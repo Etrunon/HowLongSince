@@ -341,8 +341,8 @@ fun CounterCard(c: CounterWithLast, now: Long, onOpen: () -> Unit, onReset: () -
     Card(Modifier.fillMaxWidth().clickable(onClick = onOpen),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
       Row(Modifier.height(IntrinsicSize.Min)) {
-        // Thin bar in the first tag's color.
-        Box(Modifier.width(4.dp).fillMaxHeight().background(tags.firstOrNull()?.let { tagColor(it) } ?: MaterialTheme.colorScheme.surfaceContainerHigh))
+        // Bar in the first tag's color.
+        Box(Modifier.width(8.dp).fillMaxHeight().background(tags.firstOrNull()?.let { tagColor(it) } ?: MaterialTheme.colorScheme.surfaceContainerHigh))
         Row(Modifier.padding(start = 16.dp, end = 20.dp, top = 16.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.width(88.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 AnimatedContent(n, transitionSpec = {
