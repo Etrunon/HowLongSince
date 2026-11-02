@@ -47,7 +47,9 @@ const esc = s => s.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
 
 async function sync(change = { counters: [], events: [] }) {
   let token = localStorage.getItem('token') || '';
-  const r = await fetch('sync', { method: 'POST', headers: token ? { Authorization: 'Bearer ' + token } : {}, body: JSON.stringify(change) });
+  let r;
+  try { r = await fetch('sync', { method: 'POST', headers: token ? { Authorization: 'Bearer ' + token } : {}, body: JSON.stringify(change) }); }
+  catch { $('#err').textContent = 'Server unreachable, last change not saved. Retrying every minute.'; return; }
   if (r.status === 401) { $('#login').hidden = false; $('#token').focus(); return; }
   $('#login').hidden = true;
   if (!r.ok) { $('#err').textContent = 'Sync failed: ' + await r.text(); return; }

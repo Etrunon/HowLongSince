@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -172,6 +173,14 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
                 Text("Nothing tracked yet", style = MaterialTheme.typography.titleLarge)
                 Text("Tap New to start counting", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             }
+            var refreshing by remember { mutableStateOf(false) }
+            // Pull down at the top: fetch from the sync server; show the error if it failed.
+            PullToRefreshBox(refreshing, onRefresh = { scope.launch {
+                refreshing = true; sync(ctx); refreshing = false
+                val st = prefs.getString("syncStatus", null)
+                if (prefs.getString("syncUrl", "").isNullOrBlank()) snackbar.showSnackbar("Sync is off: set a server in Settings")
+                else if (st?.startsWith("Sync failed") == true) snackbar.showSnackbar(st)
+            } }) {
             LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp)) {
                 items(shown, key = { it.counter.id }) { c ->
@@ -186,6 +195,7 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
                         }
                     }
                 }
+            }
             }
         }
     } }
