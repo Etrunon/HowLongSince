@@ -18,6 +18,7 @@
   .muted { color: var(--muted); font-size: .9rem; }
   ul { padding-left: 16px; }
   li button { padding: 2px 6px; font-size: .8rem; margin-left: 8px; }
+  .chart { width: 100%; height: 56px; fill: var(--accent); }
   [hidden] { display: none !important; }
   h1 { display: flex; align-items: center; gap: 12px; }
   h1 img { width: 48px; height: 48px; }
@@ -78,6 +79,19 @@ function editForm(c) {
   </form>`;
 }
 
+/** Bars of the intervals between resets, oldest left, last 30; same as the app's IntervalChart. */
+function chart(ev) {
+  const gaps = ev.slice(0, -1).map((e, i) => e.at - ev[i + 1].at).reverse().slice(-30);
+  if (gaps.length < 2) return '';
+  const max = Math.max(...gaps, 1), w = 100 / gaps.length;
+  const avg = gaps.reduce((a, b) => a + b) / gaps.length;
+  return `<p class="muted">Intervals · avg ${since(Date.now() - avg)}</p>
+    <svg class="chart" viewBox="0 0 100 56" preserveAspectRatio="none">${gaps.map((g, i) => {
+      const h = Math.max(g / max * 56, 1.5);
+      return `<rect x="${i * w + w * .15}" y="${56 - h}" width="${w * .7}" height="${h}"><title>${since(Date.now() - g)}</title></rect>`;
+    }).join('')}</svg>`;
+}
+
 function render() {
   if (document.activeElement?.closest('#list form')) return; // don't wipe an edit in progress
   const open = new Set([...document.querySelectorAll('details[open]')].map(d => d.dataset.id));
@@ -89,6 +103,7 @@ function render() {
     <details data-id="${c.id}" ${open.has(c.id) ? 'open' : ''}>
       <summary><span><b>${esc(c.label)}</b><br><span class="muted">${tagList(c.tags).map(t => '#' + esc(t)).join(' ')}${c.notifyAfterMs ? ' · ⏰' : ''}</span></span>
         <span class="since">${since(last)}</span><button data-reset="${c.id}">Reset</button></summary>
+      ${chart(ev)}
       ${editForm(c)}
       <ul>${ev.map(e => `<li>${new Date(e.at).toLocaleString()} <span class="muted">${e.source}</span>${ev.length > 1 ? `<button data-del-event="${e.id}">✕</button>` : ''}</li>`).join('')}</ul>
       <button data-del="${c.id}">Delete counter</button>
