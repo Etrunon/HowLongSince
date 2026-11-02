@@ -38,6 +38,10 @@ Un server opzionale, ospitato da te, sincronizza i contatori tra il telefono e u
   - Abbina un tag dalla pagina di dettaglio del contatore. L'app scrive `howlongsince://reset/<uuid>` (l'id di sincronizzazione del contatore, così il tag funziona su ogni telefono sincronizzato) sul tag e ne ricorda l'ID.
   - Toccare il tag azzera il contatore, anche ad app chiusa.
   - I tag non abbinati vengono rifiutati, e Unpair o Re-pair fanno smettere di funzionare un vecchio tag.
+  - Oppure "Copy URL" e scrivi il tag con qualsiasi altra app NFC; il primo tocco di quel tag lo abbina.
+
+  <img src="docs/nfc-pairing.png" width="240" alt="Finestra di abbinamento: copia l'URL o abbina ora">
+
 - **Tag**: una riga di filtri in cima all'elenco, con un colore fisso per ogni tag.
 - **Impostazioni** (menu ☰)
   - Interruttore del tema scuro. Segue il sistema finché non lo cambi.

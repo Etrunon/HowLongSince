@@ -38,6 +38,10 @@ An optional self-hosted server keeps the counters in sync between the phone and 
   - Pair a tag from the counter's detail page. The app writes `howlongsince://reset/<uuid>` (the counter's sync id, so the tag works on every synced phone) to the tag and remembers the tag's ID.
   - Tapping the tag resets the counter, even when the app is closed.
   - Tags that aren't paired are rejected, and Unpair or Re-pair makes an old tag stop working.
+  - Or "Copy URL" and write the tag with any other NFC app; the first tap of that tag then pairs it.
+
+  <img src="docs/nfc-pairing.png" width="240" alt="Pair dialog: copy the URL or pair now">
+
 - **Tags**: a filter row at the top of the list, with a stable color for each tag.
 - **Settings** (☰ menu)
   - Dark theme switch. It follows the system until you change it.
