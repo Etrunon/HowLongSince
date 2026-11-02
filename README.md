@@ -17,11 +17,14 @@ An optional self-hosted server keeps the counters in sync between the phone and 
   - Every create or reset is stored, marked `create`, `manual` or `nfc`.
   - Each counter's detail page shows the log as a timeline, with the gap between resets.
   - A small bar chart shows the recent intervals and their average.
+- **Reset at a past time**: "Reset at…" on the detail page, for when you forgot to log it.
+- **Overdue first**: counters past their reminder are listed at the top (app and web).
+- **Launcher shortcuts**: long-press the app icon to reset the 4 counters that need it most.
 - **Undo**: every reset shows an "Undo" snackbar, and Undo removes that log entry.
 - **Reminders**
   - Optionally set "notify after" in hours, days or weeks (or minutes in Debug mode).
   - A ring around the reset button fills up as the reminder time gets closer and turns red when overdue.
-  - Tapping the notification opens that counter's page.
+  - Tapping the notification opens that counter's page. Its buttons reset the counter or snooze for a day.
 - **NFC tags**
   - Pair a tag from the counter's detail page. The app writes `howlongsince://reset/<id>` to the tag and remembers the tag's ID.
   - Tapping the tag resets the counter, even when the app is closed.
@@ -79,7 +82,7 @@ NFC needs a real phone and writable NDEF tags (for example NTAG213/215/216).
 
 `server/` is a small Go server that stores everything in one JSON file and serves the web app. The Docker image is a single binary of about 8 MB. Each person runs their own copy; the app has no built-in server address.
 
-**Web app**: list of counters with the time since the last reset, sorted by the oldest reset. You can add, reset and delete counters. Opening a counter shows the reset log, the interval chart, and a form for its label, tags and "notify after" reminder (the reminder itself fires on the phone). A paired NFC tag can be unpaired, but pairing needs the phone. The page refreshes every minute.
+**Web app**: list of counters with the time since the last reset, sorted by the oldest reset. You can add, reset and delete counters. Opening a counter shows the reset log, the interval chart, and a form for its label, tags and "notify after" reminder (the reminder itself fires on the phone). A paired NFC tag can be unpaired, but pairing needs the phone. The times on the page update every minute.
 
 **Run it**
 ```bash
@@ -100,5 +103,7 @@ Put a reverse proxy with HTTPS in front of it (Caddy, `tailscale serve`, …). T
 - Counters and resets have a UUID for sync. The phone keeps its local ids, so NFC tags and reminders are not affected.
 - Counter edits: the newer `updatedAt` wins. Resets are merged by id.
 - Deletes are tombstones (`deleted: true`), so they reach every device.
-- The app sends everything when it opens and shortly after every change, then applies the merged result. Changes made on the web reach the phone the next time the app is opened.
+- The app sends everything when it opens, shortly after every change, and every 15 minutes in the background (the Android minimum), then applies the merged result. The web app syncs every 15 minutes and when its tab comes back into view.
+- Deleted counters are dropped for good after 90 days, on the server and the phone. A device that has been offline for longer could bring one back.
+- Responses are gzipped. The web app can be installed as an app (manifest + icon).
 - The server writes the file atomically and refuses to start if it is corrupt, rather than overwriting it.

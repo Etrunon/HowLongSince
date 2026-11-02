@@ -19,5 +19,6 @@
                 <data android:scheme="howlongsince" android:host="reset" />
             </intent-filter>
         </activity>
+        <receiver android:name=".ReminderAction" android:exported="false" />
     </application>
 </manifest>

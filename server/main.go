@@ -3,12 +3,18 @@
 package main
 
 import (
+	"compress/gzip"
+	"crypto/subtle"
 	_ "embed"
 	"encoding/json"
 	"log"
 	"net/http"
 	"os"
+	"reflect"
+	"slices"
+	"strings"
 	"sync"
+	"time"
 )
 
 type Counter struct {
@@ -56,15 +62,47 @@ func merge(s, in State) State {
 	for _, e := range es {
 		out.Events = append(out.Events, e)
 	}
+	// Sorted, so an unchanged state compares equal and the file stays stable.
+	slices.SortFunc(out.Counters, func(a, b Counter) int { return strings.Compare(a.ID, b.ID) })
+	slices.SortFunc(out.Events, func(a, b Event) int { return strings.Compare(a.ID, b.ID) })
+	return out
+}
+
+// tombstoneTTL: deleted counters older than this are dropped for good, with their events.
+// A device offline for longer could bring such a counter back.
+const tombstoneTTL = 90 * 24 * time.Hour
+
+// prune drops counters deleted before cutoff (ms) and events without a counter.
+func prune(s State, cutoff int64) State {
+	out := State{Counters: []Counter{}, Events: []Event{}}
+	keep := map[string]bool{}
+	for _, c := range s.Counters {
+		if !c.Deleted || c.UpdatedAt >= cutoff {
+			out.Counters = append(out.Counters, c)
+			keep[c.ID] = true
+		}
+	}
+	for _, e := range s.Events {
+		if keep[e.CounterID] {
+			out.Events = append(out.Events, e)
+		}
+	}
 	return out
 }
 
 //go:embed index.html
 var index []byte
 
+//go:embed icon.svg
+var icon []byte
+
+const manifest = `{"name":"How Long Since?","short_name":"How Long Since","start_url":".","display":"standalone",
+"background_color":"#3366cc","theme_color":"#3366cc","icons":[{"src":"icon.svg","sizes":"any","type":"image/svg+xml"}]}`
+
 var (
-	mu   sync.Mutex
-	file = env("DATA_FILE", "/data/data.json")
+	mu    sync.Mutex // guards state and the file
+	state State
+	file  = env("DATA_FILE", "/data/data.json")
 )
 
 func env(k, d string) string {
@@ -95,14 +133,19 @@ func save(s State) error {
 
 func main() {
 	token := os.Getenv("TOKEN")
-	load() // fail fast on a corrupt file
-	http.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(index)
-	})
+	state = load() // kept in memory; fails fast on a corrupt file
+	static := func(path, typ string, body []byte) {
+		http.HandleFunc("GET "+path, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", typ)
+			w.Write(body)
+		})
+	}
+	static("/{$}", "text/html; charset=utf-8", index)
+	static("/icon.svg", "image/svg+xml", icon)
+	static("/manifest.webmanifest", "application/manifest+json", []byte(manifest))
 	http.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	http.HandleFunc("POST /sync", func(w http.ResponseWriter, r *http.Request) {
-		if token != "" && r.Header.Get("Authorization") != "Bearer "+token {
+		if token != "" && subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+token)) != 1 {
 			http.Error(w, "unauthorized", 401)
 			return
 		}
@@ -113,12 +156,22 @@ func main() {
 		}
 		mu.Lock()
 		defer mu.Unlock()
-		s := merge(load(), in)
-		if err := save(s); err != nil {
-			http.Error(w, err.Error(), 500)
-			return
+		s := prune(merge(state, in), time.Now().Add(-tombstoneTTL).UnixMilli())
+		if !reflect.DeepEqual(s, state) { // most syncs change nothing: skip the write
+			if err := save(s); err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			state = s
 		}
 		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			w.Header().Set("Content-Encoding", "gzip")
+			gz := gzip.NewWriter(w)
+			defer gz.Close()
+			json.NewEncoder(gz).Encode(s)
+			return
+		}
 		json.NewEncoder(w).Encode(s)
 	})
 	addr := env("ADDR", ":8080")

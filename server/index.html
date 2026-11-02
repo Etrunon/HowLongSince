@@ -4,7 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>How Long Since?</title>
-<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj4KICA8ZGVmcz4KICAgIDwhLS0gQSBxdWVzdGlvbiBtYXJrIHBvaW50aW5nIHVwOyB0aGUgc2hhcmVkIGh1YiBkb3QgYXQgKDAsMCkgaXMgaXRzIGRvdC4gLS0+CiAgICA8ZyBpZD0icSIgZmlsbD0ibm9uZSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj4KICAgICAgPHBhdGggZD0iTTAgLTZWLTEzUTAgLTE2IDQuNiAtMTguNkE2LjUgNi41IDAgMSAwIC02LjUgLTIzIi8+CiAgICA8L2c+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiByeD0iMjIiIGZpbGw9IiMzMzY2Y2MiLz4KICA8Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSIzNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjYiLz4KICA8cGF0aCBkPSJNNTAgMjF2NU03OSA1MGgtNU01MCA3OXYtNU0yMSA1MGg1IiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPGcgc3Ryb2tlPSIjZmZjYzMzIiBzdHJva2Utd2lkdGg9IjUiPgogICAgPHVzZSBocmVmPSIjcSIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNTAgNTApIHJvdGF0ZSg2MCkiLz4gICAgICAgICAgICAgICAgIDwhLS0gbWludXRlIGhhbmQsIH4yIG8nY2xvY2sgLS0+CiAgICA8dXNlIGhyZWY9IiNxIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSg1MCA1MCkgcm90YXRlKC02MCkgc2NhbGUoLjcyKSIvPiAgICAgPCEtLSBob3VyIGhhbmQsIH4xMCBvJ2Nsb2NrIC0tPgogIDwvZz4KICA8Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0LjUiIGZpbGw9IiNmZmNjMzMiLz4KPC9zdmc+Cg==">
+<link rel="icon" href="icon.svg">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#3366cc">
 <style>
   :root { color-scheme: light dark; --bg:#fafafa; --fg:#222; --card:#fff; --muted:#777; --accent:#3366cc; --tag-l:45%; }
   @media (prefers-color-scheme: dark) { :root { --bg:#121212; --fg:#eee; --card:#1e1e1e; --muted:#999; --accent:#8ab4f8; --tag-l:70%; } }
@@ -32,10 +34,11 @@
   [data-edit] label { display: grid; gap: 4px; font-size: .9rem; }
   .row { display: flex; gap: 8px; }
   select { padding: 8px; font-size: 1rem; }
+  .overdue .since { color: #d33; }
 </style>
 </head>
 <body>
-<h1><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj4KICA8ZGVmcz4KICAgIDwhLS0gQSBxdWVzdGlvbiBtYXJrIHBvaW50aW5nIHVwOyB0aGUgc2hhcmVkIGh1YiBkb3QgYXQgKDAsMCkgaXMgaXRzIGRvdC4gLS0+CiAgICA8ZyBpZD0icSIgZmlsbD0ibm9uZSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj4KICAgICAgPHBhdGggZD0iTTAgLTZWLTEzUTAgLTE2IDQuNiAtMTguNkE2LjUgNi41IDAgMSAwIC02LjUgLTIzIi8+CiAgICA8L2c+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiByeD0iMjIiIGZpbGw9IiMzMzY2Y2MiLz4KICA8Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSIzNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjYiLz4KICA8cGF0aCBkPSJNNTAgMjF2NU03OSA1MGgtNU01MCA3OXYtNU0yMSA1MGg1IiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPGcgc3Ryb2tlPSIjZmZjYzMzIiBzdHJva2Utd2lkdGg9IjUiPgogICAgPHVzZSBocmVmPSIjcSIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNTAgNTApIHJvdGF0ZSg2MCkiLz4gICAgICAgICAgICAgICAgIDwhLS0gbWludXRlIGhhbmQsIH4yIG8nY2xvY2sgLS0+CiAgICA8dXNlIGhyZWY9IiNxIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSg1MCA1MCkgcm90YXRlKC02MCkgc2NhbGUoLjcyKSIvPiAgICAgPCEtLSBob3VyIGhhbmQsIH4xMCBvJ2Nsb2NrIC0tPgogIDwvZz4KICA8Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0LjUiIGZpbGw9IiNmZmNjMzMiLz4KPC9zdmc+Cg==" alt="">How Long Since?</h1>
+<h1><img src="icon.svg" alt="">How Long Since?</h1>
 <form id="login" hidden>
   <input name="username" autocomplete="username" value="howlongsince" readonly>
   <input id="token" name="password" type="password" autocomplete="current-password" placeholder="Token" required>
@@ -68,7 +71,7 @@ function since(ms) {
   return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
 }
 
-const event = (counterId, source) => ({ id: crypto.randomUUID(), counterId, at: Date.now(), source, deleted: false });
+const event = (counterId, source, at = Date.now()) => ({ id: crypto.randomUUID(), counterId, at, source, deleted: false });
 
 const UNITS = [['minutes', 6e4], ['hours', 36e5], ['days', 864e5], ['weeks', 6048e5]];
 const tagList = s => [...new Set(s.split(',').map(t => t.trim().toLowerCase()).filter(Boolean))]; // same as the app
@@ -82,6 +85,7 @@ function editForm(c) {
     <label>Tags <input name="tags" value="${esc(tagList(c.tags).join(', '))}" placeholder="comma separated"></label>
     <label>Notify after <span class="row"><input name="amount" type="number" min="1" value="${ms ? ms / size : ''}" placeholder="never">
       <select name="unit">${UNITS.map(([u]) => `<option ${u === unit ? 'selected' : ''}>${u}</option>`).join('')}</select></span></label>
+    <label>Reset at a past time <span class="row"><input type="datetime-local" name="at"><button type="button" data-reset-at="${c.id}">Reset</button></span></label>
     ${c.nfcTagId ? `<p class="muted">NFC tag paired <button type="button" data-unpair="${c.id}">Unpair</button></p>` : ''}
     <button>Save</button>
   </form>`;
@@ -114,10 +118,11 @@ function render() {
   $('#tags').innerHTML = allTags.map(t => `<button data-tag="${esc(t)}" class="${t === filter ? 'on' : ''}">${dot(t)}${esc(t)}</button>`).join('');
   const rows = live.filter(c => !filter || tagList(c.tags).includes(filter)).map(c => {
     const ev = state.events.filter(e => e.counterId === c.id && !e.deleted).sort((a, b) => b.at - a.at);
-    return { c, ev, last: ev[0]?.at ?? 0 };
-  }).sort((a, b) => a.last - b.last);
-  $('#list').innerHTML = rows.map(({ c, ev, last }) => `
-    <details data-id="${c.id}" ${open.has(c.id) ? 'open' : ''} style="border-left-color:${tagList(c.tags).length ? `hsl(${tagHue(tagList(c.tags)[0])} 55% var(--tag-l))` : 'var(--card)'}">
+    const last = ev[0]?.at ?? 0;
+    return { c, ev, last, overdue: c.notifyAfterMs != null && Date.now() - last >= c.notifyAfterMs };
+  }).sort((a, b) => b.overdue - a.overdue || a.last - b.last); // overdue first, then oldest reset
+  $('#list').innerHTML = rows.map(({ c, ev, last, overdue }) => `
+    <details data-id="${c.id}" class="${overdue ? 'overdue' : ''}" ${open.has(c.id) ? 'open' : ''} style="border-left-color:${tagList(c.tags).length ? `hsl(${tagHue(tagList(c.tags)[0])} 55% var(--tag-l))` : 'var(--card)'}">
       <summary><span><b>${esc(c.label)}</b><br><span class="muted">${tagList(c.tags).map(t => '#' + esc(t)).join(' ')}${c.notifyAfterMs ? ' · ⏰' : ''}</span></span>
         <span class="since">${since(last)}</span><button data-reset="${c.id}">Reset</button></summary>
       ${chart(ev)}
@@ -157,6 +162,11 @@ $('#list').onsubmit = e => {
 $('#list').onclick = e => {
   const d = e.target.dataset;
   if (d.reset) { e.preventDefault(); sync({ counters: [], events: [event(d.reset, 'manual')] }); }
+  if (d.resetAt) {
+    const at = new Date(e.target.closest('form').elements.at.value).getTime();
+    if (!at || at > Date.now()) return alert('Pick a time in the past');
+    sync({ counters: [], events: [event(d.resetAt, 'manual', at)] });
+  }
   if (d.delEvent) sync({ counters: [], events: [{ ...state.events.find(x => x.id === d.delEvent), deleted: true }] });
   if (d.unpair) sync({ counters: [{ ...state.counters.find(x => x.id === d.unpair), nfcTagId: null, updatedAt: Date.now() }], events: [] });
   if (d.del && confirm('Delete this counter?'))
@@ -164,7 +174,9 @@ $('#list').onclick = e => {
 };
 
 sync();
-setInterval(sync, 60000); // pick up phone changes, refresh times
+setInterval(sync, 15 * 60000); // pick up phone changes
+setInterval(render, 60000); // keep the times current between syncs
+document.addEventListener('visibilitychange', () => document.hidden || sync()); // fresh data when coming back to the tab
 </script>
 </body>
 </html>

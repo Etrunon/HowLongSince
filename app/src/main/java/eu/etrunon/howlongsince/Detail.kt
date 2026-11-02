@@ -1,6 +1,9 @@
 package eu.etrunon.howlongsince
 
 import android.app.Activity
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
+import java.util.Calendar
 import android.nfc.NfcAdapter
 import android.widget.Toast
 import androidx.compose.foundation.Canvas
@@ -43,7 +46,22 @@ fun Detail(c: CounterWithLast, dao: CounterDao, now: Long, onBack: () -> Unit, o
     }) { pad ->
         Column(Modifier.padding(pad).padding(horizontal = 16.dp)) {
             Text(since(now - c.lastAt), style = MaterialTheme.typography.displaySmall)
-            Text("${events.size} entries", style = MaterialTheme.typography.bodySmall)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("${events.size} entries", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                // Forgot to log it: reset at a past date and time.
+                TextButton(onClick = {
+                    val cal = Calendar.getInstance()
+                    DatePickerDialog(ctx, { _, y, m, d ->
+                        TimePickerDialog(ctx, { _, h, min ->
+                            cal.set(y, m, d, h, min, 0)
+                            if (cal.timeInMillis > System.currentTimeMillis())
+                                Toast.makeText(ctx, "Pick a time in the past", Toast.LENGTH_SHORT).show()
+                            else scope.launch { dao.reset(id, "manual", cal.timeInMillis); reschedule(ctx, id) }
+                        }, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), android.text.format.DateFormat.is24HourFormat(ctx)).show()
+                    }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH))
+                        .apply { datePicker.maxDate = System.currentTimeMillis() }.show()
+                }) { Text("Reset at…") }
+            }
             if (nfc != null) Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(if (c.counter.nfcTagId != null) "NFC tag paired" else "No NFC tag", Modifier.weight(1f))
                 if (c.counter.nfcTagId != null) TextButton(onClick = { scope.launch { dao.setTag(id, null) } }) { Text("Unpair") }

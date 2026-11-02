@@ -1,6 +1,7 @@
 package eu.etrunon.howlongsince
 
 import android.content.Context
+import androidx.work.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -12,6 +13,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.text.DateFormat
 import java.util.Date
+import java.util.concurrent.TimeUnit
 
 /** Server state; events carry their counter's uid (local ids differ per device). */
 data class Remote(val counters: List<Counter>, val events: List<Pair<String, Event>>)
@@ -59,6 +61,7 @@ suspend fun sync(ctx: Context): Unit = lock.withLock {
     if (url.isEmpty()) return
     val dao = Db.get(ctx).dao()
     val status = try {
+        dao.pruneDeleted(System.currentTimeMillis() - TimeUnit.DAYS.toMillis(90)) // same TTL as the server
         // ponytail: sends the whole history each time; fine for thousands of resets, send a delta if it grows past that.
         val body = stateJson(dao.rawCounters(), dao.rawEvents())
         val res = withContext(Dispatchers.IO) { post("$url/sync", prefs.getString("syncToken", "")!!.trim(), body) }
@@ -69,6 +72,20 @@ suspend fun sync(ctx: Context): Unit = lock.withLock {
     }
     prefs.edit().putString("syncStatus", status).apply()
 }
+
+/** Background sync, so web changes and reminders stay current without opening the app. */
+class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
+    override suspend fun doWork(): Result { sync(applicationContext); return Result.success() }
+}
+
+private val online = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+
+fun schedulePeriodicSync(ctx: Context) = WorkManager.getInstance(ctx).enqueueUniquePeriodicWork("sync",
+    ExistingPeriodicWorkPolicy.UPDATE, PeriodicWorkRequestBuilder<SyncWorker>(15, TimeUnit.MINUTES).setConstraints(online).build())
+
+/** One sync as soon as there is network; for places that can't wait on HTTP (receivers). */
+fun syncSoon(ctx: Context) = WorkManager.getInstance(ctx).enqueueUniqueWork("sync-now", ExistingWorkPolicy.REPLACE,
+    OneTimeWorkRequestBuilder<SyncWorker>().setConstraints(online).build())
 
 private fun post(url: String, token: String, body: String): String {
     val c = URL(url).openConnection() as HttpURLConnection

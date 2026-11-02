@@ -8,6 +8,9 @@ import android.nfc.Tag
 import android.os.Bundle
 import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -63,6 +66,19 @@ class MainActivity : ComponentActivity() {
         val prefs = getSharedPreferences("settings", 0)
         // Push every local change; converges because merge writes nothing when already in sync.
         lifecycleScope.launch { dao.counters().drop(1).debounce(1500).collect { sync(this@MainActivity) } }
+        schedulePeriodicSync(this)
+        // Launcher long-press: reset the counters most in need of it.
+        lifecycleScope.launch { dao.counters().collect { list ->
+            val now = System.currentTimeMillis()
+            ShortcutManagerCompat.setDynamicShortcuts(this@MainActivity, list.sortedByDescending { it.overdue(now) }
+                .take(ShortcutManagerCompat.getMaxShortcutCountPerActivity(this@MainActivity).coerceAtMost(4)).map { c ->
+                    ShortcutInfoCompat.Builder(this@MainActivity, "reset-${c.counter.id}")
+                        .setShortLabel("Reset ${c.counter.label}".take(25)).setLongLabel("Reset ${c.counter.label}")
+                        .setIcon(IconCompat.createWithResource(this@MainActivity, R.mipmap.ic_launcher))
+                        .setIntent(Intent(RESET_ACTION, null, this@MainActivity, MainActivity::class.java).putExtra("id", c.counter.id))
+                        .build()
+                })
+        } }
         setContent {
             // null = follow the system until the user flips the switch.
             var dark by remember { mutableStateOf(if (prefs.contains("dark")) prefs.getBoolean("dark", false) else null) }
@@ -89,6 +105,7 @@ class MainActivity : ComponentActivity() {
 
     private fun handle(intent: Intent) {
         intent.getLongExtra("id", 0).takeIf { it != 0L }?.let { openId = it } // notification tap
+        if (intent.action == RESET_ACTION) return resetAndShow(intent.getLongExtra("id", 0), "manual")
         if (intent.action != NfcAdapter.ACTION_NDEF_DISCOVERED) return
         val id = parseResetUri(intent.dataString) ?: return
         @Suppress("DEPRECATION") val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG)
@@ -100,15 +117,23 @@ class MainActivity : ComponentActivity() {
                 Toast.makeText(this@MainActivity, "This tag isn't paired with a counter", Toast.LENGTH_SHORT).show()
                 return@launch
             }
-            dao.reset(id, "nfc")
-            reschedule(this@MainActivity, id)
-            window.decorView.performHapticFeedback(
-                if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.LONG_PRESS)
-            Toast.makeText(this@MainActivity, "Reset: ${c.counter.label}", Toast.LENGTH_SHORT).show()
-            openId = id
+            resetAndShow(id, "nfc")
         }
     }
+
+    private fun resetAndShow(id: Long, source: String) { lifecycleScope.launch {
+        val dao = Db.get(this@MainActivity).dao()
+        val c = dao.counter(id) ?: return@launch
+        dao.reset(id, source)
+        reschedule(this@MainActivity, id)
+        window.decorView.performHapticFeedback(
+            if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.LONG_PRESS)
+        Toast.makeText(this@MainActivity, "Reset: ${c.counter.label}", Toast.LENGTH_SHORT).show()
+        openId = id
+    } }
 }
+
+const val RESET_ACTION = "eu.etrunon.howlongsince.RESET"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -124,6 +149,7 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
     val allTags = counters.flatMap { tagList(it.counter.tags) }.distinct().sorted()
     if (filter !in allTags) filter = null
     val shown = counters.filter { filter == null || filter in tagList(it.counter.tags) }
+        .sortedByDescending { it.overdue(now) } // overdue first; stable, so oldest reset next
     var open by remember { mutableStateOf<Long?>(null) }
     val openC = counters.find { it.counter.id == open }
     val prefs = remember { ctx.getSharedPreferences("settings", 0) }

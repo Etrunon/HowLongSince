@@ -29,7 +29,9 @@ data class Event(
     val deleted: Boolean = false,
 )
 
-data class CounterWithLast(@Embedded val counter: Counter, val lastAt: Long)
+data class CounterWithLast(@Embedded val counter: Counter, val lastAt: Long) {
+    fun overdue(now: Long) = counter.notifyAfterMs?.let { now - lastAt >= it } == true
+}
 
 @Dao
 interface CounterDao {
@@ -59,6 +61,8 @@ interface CounterDao {
 
     @Query("DELETE FROM Counter WHERE uid IN (:uids)") suspend fun purge(uids: List<String>) // events go too (cascade)
     @Query("UPDATE Counter SET deleted = 1, updatedAt = :now WHERE deleted = 0") suspend fun deleteAll(now: Long)
+    /** Drops tombstones older than [cutoff] for good, like the server does. */
+    @Query("DELETE FROM Counter WHERE deleted = 1 AND updatedAt < :cutoff") suspend fun pruneDeleted(cutoff: Long)
 
     /** Import: everything else is tombstoned (so the server drops it too), imported counters win as of now. */
     @Transaction
@@ -103,8 +107,8 @@ interface CounterDao {
         return id
     }
 
-    suspend fun reset(id: Long, source: String = "manual") =
-        insert(Event(counterId = id, at = System.currentTimeMillis(), source = source))
+    suspend fun reset(id: Long, source: String = "manual", at: Long = System.currentTimeMillis()) =
+        insert(Event(counterId = id, at = at, source = source))
 }
 
 @Database(entities = [Counter::class, Event::class], version = 2, exportSchema = false)
