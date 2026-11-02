@@ -1,9 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <!-- A question mark pointing up; the shared hub dot at (0,0) is its dot. -->
+    <g id="q" fill="none" stroke-linecap="round">
+      <path d="M0 -6V-13Q0 -16 4.6 -18.6A6.5 6.5 0 1 0 -6.5 -23"/>
+    </g>
+  </defs>
   <rect width="100" height="100" rx="22" fill="#3366cc"/>
   <circle cx="50" cy="50" r="34" fill="none" stroke="#fff" stroke-width="6"/>
-  <g stroke="#fff" stroke-width="4" stroke-linecap="round">
-    <path d="M50 21v5M79 50h-5M50 79v-5M21 50h5"/>
+  <path d="M50 21v5M79 50h-5M50 79v-5M21 50h5" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+  <g stroke="#ffcc33" stroke-width="5">
+    <use href="#q" transform="translate(50 50) rotate(60)"/>                 <!-- minute hand, ~2 o'clock -->
+    <use href="#q" transform="translate(50 50) rotate(-60) scale(.72)"/>     <!-- hour hand, ~10 o'clock -->
   </g>
-  <path d="M40 42A10 10 0 1 1 55 50.7Q50 53.5 50 59" fill="none" stroke="#ffcc33" stroke-width="7" stroke-linecap="round"/>
-  <circle cx="50" cy="69" r="4.5" fill="#ffcc33"/>
+  <circle cx="50" cy="50" r="4.5" fill="#ffcc33"/>
 </svg>
