@@ -62,3 +62,10 @@ export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 ```
 
 NFC needs a real phone and writable NDEF tags (for example NTAG213/215/216).
+
+## Sync server (optional)
+
+`server/` is a tiny Go server (one JSON file, web UI, `POST /sync`), ~8 MB `scratch` image:
+`cd server && echo HLS_TOKEN=$(openssl rand -hex 16) > .env && docker compose up -d --build`, then put a
+reverse proxy with HTTPS in front of `127.0.0.1:13387`. In the app: Settings → Sync server → URL + token.
+The app syncs on open and after every change; counters merge last-write-wins, resets merge by id, deletes are tombstones.

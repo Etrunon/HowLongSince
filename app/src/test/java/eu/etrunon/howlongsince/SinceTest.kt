@@ -67,3 +67,13 @@ class BackupTest {
         fails("""{"version":1,"counters":[$ok,$ok]}""")
     }
 }
+
+class SyncJsonTest {
+    @Test fun roundTrip() {
+        val c = listOf(Counter(3, "Water", "home", 3_600_000, "04ab", uid = "a", updatedAt = 5, deleted = true))
+        val e = listOf(Event(1, 3, 100, "nfc", uid = "e", deleted = true), Event(2, 99, 1, "manual")) // orphan dropped
+        val r = parseState(stateJson(c, e))
+        assertEquals(c.map { it.copy(id = 0) }, r.counters)
+        assertEquals(listOf("a" to e[0].copy(id = 0, counterId = 0)), r.events)
+    }
+}

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Long Since?</title>
+<style>
+  :root { color-scheme: light dark; --bg:#fafafa; --fg:#222; --card:#fff; --muted:#777; --accent:#3366cc; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#121212; --fg:#eee; --card:#1e1e1e; --muted:#999; --accent:#8ab4f8; } }
+  body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--fg); max-width: 640px; margin: 0 auto; padding: 16px; }
+  form { display: flex; gap: 8px; margin-bottom: 16px; }
+  input { flex: 1; padding: 8px; font-size: 1rem; }
+  button { padding: 8px 12px; font-size: 1rem; cursor: pointer; }
+  details { background: var(--card); border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+  summary { display: flex; justify-content: space-between; align-items: center; gap: 8px; cursor: pointer; list-style: none; }
+  .since { font-size: 1.3rem; font-weight: 600; color: var(--accent); }
+  .muted { color: var(--muted); font-size: .9rem; }
+  ul { padding-left: 16px; }
+  li button { padding: 2px 6px; font-size: .8rem; margin-left: 8px; }
+  #err { color: #d33; }
+</style>
+</head>
+<body>
+<h1>How Long Since?</h1>
+<form id="login" hidden>
+  <input name="username" autocomplete="username" value="howlongsince" readonly>
+  <input id="token" name="password" type="password" autocomplete="current-password" placeholder="Token" required>
+  <button>Log in</button>
+</form>
+<form id="add"><input id="label" placeholder="New counter" required><button>Add</button></form>
+<p id="err"></p>
+<div id="list"></div>
+<script>
+let state = { counters: [], events: [] };
+const $ = s => document.querySelector(s);
+const esc = s => s.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
+
+async function sync(change = { counters: [], events: [] }) {
+  let token = localStorage.getItem('token') || '';
+  const r = await fetch('sync', { method: 'POST', headers: token ? { Authorization: 'Bearer ' + token } : {}, body: JSON.stringify(change) });
+  if (r.status === 401) { $('#login').hidden = false; $('#token').focus(); return; }
+  $('#login').hidden = true;
+  if (!r.ok) { $('#err').textContent = 'Sync failed: ' + await r.text(); return; }
+  $('#err').textContent = '';
+  state = await r.json();
+  render();
+}
+
+function since(ms) {
+  const s = Math.max(0, (Date.now() - ms) / 1000), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
+}
+
+const event = (counterId, source) => ({ id: crypto.randomUUID(), counterId, at: Date.now(), source, deleted: false });
+
+function render() {
+  const open = new Set([...document.querySelectorAll('details[open]')].map(d => d.dataset.id));
+  const rows = state.counters.filter(c => !c.deleted).map(c => {
+    const ev = state.events.filter(e => e.counterId === c.id && !e.deleted).sort((a, b) => b.at - a.at);
+    return { c, ev, last: ev[0]?.at ?? 0 };
+  }).sort((a, b) => a.last - b.last);
+  $('#list').innerHTML = rows.map(({ c, ev, last }) => `
+    <details data-id="${c.id}" ${open.has(c.id) ? 'open' : ''}>
+      <summary><span><b>${esc(c.label)}</b><br><span class="muted">${esc(c.tags)}</span></span>
+        <span class="since">${since(last)}</span><button data-reset="${c.id}">Reset</button></summary>
+      <ul>${ev.map(e => `<li>${new Date(e.at).toLocaleString()} <span class="muted">${e.source}</span>${ev.length > 1 ? `<button data-del-event="${e.id}">✕</button>` : ''}</li>`).join('')}</ul>
+      <button data-del="${c.id}">Delete counter</button>
+    </details>`).join('');
+}
+
+$('#login').onsubmit = e => {
+  e.preventDefault();
+  localStorage.setItem('token', $('#token').value);
+  sync();
+};
+
+$('#add').onsubmit = e => {
+  e.preventDefault();
+  const c = { id: crypto.randomUUID(), label: $('#label').value.trim(), tags: '', notifyAfterMs: null, nfcTagId: null, updatedAt: Date.now(), deleted: false };
+  $('#label').value = '';
+  sync({ counters: [c], events: [event(c.id, 'create')] });
+};
+
+$('#list').onclick = e => {
+  const d = e.target.dataset;
+  if (d.reset) { e.preventDefault(); sync({ counters: [], events: [event(d.reset, 'manual')] }); }
+  if (d.delEvent) sync({ counters: [], events: [{ ...state.events.find(x => x.id === d.delEvent), deleted: true }] });
+  if (d.del && confirm('Delete this counter?'))
+    sync({ counters: [{ ...state.counters.find(x => x.id === d.del), deleted: true, updatedAt: Date.now() }], events: [] });
+};
+
+sync();
+setInterval(sync, 60000); // pick up phone changes, refresh times
+</script>
+</body>
+</html>

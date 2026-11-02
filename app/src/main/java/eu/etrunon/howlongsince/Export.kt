@@ -8,6 +8,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
+import java.util.UUID
 
 typealias Backup = List<Pair<Counter, List<Event>>>
 
@@ -23,8 +24,10 @@ fun toJson(counters: List<Counter>, events: List<Event>, now: Instant = Instant.
                 .put("tags", JSONArray(tagList(c.tags)))
                 .put("notifyAfterMs", c.notifyAfterMs ?: JSONObject.NULL)
                 .put("nfcTagId", c.nfcTagId ?: JSONObject.NULL)
+                .put("uid", c.uid)
+                .put("updatedAt", c.updatedAt)
                 .put("events", JSONArray(byCounter[c.id].orEmpty().map { e ->
-                    JSONObject().put("at", e.at).put("time", Instant.ofEpochMilli(e.at).toString()).put("source", e.source)
+                    JSONObject().put("at", e.at).put("time", Instant.ofEpochMilli(e.at).toString()).put("source", e.source).put("uid", e.uid)
                 }))
         }))
         .toString(2)
@@ -47,9 +50,12 @@ fun fromJson(s: String): Backup {
             id = id, label = label, tags = tagList(tags).joinToString(","),
             notifyAfterMs = if (o.isNull("notifyAfterMs")) null else o.getLong("notifyAfterMs"),
             nfcTagId = if (o.isNull("nfcTagId")) null else o.getString("nfcTagId"),
+            uid = o.optString("uid").ifEmpty { UUID.randomUUID().toString() }, // older exports have none
+            updatedAt = o.optLong("updatedAt", System.currentTimeMillis()),
         ) to (0 until ev.length()).map { j ->
             val e = ev.getJSONObject(j)
-            Event(counterId = id, at = e.getLong("at"), source = e.optString("source", "manual"))
+            Event(counterId = id, at = e.getLong("at"), source = e.optString("source", "manual"),
+                uid = e.optString("uid").ifEmpty { UUID.randomUUID().toString() })
         }
     }
     require(out.map { it.first.id }.toSet().size == out.size) { "Duplicate counter ids" }

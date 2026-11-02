@@ -44,9 +44,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    @OptIn(kotlinx.coroutines.FlowPreview::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -56,6 +60,8 @@ class MainActivity : ComponentActivity() {
         val replay = savedInstanceState != null || intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0
         if (!replay) handle(intent)
         val prefs = getSharedPreferences("settings", 0)
+        // Push every local change; converges because merge writes nothing when already in sync.
+        lifecycleScope.launch { dao.counters().drop(1).debounce(1500).collect { sync(this@MainActivity) } }
         setContent {
             // null = follow the system until the user flips the switch.
             var dark by remember { mutableStateOf(if (prefs.contains("dark")) prefs.getBoolean("dark", false) else null) }
@@ -69,6 +75,11 @@ class MainActivity : ComponentActivity() {
 
     // Counter to show, e.g. from a notification tap; cleared once the UI has opened it.
     private var openId by mutableStateOf<Long?>(null)
+
+    override fun onResume() {
+        super.onResume()
+        lifecycleScope.launch { sync(this@MainActivity) } // pull changes made on the web
+    }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -180,7 +191,7 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
     } }
 
     editing?.let { c ->
-        EditDialog(c, debug, onDismiss = { editing = null }, onDelete = { scope.launch { dao.delete(c); reschedule(ctx, c.id) }; editing = null }) { saved ->
+        EditDialog(c, debug, onDismiss = { editing = null }, onDelete = { scope.launch { dao.delete(c.id); reschedule(ctx, c.id) }; editing = null }) { saved ->
             scope.launch {
                 val id = if (saved.id == 0L) dao.create(saved) else saved.id.also { dao.update(saved) }
                 reschedule(ctx, id)
@@ -248,6 +259,26 @@ fun Settings(dark: Boolean, onDark: (Boolean) -> Unit, debug: Boolean, onDebug: 
         HorizontalDivider()
         val ctx = LocalContext.current
         val scope = rememberCoroutineScope()
+        val prefs = remember { ctx.getSharedPreferences("settings", 0) }
+        var url by remember { mutableStateOf(prefs.getString("syncUrl", "")!!) }
+        var token by remember { mutableStateOf(prefs.getString("syncToken", "")!!) }
+        var status by remember { mutableStateOf(prefs.getString("syncStatus", "Not synced yet")!!) }
+        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Sync server", style = MaterialTheme.typography.titleMedium)
+            OutlinedTextField(url, { url = it; prefs.edit().putString("syncUrl", it).apply() }, Modifier.fillMaxWidth(),
+                label = { Text("URL (empty = no sync)") }, placeholder = { Text("https://your-server.example") }, singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
+            OutlinedTextField(token, { token = it; prefs.edit().putString("syncToken", it).apply() }, Modifier.fillMaxWidth(),
+                label = { Text("Token") }, singleLine = true, visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(status, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                TextButton(enabled = url.isNotBlank(), onClick = { scope.launch {
+                    status = "Syncing…"; sync(ctx); status = prefs.getString("syncStatus", "")!!
+                } }) { Text("Sync now") }
+            }
+        }
+        HorizontalDivider()
         val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
             if (uri != null) scope.launch {
                 val msg = try { "Exported ${exportJson(ctx, uri)} counters" } catch (e: Exception) { "Export failed: ${e.message}" }
@@ -281,7 +312,7 @@ fun Settings(dark: Boolean, onDark: (Boolean) -> Unit, debug: Boolean, onDebug: 
         ListItem(
             modifier = Modifier.clickable { import.launch(arrayOf("application/json", "application/octet-stream", "text/plain")) },
             headlineContent = { Text("Import data") },
-            supportingContent = { Text("Replace everything with a previously exported file") },
+            supportingContent = { Text("Replace everything with a previously exported file (also on the sync server)") },
         )
         ListItem(
             modifier = Modifier.clickable { export.launch("howlongsince-${java.time.LocalDate.now()}.json") },
