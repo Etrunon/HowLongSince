@@ -16,7 +16,9 @@
   button { padding: 8px 12px; font-size: 1rem; cursor: pointer; }
   details { background: var(--card); border-radius: 8px; padding: 12px; margin-bottom: 8px; border-left: 8px solid; } /* first tag's color, like the app */
   summary { display: flex; justify-content: space-between; align-items: center; gap: 8px; cursor: pointer; list-style: none; }
-  .since { font-size: 1.3rem; font-weight: 600; color: var(--accent); }
+  .since { font-size: 1.3rem; font-weight: 600; color: var(--accent); margin-left: auto; white-space: nowrap; }
+  [data-reset] { background: var(--accent); color: var(--bg); border: none; border-radius: 999px; padding: 8px 16px; font-weight: 600; white-space: nowrap; }
+  [data-reset]:hover { filter: brightness(1.1); }
   .muted { color: var(--muted); font-size: .9rem; }
   ul { padding-left: 16px; }
   li button { padding: 2px 6px; font-size: .8rem; margin-left: 8px; }
@@ -139,7 +141,7 @@ function render() {
   $('#list').innerHTML = rows.map(({ c, ev, last, overdue }) => `
     <details data-id="${c.id}" class="${overdue ? 'overdue' : ''}" ${open.has(c.id) ? 'open' : ''} style="border-left-color:${tagList(c.tags).length ? `hsl(${tagHue(tagList(c.tags)[0])} 55% var(--tag-l))` : 'var(--card)'}">
       <summary><span><b>${esc(c.label)}</b><br><span class="muted">${tagList(c.tags).map(t => '#' + esc(t)).join(' ')}${c.notifyAfterMs ? ' · ⏰' : ''}</span></span>
-        <span class="since">${since(last)}</span><button data-reset="${c.id}">Reset</button></summary>
+        <span class="since">${since(last)}</span><button data-reset="${c.id}">↻ Reset</button></summary>
       ${chart(ev)}
       ${editForm(c, ev.length >= 3 ? (ev[0].at - ev.at(-1).at) / (ev.length - 1) : 0)}
       <ul>${ev.map(e => `<li>${new Date(e.at).toLocaleString()} <span class="muted">${e.source}</span>${ev.length > 1 ? `<button data-del-event="${e.id}">✕</button>` : ''}${e.note ? `<span class="note">${esc(e.note)}</span>` : ''}</li>`).join('')}</ul>

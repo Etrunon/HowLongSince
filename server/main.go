@@ -1,5 +1,5 @@
 // How Long Since sync server: one JSON file, a web UI, and POST /sync.
-// Config (env): DATA_FILE (default /data/data.json), ADDR (default :8080), TOKEN (optional bearer token).
+// Config (env): DATA_FILE (default /data/data.json), ADDR (default :8080), TOKEN (bearer token, required unless INSECURE=1).
 package main
 
 import (
@@ -139,7 +139,10 @@ func save(s State) error {
 func main() {
 	token := os.Getenv("TOKEN")
 	if token == "" {
-		log.Print("WARNING: TOKEN is not set, anyone who can reach this server can read and change the data")
+		if os.Getenv("INSECURE") != "1" {
+			log.Fatal("TOKEN is not set; set it, or INSECURE=1 to run without auth (anyone who can reach the server can read and change the data)")
+		}
+		log.Print("WARNING: INSECURE=1, running without auth")
 	}
 	state = load() // kept in memory; fails fast on a corrupt file
 	static := func(path, typ string, body []byte) {
@@ -184,5 +187,7 @@ func main() {
 	})
 	addr := env("ADDR", ":8080")
 	log.Printf("listening on %s, data %s", addr, file)
-	log.Fatal(http.ListenAndServe(addr, nil))
+	srv := &http.Server{Addr: addr, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second,
+		WriteTimeout: 30 * time.Second, IdleTimeout: 2 * time.Minute} // drop slow or stuck clients
+	log.Fatal(srv.ListenAndServe())
 }
