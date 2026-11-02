@@ -18,6 +18,10 @@
   ul { padding-left: 16px; }
   li button { padding: 2px 6px; font-size: .8rem; margin-left: 8px; }
   #err { color: #d33; }
+  [data-edit] { display: grid; gap: 8px; margin: 12px 0; }
+  [data-edit] label { display: grid; gap: 4px; font-size: .9rem; }
+  .row { display: flex; gap: 8px; }
+  select { padding: 8px; font-size: 1rem; }
 </style>
 </head>
 <body>
@@ -53,7 +57,25 @@ function since(ms) {
 
 const event = (counterId, source) => ({ id: crypto.randomUUID(), counterId, at: Date.now(), source, deleted: false });
 
+const UNITS = [['minutes', 6e4], ['hours', 36e5], ['days', 864e5], ['weeks', 6048e5]];
+const tagList = s => [...new Set(s.split(',').map(t => t.trim().toLowerCase()).filter(Boolean))]; // same as the app
+
+function editForm(c) {
+  const ms = c.notifyAfterMs;
+  // Largest unit that divides the stored value evenly, like the app.
+  const [unit, size] = ms ? UNITS.filter(([, n]) => ms % n === 0).pop() ?? UNITS[0] : UNITS[2];
+  return `<form data-edit="${c.id}">
+    <label>Label <input name="label" value="${esc(c.label)}" required></label>
+    <label>Tags <input name="tags" value="${esc(tagList(c.tags).join(', '))}" placeholder="comma separated"></label>
+    <label>Notify after <span class="row"><input name="amount" type="number" min="1" value="${ms ? ms / size : ''}" placeholder="never">
+      <select name="unit">${UNITS.map(([u]) => `<option ${u === unit ? 'selected' : ''}>${u}</option>`).join('')}</select></span></label>
+    ${c.nfcTagId ? `<p class="muted">NFC tag paired <button type="button" data-unpair="${c.id}">Unpair</button></p>` : ''}
+    <button>Save</button>
+  </form>`;
+}
+
 function render() {
+  if (document.activeElement?.closest('#list form')) return; // don't wipe an edit in progress
   const open = new Set([...document.querySelectorAll('details[open]')].map(d => d.dataset.id));
   const rows = state.counters.filter(c => !c.deleted).map(c => {
     const ev = state.events.filter(e => e.counterId === c.id && !e.deleted).sort((a, b) => b.at - a.at);
@@ -61,8 +83,9 @@ function render() {
   }).sort((a, b) => a.last - b.last);
   $('#list').innerHTML = rows.map(({ c, ev, last }) => `
     <details data-id="${c.id}" ${open.has(c.id) ? 'open' : ''}>
-      <summary><span><b>${esc(c.label)}</b><br><span class="muted">${esc(c.tags)}</span></span>
+      <summary><span><b>${esc(c.label)}</b><br><span class="muted">${tagList(c.tags).map(t => '#' + esc(t)).join(' ')}${c.notifyAfterMs ? ' · ⏰' : ''}</span></span>
         <span class="since">${since(last)}</span><button data-reset="${c.id}">Reset</button></summary>
+      ${editForm(c)}
       <ul>${ev.map(e => `<li>${new Date(e.at).toLocaleString()} <span class="muted">${e.source}</span>${ev.length > 1 ? `<button data-del-event="${e.id}">✕</button>` : ''}</li>`).join('')}</ul>
       <button data-del="${c.id}">Delete counter</button>
     </details>`).join('');
@@ -81,10 +104,20 @@ $('#add').onsubmit = e => {
   sync({ counters: [c], events: [event(c.id, 'create')] });
 };
 
+$('#list').onsubmit = e => {
+  e.preventDefault();
+  const f = new FormData(e.target), amount = Number(f.get('amount'));
+  const c = state.counters.find(x => x.id === e.target.dataset.edit);
+  document.activeElement.blur();
+  sync({ counters: [{ ...c, label: f.get('label').trim(), tags: tagList(f.get('tags')).join(','),
+    notifyAfterMs: amount > 0 ? amount * UNITS.find(([u]) => u === f.get('unit'))[1] : null, updatedAt: Date.now() }], events: [] });
+};
+
 $('#list').onclick = e => {
   const d = e.target.dataset;
   if (d.reset) { e.preventDefault(); sync({ counters: [], events: [event(d.reset, 'manual')] }); }
   if (d.delEvent) sync({ counters: [], events: [{ ...state.events.find(x => x.id === d.delEvent), deleted: true }] });
+  if (d.unpair) sync({ counters: [{ ...state.counters.find(x => x.id === d.unpair), nfcTagId: null, updatedAt: Date.now() }], events: [] });
   if (d.del && confirm('Delete this counter?'))
     sync({ counters: [{ ...state.counters.find(x => x.id === d.del), deleted: true, updatedAt: Date.now() }], events: [] });
 };
