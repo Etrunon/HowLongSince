@@ -118,3 +118,7 @@ Put a reverse proxy with HTTPS in front of it (Caddy, `tailscale serve`, …). T
 - Deleted counters are dropped for good after 90 days, on the server and the phone. A device that has been offline for longer could bring one back.
 - Responses are gzipped. The web app can be installed as an app (manifest + icon).
 - The server writes the file atomically and refuses to start if it is corrupt, rather than overwriting it.
+
+## License
+
+GPL-3.0, see [LICENSE](LICENSE). You can use, change and share it; shared changes must stay under the GPL.
