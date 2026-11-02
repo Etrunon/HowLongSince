@@ -1,8 +1,12 @@
 # How Long Since?
 
+<img src="logo.svg" width="96" alt="">
+
 A small Android app that tracks how long it has been since something last happened, such as watering the plants, changing the toothbrush or the last haircut.
 
 Each item is a **counter**: a label, some tags, and a log of every time it was set or reset. The app shows the time since the latest reset and can remind you when a counter has gone too long. An NFC sticker can reset a counter with a single tap.
+
+An optional self-hosted server keeps the counters in sync between the phone and a web app that works in any browser.
 
 ## Features
 
@@ -26,7 +30,8 @@ Each item is a **counter**: a label, some tags, and a log of every time it was s
 - **Settings** (☰ menu)
   - Dark theme switch. It follows the system until you change it.
   - Debug mode, which allows minute-based reminders.
-  - JSON export, and an import that replaces all data. The file is checked and you confirm before anything is overwritten.
+  - JSON export, and an import that replaces all data. The file is checked and you confirm before anything is overwritten. With sync on, the import replaces the data on the server too.
+  - Sync server URL and token, with the last sync status and a "Sync now" button. Leave the URL empty to turn sync off.
 - **Look**: Material 3 with colors from your wallpaper (Android 12+) and a large title bar that collapses as you scroll.
 
 ## Tech
@@ -35,7 +40,7 @@ Each item is a **counter**: a label, some tags, and a log of every time it was s
 - **Room** stores data in two tables: `Counter` and `Event`. Elapsed time is calculated from the latest `Event` and never stored.
 - **WorkManager** runs one delayed job per counter, and it is replaced on every change.
 - The **Android NFC API**: NDEF URI records for tapping, and reader mode while pairing.
-- The built-in `org.json` library for export and import.
+- The built-in `org.json` library for export, import and sync, and `HttpURLConnection` for sync.
 
 ## Code layout
 
@@ -47,8 +52,15 @@ app/src/main/java/eu/etrunon/howlongsince/
   Notify.kt        Reminder scheduling and the notification worker
   Nfc.kt           Tag writing and reading of the reset URI
   Export.kt        JSON export, import and restore
+  Sync.kt          Sync with the server: JSON format and the HTTP call
   Theme.kt         Dynamic color theme and tag colors
-app/src/test/.../SinceTest.kt  Unit tests (formatting, tags, reminder delay, NFC URI, backup round trip)
+app/src/test/.../SinceTest.kt  Unit tests (formatting, tags, reminder delay, NFC URI, backup and sync JSON round trips)
+server/
+  main.go          Sync server: merge logic, JSON file storage, HTTP handlers
+  main_test.go     Merge unit test (runs during docker build)
+  index.html       Web app, built into the server binary
+  Dockerfile, compose.yml
+logo.svg           Logo (the app icon and the web favicon are drawn from it)
 ```
 
 ## Build
@@ -63,9 +75,30 @@ export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 
 NFC needs a real phone and writable NDEF tags (for example NTAG213/215/216).
 
-## Sync server (optional)
+## Sync server and web app (optional)
 
-`server/` is a tiny Go server (one JSON file, web UI, `POST /sync`), ~8 MB `scratch` image:
-`cd server && echo HLS_TOKEN=$(openssl rand -hex 16) > .env && docker compose up -d --build`, then put a
-reverse proxy with HTTPS in front of `127.0.0.1:13387`. In the app: Settings → Sync server → URL + token.
-The app syncs on open and after every change; counters merge last-write-wins, resets merge by id, deletes are tombstones.
+`server/` is a small Go server that stores everything in one JSON file and serves the web app. The Docker image is a single binary of about 8 MB. Each person runs their own copy; the app has no built-in server address.
+
+**Web app**: list of counters with the time since the last reset, sorted by the oldest reset. You can add, reset and delete counters. Opening a counter shows the reset log, the interval chart, and a form for its label, tags and "notify after" reminder (the reminder itself fires on the phone). A paired NFC tag can be unpaired, but pairing needs the phone. The page refreshes every minute.
+
+**Run it**
+```bash
+cd server
+echo HLS_TOKEN=$(openssl rand -hex 16) > .env   # the token clients need
+mkdir -p data                                   # must be writable by uid 1000
+docker compose up -d --build                    # listens on 127.0.0.1:13387
+```
+Put a reverse proxy with HTTPS in front of it (Caddy, `tailscale serve`, …). Then:
+- **Web**: open the URL and log in with the token. The login form works with password managers, and the token is then kept in the browser.
+- **Phone**: Settings → Sync server, enter the URL and the token.
+
+**Configuration** (environment variables): `TOKEN` (bearer token; empty = no auth, only behind a trusted network), `DATA_FILE` (default `/data/data.json`), `ADDR` (default `:8080`). `compose.yml` maps `HLS_TOKEN` from `.env` to `TOKEN`.
+
+**API**: `GET /` web app, `GET /health` returns `ok`, `POST /sync` takes `{counters, events}` (all or only the changed ones) and returns the merged full state.
+
+**How sync works**
+- Counters and resets have a UUID for sync. The phone keeps its local ids, so NFC tags and reminders are not affected.
+- Counter edits: the newer `updatedAt` wins. Resets are merged by id.
+- Deletes are tombstones (`deleted: true`), so they reach every device.
+- The app sends everything when it opens and shortly after every change, then applies the merged result. Changes made on the web reach the phone the next time the app is opened.
+- The server writes the file atomically and refuses to start if it is corrupt, rather than overwriting it.
