@@ -26,8 +26,9 @@ fun toJson(counters: List<Counter>, events: List<Event>, now: Instant = Instant.
                 .put("nfcTagId", c.nfcTagId ?: JSONObject.NULL)
                 .put("uid", c.uid)
                 .put("updatedAt", c.updatedAt)
+                .put("archived", c.archived)
                 .put("events", JSONArray(byCounter[c.id].orEmpty().map { e ->
-                    JSONObject().put("at", e.at).put("time", Instant.ofEpochMilli(e.at).toString()).put("source", e.source).put("uid", e.uid)
+                    JSONObject().put("at", e.at).put("time", Instant.ofEpochMilli(e.at).toString()).put("source", e.source).put("uid", e.uid).putOpt("note", e.note)
                 }))
         }))
         .toString(2)
@@ -52,10 +53,12 @@ fun fromJson(s: String): Backup {
             nfcTagId = if (o.isNull("nfcTagId")) null else o.getString("nfcTagId"),
             uid = o.optString("uid").ifEmpty { UUID.randomUUID().toString() }, // older exports have none
             updatedAt = o.optLong("updatedAt", System.currentTimeMillis()),
+            archived = o.optBoolean("archived"),
         ) to (0 until ev.length()).map { j ->
             val e = ev.getJSONObject(j)
             Event(counterId = id, at = e.getLong("at"), source = e.optString("source", "manual"),
-                uid = e.optString("uid").ifEmpty { UUID.randomUUID().toString() })
+                uid = e.optString("uid").ifEmpty { UUID.randomUUID().toString() },
+                note = if (e.isNull("note")) null else e.getString("note"))
         }
     }
     require(out.map { it.first.id }.toSet().size == out.size) { "Duplicate counter ids" }

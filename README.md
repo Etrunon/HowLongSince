@@ -18,6 +18,11 @@ An optional self-hosted server keeps the counters in sync between the phone and 
   - Each counter's detail page shows the log as a timeline, with the gap between resets.
   - A small bar chart shows the recent intervals and their average.
 - **Reset at a past time**: "Reset at…" on the detail page, for when you forgot to log it.
+- **Notes**: "Reset…" on the detail page takes an optional note (e.g. "new filter brand"), shown in the timeline.
+- **Archive**: hide a counter without losing its history; archived counters have no reminders and sit behind an "Archived" chip.
+- **Search and sort**: search labels and tags; sort by most overdue, recently reset or name (app and web).
+- **Home-screen widget**: the counters most in need of a reset, each with a reset button. Times refresh on every change and every 30 minutes.
+- **Use my average**: the edit dialog can set "notify after" to your average interval between resets.
 - **Overdue first**: counters past their reminder are listed at the top (app and web).
 - **Launcher shortcuts**: long-press the app icon to reset the 4 counters that need it most.
 - **Undo**: every reset shows an "Undo" snackbar, and Undo removes that log entry.
@@ -56,6 +61,7 @@ app/src/main/java/eu/etrunon/howlongsince/
   Nfc.kt           Tag writing and reading of the reset URI
   Export.kt        JSON export, import and restore
   Sync.kt          Sync with the server: JSON format and the HTTP call
+  Widget.kt        Home-screen widget
   Theme.kt         Dynamic color theme and tag colors
 app/src/test/.../SinceTest.kt  Unit tests (formatting, tags, reminder delay, NFC URI, backup and sync JSON round trips)
 server/

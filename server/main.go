@@ -18,13 +18,14 @@ import (
 )
 
 type Counter struct {
-	ID            string `json:"id"` // UUID
-	Label         string `json:"label"`
-	Tags          string `json:"tags"`
-	NotifyAfterMs *int64 `json:"notifyAfterMs"`
+	ID            string  `json:"id"` // UUID
+	Label         string  `json:"label"`
+	Tags          string  `json:"tags"`
+	NotifyAfterMs *int64  `json:"notifyAfterMs"`
 	NfcTagID      *string `json:"nfcTagId"`
-	UpdatedAt     int64  `json:"updatedAt"` // last-write-wins
-	Deleted       bool   `json:"deleted"`   // tombstone
+	UpdatedAt     int64   `json:"updatedAt"` // last-write-wins
+	Deleted       bool    `json:"deleted"`   // tombstone
+	Archived      bool    `json:"archived"`
 }
 
 type Event struct {
@@ -33,6 +34,7 @@ type Event struct {
 	At        int64  `json:"at"`
 	Source    string `json:"source"` // create | manual | nfc
 	Deleted   bool   `json:"deleted"`
+	Note      string `json:"note,omitempty"` // set when logged, never edited
 }
 
 type State struct {
@@ -52,6 +54,9 @@ func merge(s, in State) State {
 	for _, e := range append(s.Events, in.Events...) {
 		if old, ok := es[e.ID]; ok {
 			e.Deleted = e.Deleted || old.Deleted
+			if e.Note == "" {
+				e.Note = old.Note // a client that predates notes mustn't erase them
+			}
 		}
 		es[e.ID] = e
 	}
@@ -133,6 +138,9 @@ func save(s State) error {
 
 func main() {
 	token := os.Getenv("TOKEN")
+	if token == "" {
+		log.Print("WARNING: TOKEN is not set, anyone who can reach this server can read and change the data")
+	}
 	state = load() // kept in memory; fails fast on a corrupt file
 	static := func(path, typ string, body []byte) {
 		http.HandleFunc("GET "+path, func(w http.ResponseWriter, r *http.Request) {

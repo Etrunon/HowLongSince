@@ -53,3 +53,11 @@ func TestPrune(t *testing.T) {
 		}
 	}
 }
+
+func TestMergeKeepsNote(t *testing.T) {
+	s := State{Events: []Event{{ID: "e", CounterID: "a", Note: "hi"}}}
+	out := merge(s, State{Events: []Event{{ID: "e", CounterID: "a"}}})
+	if out.Events[0].Note != "hi" {
+		t.Error("note lost")
+	}
+}

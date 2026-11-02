@@ -35,6 +35,8 @@
   .row { display: flex; gap: 8px; }
   select { padding: 8px; font-size: 1rem; }
   .overdue .since { color: #d33; }
+  #tools { margin-bottom: 12px; }
+  .note { display: block; margin-left: 8px; }
 </style>
 </head>
 <body>
@@ -46,6 +48,9 @@
 </form>
 <form id="add"><input id="label" placeholder="New counter" required><button>Add</button></form>
 <p id="err"></p>
+<p id="undo" hidden><span></span> <button>Undo</button></p>
+<div class="row" id="tools"><input id="q" type="search" placeholder="Search labels and tags">
+  <select id="sort"><option value="due">Most overdue</option><option value="recent">Recently reset</option><option value="name">Name</option></select></div>
 <div id="tags"></div>
 <div id="list"></div>
 <script>
@@ -76,7 +81,7 @@ const event = (counterId, source, at = Date.now()) => ({ id: crypto.randomUUID()
 const UNITS = [['minutes', 6e4], ['hours', 36e5], ['days', 864e5], ['weeks', 6048e5]];
 const tagList = s => [...new Set(s.split(',').map(t => t.trim().toLowerCase()).filter(Boolean))]; // same as the app
 
-function editForm(c) {
+function editForm(c, avg) {
   const ms = c.notifyAfterMs;
   // Largest unit that divides the stored value evenly, like the app.
   const [unit, size] = ms ? UNITS.filter(([, n]) => ms % n === 0).pop() ?? UNITS[0] : UNITS[2];
@@ -84,10 +89,11 @@ function editForm(c) {
     <label>Label <input name="label" value="${esc(c.label)}" required></label>
     <label>Tags <input name="tags" value="${esc(tagList(c.tags).join(', '))}" placeholder="comma separated"></label>
     <label>Notify after <span class="row"><input name="amount" type="number" min="1" value="${ms ? ms / size : ''}" placeholder="never">
-      <select name="unit">${UNITS.map(([u]) => `<option ${u === unit ? 'selected' : ''}>${u}</option>`).join('')}</select></span></label>
-    <label>Reset at a past time <span class="row"><input type="datetime-local" name="at"><button type="button" data-reset-at="${c.id}">Reset</button></span></label>
+      <select name="unit">${UNITS.map(([u]) => `<option ${u === unit ? 'selected' : ''}>${u}</option>`).join('')}</select>
+      ${avg ? `<button type="button" data-avg="${avg}">Use my average (${since(Date.now() - avg)})</button>` : ''}</span></label>
+    <label>Reset with a note, or at a past time <span class="row"><input name="note" placeholder="note (optional)"><input type="datetime-local" name="at"><button type="button" data-reset-at="${c.id}">Reset</button></span></label>
     ${c.nfcTagId ? `<p class="muted">NFC tag paired <button type="button" data-unpair="${c.id}">Unpair</button></p>` : ''}
-    <button>Save</button>
+    <span class="row"><button>Save</button><button type="button" data-archive="${c.id}">${c.archived ? 'Unarchive' : 'Archive'}</button></span>
   </form>`;
 }
 
@@ -107,27 +113,36 @@ function chart(ev) {
 // Same hue as the app's tagColor: Java String.hashCode() mod 360.
 const tagHue = t => { let h = 0; for (const ch of t) h = Math.imul(h, 31) + ch.charCodeAt(0) | 0; return (h % 360 + 360) % 360; };
 const dot = t => `<i class="dot" style="background:hsl(${tagHue(t)} 55% var(--tag-l))"></i>`;
-let filter = null;
+let filter = null, showArchived = false;
+$('#sort').value = localStorage.getItem('sort') || 'due';
 
 function render() {
   if (document.activeElement?.closest('#list form')) return; // don't wipe an edit in progress
   const open = new Set([...document.querySelectorAll('details[open]')].map(d => d.dataset.id));
-  const live = state.counters.filter(c => !c.deleted);
+  const all = state.counters.filter(c => !c.deleted);
+  const hasArchived = all.some(c => c.archived);
+  if (!hasArchived) showArchived = false;
+  const live = all.filter(c => !!c.archived === showArchived);
   const allTags = [...new Set(live.flatMap(c => tagList(c.tags)))].sort();
   if (!allTags.includes(filter)) filter = null;
-  $('#tags').innerHTML = allTags.map(t => `<button data-tag="${esc(t)}" class="${t === filter ? 'on' : ''}">${dot(t)}${esc(t)}</button>`).join('');
-  const rows = live.filter(c => !filter || tagList(c.tags).includes(filter)).map(c => {
+  $('#tags').innerHTML = allTags.map(t => `<button data-tag="${esc(t)}" class="${t === filter ? 'on' : ''}">${dot(t)}${esc(t)}</button>`).join('')
+    + (hasArchived ? `<button data-archived class="${showArchived ? 'on' : ''}">Archived</button>` : '');
+  const q = $('#q').value.trim().toLowerCase(), sort = $('#sort').value;
+  const rows = live.filter(c => !filter || tagList(c.tags).includes(filter))
+    .filter(c => !q || c.label.toLowerCase().includes(q) || c.tags.includes(q)).map(c => {
     const ev = state.events.filter(e => e.counterId === c.id && !e.deleted).sort((a, b) => b.at - a.at);
     const last = ev[0]?.at ?? 0;
     return { c, ev, last, overdue: c.notifyAfterMs != null && Date.now() - last >= c.notifyAfterMs };
-  }).sort((a, b) => b.overdue - a.overdue || a.last - b.last); // overdue first, then oldest reset
+  }).sort(sort === 'name' ? (a, b) => a.c.label.localeCompare(b.c.label)
+    : sort === 'recent' ? (a, b) => b.last - a.last
+    : (a, b) => b.overdue - a.overdue || a.last - b.last); // overdue first, then oldest reset
   $('#list').innerHTML = rows.map(({ c, ev, last, overdue }) => `
     <details data-id="${c.id}" class="${overdue ? 'overdue' : ''}" ${open.has(c.id) ? 'open' : ''} style="border-left-color:${tagList(c.tags).length ? `hsl(${tagHue(tagList(c.tags)[0])} 55% var(--tag-l))` : 'var(--card)'}">
       <summary><span><b>${esc(c.label)}</b><br><span class="muted">${tagList(c.tags).map(t => '#' + esc(t)).join(' ')}${c.notifyAfterMs ? ' · ⏰' : ''}</span></span>
         <span class="since">${since(last)}</span><button data-reset="${c.id}">Reset</button></summary>
       ${chart(ev)}
-      ${editForm(c)}
-      <ul>${ev.map(e => `<li>${new Date(e.at).toLocaleString()} <span class="muted">${e.source}</span>${ev.length > 1 ? `<button data-del-event="${e.id}">✕</button>` : ''}</li>`).join('')}</ul>
+      ${editForm(c, ev.length >= 3 ? (ev[0].at - ev.at(-1).at) / (ev.length - 1) : 0)}
+      <ul>${ev.map(e => `<li>${new Date(e.at).toLocaleString()} <span class="muted">${e.source}</span>${ev.length > 1 ? `<button data-del-event="${e.id}">✕</button>` : ''}${e.note ? `<span class="note">${esc(e.note)}</span>` : ''}</li>`).join('')}</ul>
       <button data-del="${c.id}">Delete counter</button>
     </details>`).join('');
 }
@@ -140,12 +155,13 @@ $('#login').onsubmit = e => {
 
 $('#add').onsubmit = e => {
   e.preventDefault();
-  const c = { id: crypto.randomUUID(), label: $('#label').value.trim(), tags: '', notifyAfterMs: null, nfcTagId: null, updatedAt: Date.now(), deleted: false };
+  const c = { id: crypto.randomUUID(), label: $('#label').value.trim(), tags: '', notifyAfterMs: null, nfcTagId: null, updatedAt: Date.now(), deleted: false, archived: false };
   $('#label').value = '';
   sync({ counters: [c], events: [event(c.id, 'create')] });
 };
 
 $('#tags').onclick = e => {
+  if (e.target.closest('[data-archived]')) { showArchived = !showArchived; render(); }
   const t = e.target.closest('[data-tag]')?.dataset.tag;
   if (t) { filter = filter === t ? null : t; render(); }
 };
@@ -161,17 +177,42 @@ $('#list').onsubmit = e => {
 
 $('#list').onclick = e => {
   const d = e.target.dataset;
-  if (d.reset) { e.preventDefault(); sync({ counters: [], events: [event(d.reset, 'manual')] }); }
+  if (d.reset) {
+    e.preventDefault();
+    const ev = event(d.reset, 'manual');
+    sync({ counters: [], events: [ev] });
+    showUndo(`Reset ${state.counters.find(x => x.id === d.reset).label}`, ev);
+  }
   if (d.resetAt) {
-    const at = new Date(e.target.closest('form').elements.at.value).getTime();
-    if (!at || at > Date.now()) return alert('Pick a time in the past');
-    sync({ counters: [], events: [event(d.resetAt, 'manual', at)] });
+    const f = e.target.closest('form').elements, v = f.at.value, at = v ? new Date(v).getTime() : Date.now();
+    if (at > Date.now()) return alert('Pick a time in the past');
+    sync({ counters: [], events: [{ ...event(d.resetAt, 'manual', at), ...(f.note.value.trim() && { note: f.note.value.trim() }) }] });
+    document.activeElement.blur();
+  }
+  if (d.avg) {
+    const f = e.target.closest('form').elements, a = Number(d.avg);
+    const [u, n] = a < 1728e5 ? UNITS[1] : UNITS[2]; // hours under 2 days, else days
+    f.unit.value = u; f.amount.value = Math.max(1, Math.round(a / n));
+  }
+  if (d.archive) {
+    const c = state.counters.find(x => x.id === d.archive);
+    document.activeElement.blur();
+    sync({ counters: [{ ...c, archived: !c.archived, updatedAt: Date.now() }], events: [] });
   }
   if (d.delEvent) sync({ counters: [], events: [{ ...state.events.find(x => x.id === d.delEvent), deleted: true }] });
   if (d.unpair) sync({ counters: [{ ...state.counters.find(x => x.id === d.unpair), nfcTagId: null, updatedAt: Date.now() }], events: [] });
   if (d.del && confirm('Delete this counter?'))
     sync({ counters: [{ ...state.counters.find(x => x.id === d.del), deleted: true, updatedAt: Date.now() }], events: [] });
 };
+
+let undoTimer;
+function showUndo(text, ev) {
+  $('#undo span').textContent = text; $('#undo').hidden = false;
+  $('#undo button').onclick = () => { $('#undo').hidden = true; sync({ counters: [], events: [{ ...ev, deleted: true }] }); };
+  clearTimeout(undoTimer); undoTimer = setTimeout(() => $('#undo').hidden = true, 8000);
+}
+$('#q').oninput = render;
+$('#sort').onchange = () => { localStorage.setItem('sort', $('#sort').value); render(); };
 
 sync();
 setInterval(sync, 15 * 60000); // pick up phone changes

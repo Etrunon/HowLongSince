@@ -33,6 +33,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -70,7 +73,7 @@ class MainActivity : ComponentActivity() {
         // Launcher long-press: reset the counters most in need of it.
         lifecycleScope.launch { dao.counters().collect { list ->
             val now = System.currentTimeMillis()
-            ShortcutManagerCompat.setDynamicShortcuts(this@MainActivity, list.sortedByDescending { it.overdue(now) }
+            ShortcutManagerCompat.setDynamicShortcuts(this@MainActivity, list.filter { !it.counter.archived }.sortedByDescending { it.overdue(now) }
                 .take(ShortcutManagerCompat.getMaxShortcutCountPerActivity(this@MainActivity).coerceAtMost(4)).map { c ->
                     ShortcutInfoCompat.Builder(this@MainActivity, "reset-${c.counter.id}")
                         .setShortLabel("Reset ${c.counter.label}".take(25)).setLongLabel("Reset ${c.counter.label}")
@@ -146,10 +149,23 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
     var editing by remember { mutableStateOf<Counter?>(null) } // id 0 = new
     var filter by remember { mutableStateOf<String?>(null) }
 
-    val allTags = counters.flatMap { tagList(it.counter.tags) }.distinct().sorted()
+    var showArchived by remember { mutableStateOf(false) }
+    var searching by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    val pool = counters.filter { it.counter.archived == showArchived }
+    val hasArchived = counters.any { it.counter.archived }
+    if (!hasArchived) showArchived = false
+    val allTags = pool.flatMap { tagList(it.counter.tags) }.distinct().sorted()
     if (filter !in allTags) filter = null
-    val shown = counters.filter { filter == null || filter in tagList(it.counter.tags) }
-        .sortedByDescending { it.overdue(now) } // overdue first; stable, so oldest reset next
+    val prefs0 = remember { ctx.getSharedPreferences("settings", 0) }
+    var sort by remember { mutableStateOf(prefs0.getString("sort", "due")!!) }
+    val shown = pool.filter { filter == null || filter in tagList(it.counter.tags) }
+        .filter { query.isBlank() || it.counter.label.contains(query.trim(), true) || it.counter.tags.contains(query.trim(), true) }
+        .let { l -> when (sort) {
+            "name" -> l.sortedBy { it.counter.label.lowercase() }
+            "recent" -> l.sortedByDescending { it.lastAt }
+            else -> l.sortedByDescending { it.overdue(now) } // overdue first; stable, so oldest reset next
+        } }
     var open by remember { mutableStateOf<Long?>(null) }
     val openC = counters.find { it.counter.id == open }
     val prefs = remember { ctx.getSharedPreferences("settings", 0) }
@@ -178,6 +194,16 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
         modifier = Modifier.nestedScroll(bar.nestedScrollConnection),
         topBar = { LargeTopAppBar(title = { Text("How Long Since?") }, scrollBehavior = bar, navigationIcon = {
             IconButton(onClick = { scope.launch { drawer.open() } }) { Icon(Icons.Filled.Menu, contentDescription = "Menu") }
+        }, actions = {
+            IconButton(onClick = { searching = !searching; query = "" }) { Icon(Icons.Filled.Search, contentDescription = "Search") }
+            var menu by remember { mutableStateOf(false) }
+            IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Sort") }
+            DropdownMenu(menu, onDismissRequest = { menu = false }) {
+                listOf("due" to "Most overdue", "recent" to "Recently reset", "name" to "Name").forEach { (k, name) ->
+                    DropdownMenuItem(text = { Text(name) }, onClick = { sort = k; prefs0.edit().putString("sort", k).apply(); menu = false },
+                        leadingIcon = { if (sort == k) Icon(Icons.Filled.Check, contentDescription = null) else Spacer(Modifier.size(24.dp)) })
+                }
+            }
         }) },
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
@@ -188,11 +214,14 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
         },
     ) { pad ->
         Column(Modifier.padding(pad).padding(horizontal = 16.dp)) {
-            if (allTags.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (searching) OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                placeholder = { Text("Search labels and tags") }, singleLine = true)
+            if (allTags.isNotEmpty() || hasArchived) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 allTags.forEach { t ->
                     FilterChip(selected = filter == t, onClick = { filter = if (filter == t) null else t }, label = { Text(t) },
                         leadingIcon = { Box(Modifier.size(8.dp).background(tagColor(t), CircleShape)) })
                 }
+                if (hasArchived) FilterChip(selected = showArchived, onClick = { showArchived = !showArchived }, label = { Text("Archived") })
             }
             if (counters.isEmpty()) Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally) {
@@ -227,7 +256,7 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
     } }
 
     editing?.let { c ->
-        EditDialog(c, debug, onDismiss = { editing = null }, onDelete = { scope.launch { dao.delete(c.id); reschedule(ctx, c.id) }; editing = null }) { saved ->
+        EditDialog(c, debug, dao, onDismiss = { editing = null }, onDelete = { scope.launch { dao.delete(c.id); reschedule(ctx, c.id) }; editing = null }) { saved ->
             scope.launch {
                 val id = if (saved.id == 0L) dao.create(saved) else saved.id.also { dao.update(saved) }
                 reschedule(ctx, id)
@@ -240,7 +269,7 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
 private val units = listOf("minutes" to 60_000L, "hours" to 3_600_000L, "days" to 86_400_000L, "weeks" to 604_800_000L)
 
 @Composable
-fun EditDialog(c: Counter, debug: Boolean, onDismiss: () -> Unit, onDelete: () -> Unit, onSave: (Counter) -> Unit) {
+fun EditDialog(c: Counter, debug: Boolean, dao: CounterDao, onDismiss: () -> Unit, onDelete: () -> Unit, onSave: (Counter) -> Unit) {
     var label by remember { mutableStateOf(c.label) }
     var tags by remember { mutableStateOf(c.tags.replace(",", ", ")) }
     // Minutes only in debug mode, or if this counter already uses them (else it couldn't be shown).
@@ -250,6 +279,8 @@ fun EditDialog(c: Counter, debug: Boolean, onDismiss: () -> Unit, onDelete: () -
     var unit by remember { mutableStateOf(start) }
     var amount by remember { mutableStateOf(c.notifyAfterMs?.let { (it / start.second).toString() } ?: "") }
     val n = amount.toLongOrNull()?.takeIf { it > 0 }
+    val avg by produceState<Long?>(null) { if (c.id != 0L) value = avgGap(dao.times(c.id)) }
+    fun result() = c.copy(label = label.trim(), tags = tagList(tags).joinToString(","), notifyAfterMs = n?.times(unit.second))
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -263,12 +294,22 @@ fun EditDialog(c: Counter, debug: Boolean, onDismiss: () -> Unit, onDelete: () -
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     units.forEach { u -> FilterChip(selected = unit == u, onClick = { unit = u }, label = { Text(u.first) }) }
                 }
-                if (c.id != 0L) TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                // Remind at your usual pace: hours under 2 days, else days (minutes only if offered).
+                avg?.let { a ->
+                    TextButton(onClick = {
+                        val u = units.first { it.first == if (a < 3_600_000 && units[0].first == "minutes") "minutes" else if (a < 172_800_000) "hours" else "days" }
+                        unit = u; amount = maxOf(1, Math.round(a.toDouble() / u.second)).toString()
+                    }) { Text("Use my average (${since(a)})") }
+                }
+                if (c.id != 0L) Row {
+                    TextButton(onClick = { onSave(result().copy(archived = !c.archived)) }) { Text(if (c.archived) "Unarchive" else "Archive") }
+                    TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                }
             }
         },
         confirmButton = {
             TextButton(enabled = label.isNotBlank(), onClick = {
-                onSave(c.copy(label = label.trim(), tags = tagList(tags).joinToString(","), notifyAfterMs = n?.times(unit.second)))
+                onSave(result())
             }) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },

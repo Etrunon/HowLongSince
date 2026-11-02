@@ -16,6 +16,7 @@ data class Counter(
     val uid: String = UUID.randomUUID().toString(), // sync identity; id stays local (NFC tags, reminders)
     val updatedAt: Long = System.currentTimeMillis(), // last-write-wins on sync
     val deleted: Boolean = false, // tombstone, so deletes reach the server
+    val archived: Boolean = false, // hidden from the list, no reminders, history kept
 )
 
 @Entity(foreignKeys = [ForeignKey(entity = Counter::class, parentColumns = ["id"], childColumns = ["counterId"], onDelete = ForeignKey.CASCADE)],
@@ -27,6 +28,7 @@ data class Event(
     val source: String, // "create" | "manual" | "nfc"
     val uid: String = UUID.randomUUID().toString(),
     val deleted: Boolean = false,
+    val note: String? = null, // set when logged, never edited (sync merges events by union)
 )
 
 data class CounterWithLast(@Embedded val counter: Counter, val lastAt: Long) {
@@ -43,6 +45,9 @@ interface CounterDao {
 
     @Query("SELECT * FROM Event WHERE counterId = :id AND deleted = 0 ORDER BY at DESC")
     fun events(id: Long): Flow<List<Event>>
+
+    @Query("SELECT at FROM Event WHERE counterId = :id AND deleted = 0 ORDER BY at")
+    suspend fun times(id: Long): List<Long>
 
     @Query("UPDATE Counter SET nfcTagId = :uid, updatedAt = :now WHERE id = :id")
     suspend fun setTag(id: Long, uid: String?, now: Long = System.currentTimeMillis())
@@ -107,11 +112,11 @@ interface CounterDao {
         return id
     }
 
-    suspend fun reset(id: Long, source: String = "manual", at: Long = System.currentTimeMillis()) =
-        insert(Event(counterId = id, at = at, source = source))
+    suspend fun reset(id: Long, source: String = "manual", at: Long = System.currentTimeMillis(), note: String? = null) =
+        insert(Event(counterId = id, at = at, source = source, note = note?.trim()?.ifEmpty { null }))
 }
 
-@Database(entities = [Counter::class, Event::class], version = 2, exportSchema = false)
+@Database(entities = [Counter::class, Event::class], version = 3, exportSchema = false)
 abstract class Db : RoomDatabase() {
     abstract fun dao(): CounterDao
 
@@ -128,9 +133,16 @@ abstract class Db : RoomDatabase() {
                 "UPDATE Event SET uid = lower(hex(randomblob(16)))",
             ).forEach(db::execSQL)
         }
+        /** v3: archived counters, notes on resets. */
+        private val v3 = object : Migration(2, 3) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) = listOf(
+                "ALTER TABLE Counter ADD COLUMN archived INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE Event ADD COLUMN note TEXT",
+            ).forEach(db::execSQL)
+        }
         @Volatile private var instance: Db? = null
         fun get(ctx: Context) = instance ?: synchronized(this) {
-            instance ?: Room.databaseBuilder(ctx.applicationContext, Db::class.java, "hls.db").addMigrations(v2).build().also { instance = it }
+            instance ?: Room.databaseBuilder(ctx.applicationContext, Db::class.java, "hls.db").addMigrations(v2, v3).build().also { instance = it }
         }
     }
 }
@@ -157,3 +169,6 @@ fun sinceBig(ms: Long): Pair<String, String> {
 
 /** "Home, health ,home" -> [home, health]. Tags are stored normalized, comma-joined. */
 fun tagList(s: String) = s.split(",").map { it.trim().lowercase() }.filter { it.isNotEmpty() }.distinct()
+
+/** Average gap between resets ([times] ascending), or null with fewer than 2 gaps. */
+fun avgGap(times: List<Long>): Long? = if (times.size < 3) null else (times.last() - times.first()) / (times.size - 1)

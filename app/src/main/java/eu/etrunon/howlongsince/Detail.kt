@@ -33,6 +33,7 @@ fun Detail(c: CounterWithLast, dao: CounterDao, now: Long, onBack: () -> Unit, o
     val scope = rememberCoroutineScope()
     val nfc = remember { NfcAdapter.getDefaultAdapter(ctx) }
     var pairing by remember { mutableStateOf(false) }
+    var resetting by remember { mutableStateOf(false) }
     val fmt = remember { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT) }
 
     if (pairing && nfc != null) PairDialog(nfc, id, dao) { pairing = false }
@@ -46,21 +47,30 @@ fun Detail(c: CounterWithLast, dao: CounterDao, now: Long, onBack: () -> Unit, o
     }) { pad ->
         Column(Modifier.padding(pad).padding(horizontal = 16.dp)) {
             Text(since(now - c.lastAt), style = MaterialTheme.typography.displaySmall)
+            if (c.counter.archived) Text("Archived: no reminders, hidden from the list", style = MaterialTheme.typography.bodySmall)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("${events.size} entries", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                // Forgot to log it: reset at a past date and time.
-                TextButton(onClick = {
+                TextButton(onClick = { resetting = true }) { Text("Reset…") }
+            }
+            // Reset with a note, now or (forgot to log it) at a past date and time.
+            if (resetting) {
+                var note by remember { mutableStateOf("") }
+                fun done(at: Long) { resetting = false; scope.launch { dao.reset(id, "manual", at, note); reschedule(ctx, id) } }
+                AlertDialog(onDismissRequest = { resetting = false }, title = { Text("Reset ${c.counter.label}") },
+                    text = { OutlinedTextField(note, { note = it }, label = { Text("Note (optional)") }) },
+                    confirmButton = { TextButton(onClick = { done(System.currentTimeMillis()) }) { Text("Now") } },
+                    dismissButton = { TextButton(onClick = {
                     val cal = Calendar.getInstance()
                     DatePickerDialog(ctx, { _, y, m, d ->
                         TimePickerDialog(ctx, { _, h, min ->
                             cal.set(y, m, d, h, min, 0)
                             if (cal.timeInMillis > System.currentTimeMillis())
                                 Toast.makeText(ctx, "Pick a time in the past", Toast.LENGTH_SHORT).show()
-                            else scope.launch { dao.reset(id, "manual", cal.timeInMillis); reschedule(ctx, id) }
+                            else done(cal.timeInMillis)
                         }, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), android.text.format.DateFormat.is24HourFormat(ctx)).show()
                     }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH))
                         .apply { datePicker.maxDate = System.currentTimeMillis() }.show()
-                }) { Text("Reset at…") }
+                    }) { Text("Earlier…") } })
             }
             if (nfc != null) Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(if (c.counter.nfcTagId != null) "NFC tag paired" else "No NFC tag", Modifier.weight(1f))
@@ -91,6 +101,7 @@ fun Detail(c: CounterWithLast, dao: CounterDao, now: Long, onBack: () -> Unit, o
                             val tag = when (e.source) { "nfc" -> "via NFC"; "create" -> "created"; else -> null }
                             Text(listOfNotNull(gap, tag).joinToString(" · "), style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            e.note?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                         }
                     }
                 }

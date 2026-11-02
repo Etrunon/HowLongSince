@@ -24,11 +24,11 @@ fun stateJson(counters: List<Counter>, events: List<Event>): String {
         .put("counters", JSONArray(counters.map { c ->
             JSONObject().put("id", c.uid).put("label", c.label).put("tags", c.tags)
                 .put("notifyAfterMs", c.notifyAfterMs ?: JSONObject.NULL).put("nfcTagId", c.nfcTagId ?: JSONObject.NULL)
-                .put("updatedAt", c.updatedAt).put("deleted", c.deleted)
+                .put("updatedAt", c.updatedAt).put("deleted", c.deleted).put("archived", c.archived)
         }))
         .put("events", JSONArray(events.mapNotNull { e ->
             JSONObject().put("id", e.uid).put("counterId", uids[e.counterId] ?: return@mapNotNull null)
-                .put("at", e.at).put("source", e.source).put("deleted", e.deleted)
+                .put("at", e.at).put("source", e.source).put("deleted", e.deleted).putOpt("note", e.note)
         }))
         .toString()
 }
@@ -42,12 +42,12 @@ fun parseState(s: String): Remote {
             Counter(label = c.getString("label"), tags = c.optString("tags"),
                 notifyAfterMs = if (c.isNull("notifyAfterMs")) null else c.getLong("notifyAfterMs"),
                 nfcTagId = if (c.isNull("nfcTagId")) null else c.getString("nfcTagId"),
-                uid = c.getString("id"), updatedAt = c.getLong("updatedAt"), deleted = c.optBoolean("deleted"))
+                uid = c.getString("id"), updatedAt = c.getLong("updatedAt"), deleted = c.optBoolean("deleted"), archived = c.optBoolean("archived"))
         },
         (0 until es.length()).map { i ->
             val e = es.getJSONObject(i)
             e.getString("counterId") to Event(counterId = 0, at = e.getLong("at"), source = e.optString("source", "manual"),
-                uid = e.getString("id"), deleted = e.optBoolean("deleted"))
+                uid = e.getString("id"), deleted = e.optBoolean("deleted"), note = if (e.isNull("note")) null else e.getString("note"))
         },
     )
 }

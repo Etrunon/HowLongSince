@@ -22,8 +22,9 @@ fun notifyDelay(lastAt: Long, afterMs: Long?, now: Long): Long? =
 suspend fun reschedule(ctx: Context, id: Long) {
     val wm = WorkManager.getInstance(ctx)
     val c = Db.get(ctx).dao().counter(id)
-    val delay = c?.let { notifyDelay(it.lastAt, it.counter.notifyAfterMs, System.currentTimeMillis()) }
+    val delay = c?.takeIf { !it.counter.archived }?.let { notifyDelay(it.lastAt, it.counter.notifyAfterMs, System.currentTimeMillis()) }
     if (delay == null) wm.cancelUniqueWork("notify-$id") else remindIn(ctx, id, delay)
+    updateWidgets(ctx) // every change goes through here
 }
 
 fun remindIn(ctx: Context, id: Long, delay: Long) {
@@ -57,7 +58,7 @@ class NotifyWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx
     }
 }
 
-private fun action(ctx: Context, id: Long, what: String) = PendingIntent.getBroadcast(ctx, id.toInt() * 2 + (if (what == "reset") 0 else 1),
+fun action(ctx: Context, id: Long, what: String) = PendingIntent.getBroadcast(ctx, id.toInt() * 2 + (if (what == "reset") 0 else 1),
     Intent(ctx, ReminderAction::class.java).setAction(what).putExtra("id", id),
     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
