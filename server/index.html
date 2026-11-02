@@ -19,6 +19,8 @@
   ul { padding-left: 16px; }
   li button { padding: 2px 6px; font-size: .8rem; margin-left: 8px; }
   [hidden] { display: none !important; }
+  h1 { display: flex; align-items: center; gap: 12px; }
+  h1 img { width: 48px; height: 48px; }
   #err { color: #d33; }
   [data-edit] { display: grid; gap: 8px; margin: 12px 0; }
   [data-edit] label { display: grid; gap: 4px; font-size: .9rem; }
@@ -27,7 +29,7 @@
 </style>
 </head>
 <body>
-<h1>How Long Since?</h1>
+<h1><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj4KICA8cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgcng9IjIyIiBmaWxsPSIjMzM2NmNjIi8+CiAgPGNpcmNsZSBjeD0iNTAiIGN5PSI1MCIgcj0iMzQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSI2Ii8+CiAgPGcgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjQiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+CiAgICA8cGF0aCBkPSJNNTAgMjF2NU03OSA1MGgtNU01MCA3OXYtNU0yMSA1MGg1Ii8+CiAgPC9nPgogIDxwYXRoIGQ9Ik00MCA0MkExMCAxMCAwIDEgMSA1NSA1MC43UTUwIDUzLjUgNTAgNTkiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmY2MzMyIgc3Ryb2tlLXdpZHRoPSI3IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8Y2lyY2xlIGN4PSI1MCIgY3k9IjY5IiByPSI0LjUiIGZpbGw9IiNmZmNjMzMiLz4KPC9zdmc+Cg==" alt="">How Long Since?</h1>
 <form id="login" hidden>
   <input name="username" autocomplete="username" value="howlongsince" readonly>
   <input id="token" name="password" type="password" autocomplete="current-password" placeholder="Token" required>
