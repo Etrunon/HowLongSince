@@ -93,6 +93,11 @@ docker compose up -d --build                    # listens on 127.0.0.1:13387
 ```
 Put a reverse proxy with HTTPS in front of it (Caddy, `tailscale serve`, …). Then:
 - **Web**: open the URL and log in with the token. The login form works with password managers, and the token is then kept in the browser.
+- **Install the web app** (own window, own icon):
+  - Chrome / Chromium / Edge (any OS): the install icon on the right of the address bar.
+  - Firefox on Windows (143+): the "add to taskbar" icon in the address bar pins it to the Windows taskbar. If missing, set `browser.taskbarTabs.enabled` to `true` in `about:config`.
+  - Firefox on Android: menu → "Add to Home screen".
+  - Firefox on Linux: no install option; use a pinned tab or Chromium.
 - **Phone**: Settings → Sync server, enter the URL and the token.
 
 **Configuration** (environment variables): `TOKEN` (bearer token; empty = no auth, only behind a trusted network), `DATA_FILE` (default `/data/data.json`), `ADDR` (default `:8080`). `compose.yml` maps `HLS_TOKEN` from `.env` to `TOKEN`.
