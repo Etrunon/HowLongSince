@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="reset_label">Azzera %s</string>
+    <string name="reset_done">Azzerato: %s</string>
+    <string name="tag_not_paired">Questo tag non è abbinato a un contatore</string>
+    <string name="settings">Impostazioni</string>
+    <string name="menu">Menu</string>
+    <string name="search">Cerca</string>
+    <string name="sort">Ordina</string>
+    <string name="sort_due">Più in ritardo</string>
+    <string name="sort_recent">Azzerati di recente</string>
+    <string name="sort_name">Nome</string>
+    <string name="new_">Nuovo</string>
+    <string name="search_hint">Cerca tra etichette e tag</string>
+    <string name="archived">Archiviati</string>
+    <string name="empty_title">Ancora nessun contatore</string>
+    <string name="empty_hint">Tocca Nuovo per iniziare a contare</string>
+    <string name="sync_off">Sincronizzazione disattivata: imposta un server nelle Impostazioni</string>
+    <string name="undo">Annulla</string>
+    <string name="new_counter">Nuovo contatore</string>
+    <string name="edit_counter">Modifica contatore</string>
+    <string name="label">Etichetta</string>
+    <string name="tags_hint">Tag (separati da virgole)</string>
+    <string name="notify_after">Avvisa dopo (vuoto = mai)</string>
+    <string name="unit_minutes">minuti</string>
+    <string name="unit_hours">ore</string>
+    <string name="unit_days">giorni</string>
+    <string name="unit_weeks">settimane</string>
+    <string name="use_average">Usa la mia media (%s)</string>
+    <string name="archive">Archivia</string>
+    <string name="unarchive">Ripristina</string>
+    <string name="delete">Elimina</string>
+    <string name="save">Salva</string>
+    <string name="cancel">Annulla</string>
+    <string name="back">Indietro</string>
+    <string name="edit">Modifica</string>
+    <string name="dark_theme">Tema scuro</string>
+    <string name="debug_mode">Modalità debug</string>
+    <string name="debug_hint">Consenti \"avvisa dopo\" in minuti</string>
+    <string name="sync_server">Server di sincronizzazione</string>
+    <string name="url_hint">URL (vuoto = nessuna sincronizzazione)</string>
+    <string name="token">Token</string>
+    <string name="not_synced">Non ancora sincronizzato</string>
+    <string name="syncing">Sincronizzazione…</string>
+    <string name="sync_now">Sincronizza ora</string>
+    <string name="synced">Sincronizzato alle %s</string>
+    <string name="sync_failed">Sincronizzazione non riuscita: %s</string>
+    <string name="wrong_token">token errato</string>
+    <string name="export_failed">Esportazione non riuscita: %s</string>
+    <string name="cant_read">Impossibile leggere il file: %s</string>
+    <string name="replace_title">Sostituire tutti i dati?</string>
+    <string name="replace">Sostituisci</string>
+    <string name="import_data">Importa dati</string>
+    <string name="import_hint">Sostituisce tutto con un file esportato in precedenza (anche sul server di sincronizzazione)</string>
+    <string name="export_data">Esporta dati</string>
+    <string name="export_hint">Salva tutti i contatori e i loro registri come JSON</string>
+    <string name="reset">Azzera</string>
+    <string name="archived_hint">Archiviato: nessun promemoria, nascosto dall\'elenco</string>
+    <string name="reset_dots">Azzera…</string>
+    <string name="note_optional">Nota (facoltativa)</string>
+    <string name="now">Ora</string>
+    <string name="earlier">Prima…</string>
+    <string name="pick_past">Scegli un momento nel passato</string>
+    <string name="nfc_paired">Tag NFC abbinato</string>
+    <string name="no_nfc">Nessun tag NFC</string>
+    <string name="unpair">Disabbina</string>
+    <string name="re_pair">Riabbina</string>
+    <string name="pair_tag">Abbina tag</string>
+    <string name="turn_on_nfc">Prima attiva l\'NFC</string>
+    <string name="after">dopo %s</string>
+    <string name="via_nfc">via NFC</string>
+    <string name="created">creato</string>
+    <string name="tag_paired">Tag abbinato</string>
+    <string name="pair_title">Abbina tag NFC</string>
+    <string name="pair_text">Avvicina un tag al retro del telefono. Verrà sovrascritto.</string>
+    <string name="intervals">Intervalli · media %s</string>
+    <string name="tag_read_only">Il tag è di sola lettura</string>
+    <string name="tag_too_small">Il tag è troppo piccolo</string>
+    <string name="tag_no_ndef">Il tag non supporta NDEF</string>
+    <string name="tag_write_failed">Scrittura non riuscita, tieni fermo il tag e riprova</string>
+    <string name="channel_reminders">Promemoria</string>
+    <string name="its_been">Sono passati %s</string>
+    <string name="reset_now">Azzera ora</string>
+    <string name="snooze">Rimanda di 1 giorno</string>
+    <string name="widget_empty">Ancora nessun contatore</string>
+    <string name="widget_label">Contatori</string>
+    <string name="language">Lingua</string>
+    <string name="pair_now">Abbina ora</string>
+    <string name="copy_url">Copia URL</string>
+    <string name="url_copied">URL copiato. Scrivilo su un tag con qualsiasi app NFC, poi avvicina il tag qui per abbinarlo.</string>
+    <string name="pair_choice_text">Abbina ora scrive l\'URL di questo contatore su un tag, sostituendone il contenuto.\n\nOppure copia l\'URL e scrivilo con un\'altra app NFC; il primo tocco di quel tag lo abbinerà.\n\n%s</string>
+    <string name="lang_system">Predefinita di sistema</string>
+    <plurals name="n_minutes"><item quantity="one">minuto</item><item quantity="many">minuti</item><item quantity="other">minuti</item></plurals>
+    <plurals name="n_hours"><item quantity="one">ora</item><item quantity="many">ore</item><item quantity="other">ore</item></plurals>
+    <plurals name="n_days"><item quantity="one">giorno</item><item quantity="many">giorni</item><item quantity="other">giorni</item></plurals>
+    <plurals name="n_years"><item quantity="one">anno</item><item quantity="many">anni</item><item quantity="other">anni</item></plurals>
+    <plurals name="n_entries"><item quantity="one">%d voce</item><item quantity="many">%d voci</item><item quantity="other">%d voci</item></plurals>
+    <plurals name="n_exported"><item quantity="one">Esportato %d contatore</item><item quantity="many">Esportati %d contatori</item><item quantity="other">Esportati %d contatori</item></plurals>
+    <plurals name="n_imported"><item quantity="one">Importato %d contatore</item><item quantity="many">Importati %d contatori</item><item quantity="other">Importati %d contatori</item></plurals>
+    <plurals name="n_replace_text"><item quantity="one">I contatori e i registri attuali verranno eliminati e sostituiti dal %d contatore nel file. Non si può annullare.</item><item quantity="many">I contatori e i registri attuali verranno eliminati e sostituiti dai %d contatori nel file. Non si può annullare.</item><item quantity="other">I contatori e i registri attuali verranno eliminati e sostituiti dai %d contatori nel file. Non si può annullare.</item></plurals>
+</resources>

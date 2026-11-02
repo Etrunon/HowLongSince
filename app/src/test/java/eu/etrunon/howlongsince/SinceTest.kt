@@ -6,11 +6,13 @@ import org.junit.Test
 class SinceTest {
     private val m = 60_000L; private val h = 60 * m; private val d = 24 * h
     @Test fun units() {
-        assertEquals("0m", since(-5))
-        assertEquals("59m", since(59 * m))
-        assertEquals("1h 0m", since(h))
-        assertEquals("3d 2h", since(3 * d + 2 * h + 5 * m))
-        assertEquals("1y 30d", since(395 * d))
+        assertEquals("0m", since(-5, false))
+        assertEquals("59m", since(59 * m, false))
+        assertEquals("1h 0m", since(h, false))
+        assertEquals("3d 2h", since(3 * d + 2 * h + 5 * m, false))
+        assertEquals("3g 2h", since(3 * d + 2 * h + 5 * m, true))
+        assertEquals("1y 30d", since(395 * d, false))
+        assertEquals("1a 30g", since(395 * d, true))
     }
 }
 
@@ -41,10 +43,10 @@ class NfcUriTest {
 
 class SinceBigTest {
     @Test fun big() {
-        assertEquals("0" to "minutes", sinceBig(0))
-        assertEquals("1" to "hour", sinceBig(3_600_000))
-        assertEquals("12" to "days", sinceBig(12 * 86_400_000L + 5))
-        assertEquals("2" to "years", sinceBig(800 * 86_400_000L))
+        assertEquals(0L to R.plurals.n_minutes, sinceBig(0))
+        assertEquals(1L to R.plurals.n_hours, sinceBig(3_600_000))
+        assertEquals(12L to R.plurals.n_days, sinceBig(12 * 86_400_000L + 5))
+        assertEquals(2L to R.plurals.n_years, sinceBig(800 * 86_400_000L))
     }
 }
 

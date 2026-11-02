@@ -40,18 +40,18 @@ class NotifyWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx
         val id = inputData.getLong("id", 0)
         val c = Db.get(applicationContext).dao().counter(id) ?: return Result.success()
         val nm = applicationContext.getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel("reminders", "Reminders", NotificationManager.IMPORTANCE_DEFAULT))
+        nm.createNotificationChannel(NotificationChannel("reminders", applicationContext.getString(R.string.channel_reminders), NotificationManager.IMPORTANCE_DEFAULT))
         val open = PendingIntent.getActivity(applicationContext, id.toInt(),
             Intent(applicationContext, MainActivity::class.java).putExtra("id", id),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val n = NotificationCompat.Builder(applicationContext, "reminders")
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle(c.counter.label)
-            .setContentText("It's been ${since(System.currentTimeMillis() - c.lastAt)}")
+            .setContentText(applicationContext.getString(R.string.its_been, since(System.currentTimeMillis() - c.lastAt)))
             .setContentIntent(open)
             .setAutoCancel(true)
-            .addAction(0, "Reset now", action(applicationContext, id, "reset"))
-            .addAction(0, "Snooze 1 day", action(applicationContext, id, "snooze"))
+            .addAction(0, applicationContext.getString(R.string.reset_now), action(applicationContext, id, "reset"))
+            .addAction(0, applicationContext.getString(R.string.snooze), action(applicationContext, id, "snooze"))
             .build()
         try { NotificationManagerCompat.from(applicationContext).notify(id.toInt(), n) } catch (_: SecurityException) {} // permission denied
         return Result.success()

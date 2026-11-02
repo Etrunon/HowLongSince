@@ -12,8 +12,8 @@ fun resetUri(id: Long) = "$PREFIX$id"
 fun parseResetUri(s: String?): Long? = s?.takeIf { it.startsWith(PREFIX) }?.removePrefix(PREFIX)?.toLongOrNull()
 fun ByteArray.toHex() = joinToString("") { "%02x".format(it) }
 
-/** Writes the counter's reset URI to the tag. Returns an error message, or null on success. Blocking. */
-fun writeTag(tag: Tag, id: Long): String? = try {
+/** Writes the counter's reset URI to the tag. Returns an error message (string resource), or null on success. Blocking. */
+fun writeTag(tag: Tag, id: Long): Int? = try {
     val msg = NdefMessage(NdefRecord.createUri(resetUri(id)))
     val ndef = Ndef.get(tag)
     val formatable = NdefFormatable.get(tag)
@@ -21,14 +21,14 @@ fun writeTag(tag: Tag, id: Long): String? = try {
         ndef != null -> ndef.use {
             it.connect()
             when {
-                !it.isWritable -> "Tag is read-only"
-                it.maxSize < msg.byteArrayLength -> "Tag is too small"
+                !it.isWritable -> R.string.tag_read_only
+                it.maxSize < msg.byteArrayLength -> R.string.tag_too_small
                 else -> { it.writeNdefMessage(msg); null }
             }
         }
         formatable != null -> formatable.use { it.connect(); it.format(msg); null }
-        else -> "Tag doesn't support NDEF"
+        else -> R.string.tag_no_ndef
     }
 } catch (e: Exception) { // tag moved away mid-write, etc.
-    "Write failed, hold the tag still and try again"
+    R.string.tag_write_failed
 }

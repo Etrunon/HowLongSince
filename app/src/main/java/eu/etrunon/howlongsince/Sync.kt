@@ -66,11 +66,11 @@ suspend fun sync(ctx: Context): Unit = lock.withLock {
         val body = stateJson(dao.rawCounters(), dao.rawEvents())
         val res = withContext(Dispatchers.IO) { post("$url/sync", prefs.getString("syncToken", "")!!.trim(), body) }
         dao.merge(parseState(res)).forEach { reschedule(ctx, it) }
-        "Synced " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date())
+        ctx.getString(R.string.synced, DateFormat.getTimeInstance(DateFormat.SHORT).format(Date())) to false
     } catch (e: Exception) {
-        "Sync failed: ${e.message}"
+        ctx.getString(R.string.sync_failed, if (e.message == "wrong token") ctx.getString(R.string.wrong_token) else e.message) to true
     }
-    prefs.edit().putString("syncStatus", status).apply()
+    prefs.edit().putString("syncStatus", status.first).putBoolean("syncFailed", status.second).apply()
 }
 
 /** Background sync, so web changes and reminders stay current without opening the app. */

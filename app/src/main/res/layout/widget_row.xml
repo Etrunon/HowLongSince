@@ -8,5 +8,5 @@
         android:textColor="#8AB4F8" android:textSize="15sp" android:textStyle="bold" android:paddingHorizontal="8dp" />
     <TextView android:id="@+id/reset" android:layout_width="40dp" android:layout_height="40dp"
         android:gravity="center" android:text="↻" android:textColor="#FFFFFF" android:textSize="20sp"
-        android:contentDescription="Reset" />
+        android:contentDescription="@string/reset" />
 </LinearLayout>

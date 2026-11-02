@@ -44,6 +44,7 @@ Un server opzionale, ospitato da te, sincronizza i contatori tra il telefono e u
   - Modalità Debug, che consente promemoria in minuti.
   - Esportazione JSON e un'importazione che sostituisce tutti i dati. Il file viene controllato e confermi prima che venga sovrascritto qualcosa. Con la sincronizzazione attiva, l'importazione sostituisce anche i dati sul server.
   - URL e token del server di sincronizzazione, con lo stato dell'ultima sincronizzazione e un pulsante "Sync now". Lascia l'URL vuoto per disattivare la sincronizzazione.
+- **Lingue**: inglese e italiano, secondo la lingua del telefono o del browser. Da Android 13 la lingua dell'app si può anche impostare a parte nelle impostazioni di sistema (Impostazioni → App → How Long Since? → Lingua).
 - **Aspetto**: Material 3 con i colori del tuo sfondo (Android 12+) e una barra del titolo grande che si riduce scorrendo.
 
 ## Tecnologia

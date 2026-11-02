@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import java.text.DateFormat
 import java.util.Date
 
@@ -33,51 +34,64 @@ fun Detail(c: CounterWithLast, dao: CounterDao, now: Long, onBack: () -> Unit, o
     val scope = rememberCoroutineScope()
     val nfc = remember { NfcAdapter.getDefaultAdapter(ctx) }
     var pairing by remember { mutableStateOf(false) }
+    var pairChoice by remember { mutableStateOf(false) }
     var resetting by remember { mutableStateOf(false) }
     val fmt = remember { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT) }
 
     if (pairing && nfc != null) PairDialog(nfc, id, dao) { pairing = false }
+    // Pair here, or copy the URL to write the tag with another app (then the first tap pairs it).
+    if (pairChoice) AlertDialog(onDismissRequest = { pairChoice = false }, title = { Text(stringResource(R.string.pair_title)) },
+        text = { Text(stringResource(R.string.pair_choice_text, resetUri(id))) },
+        confirmButton = { TextButton(onClick = {
+            pairChoice = false
+            if (nfc?.isEnabled == true) pairing = true else Toast.makeText(ctx, ctx.getString(R.string.turn_on_nfc), Toast.LENGTH_SHORT).show()
+        }) { Text(stringResource(R.string.pair_now)) } },
+        dismissButton = { TextButton(onClick = {
+            pairChoice = false
+            ctx.getSystemService(android.content.ClipboardManager::class.java)
+                .setPrimaryClip(android.content.ClipData.newPlainText("NFC URL", resetUri(id)))
+            ctx.getSharedPreferences("settings", 0).edit().putLong("adoptTag", id).apply()
+            Toast.makeText(ctx, ctx.getString(R.string.url_copied), Toast.LENGTH_LONG).show()
+        }) { Text(stringResource(R.string.copy_url)) } })
 
     Scaffold(topBar = {
         TopAppBar(
             title = { Text(c.counter.label) },
-            navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
-            actions = { TextButton(onClick = onEdit) { Text("Edit") } },
+            navigationIcon = { TextButton(onClick = onBack) { Text(stringResource(R.string.back)) } },
+            actions = { TextButton(onClick = onEdit) { Text(stringResource(R.string.edit)) } },
         )
     }) { pad ->
         Column(Modifier.padding(pad).padding(horizontal = 16.dp)) {
             Text(since(now - c.lastAt), style = MaterialTheme.typography.displaySmall)
-            if (c.counter.archived) Text("Archived: no reminders, hidden from the list", style = MaterialTheme.typography.bodySmall)
+            if (c.counter.archived) Text(stringResource(R.string.archived_hint), style = MaterialTheme.typography.bodySmall)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${events.size} entries", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                TextButton(onClick = { resetting = true }) { Text("Reset…") }
+                Text(ctx.resources.getQuantityString(R.plurals.n_entries, events.size, events.size), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = { resetting = true }) { Text(stringResource(R.string.reset_dots)) }
             }
             // Reset with a note, now or (forgot to log it) at a past date and time.
             if (resetting) {
                 var note by remember { mutableStateOf("") }
                 fun done(at: Long) { resetting = false; scope.launch { dao.reset(id, "manual", at, note); reschedule(ctx, id) } }
-                AlertDialog(onDismissRequest = { resetting = false }, title = { Text("Reset ${c.counter.label}") },
-                    text = { OutlinedTextField(note, { note = it }, label = { Text("Note (optional)") }) },
-                    confirmButton = { TextButton(onClick = { done(System.currentTimeMillis()) }) { Text("Now") } },
+                AlertDialog(onDismissRequest = { resetting = false }, title = { Text(stringResource(R.string.reset_label, c.counter.label)) },
+                    text = { OutlinedTextField(note, { note = it }, label = { Text(stringResource(R.string.note_optional)) }) },
+                    confirmButton = { TextButton(onClick = { done(System.currentTimeMillis()) }) { Text(stringResource(R.string.now)) } },
                     dismissButton = { TextButton(onClick = {
                     val cal = Calendar.getInstance()
                     DatePickerDialog(ctx, { _, y, m, d ->
                         TimePickerDialog(ctx, { _, h, min ->
                             cal.set(y, m, d, h, min, 0)
                             if (cal.timeInMillis > System.currentTimeMillis())
-                                Toast.makeText(ctx, "Pick a time in the past", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(ctx, ctx.getString(R.string.pick_past), Toast.LENGTH_SHORT).show()
                             else done(cal.timeInMillis)
                         }, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), android.text.format.DateFormat.is24HourFormat(ctx)).show()
                     }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH))
                         .apply { datePicker.maxDate = System.currentTimeMillis() }.show()
-                    }) { Text("Earlier…") } })
+                    }) { Text(stringResource(R.string.earlier)) } })
             }
             if (nfc != null) Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (c.counter.nfcTagId != null) "NFC tag paired" else "No NFC tag", Modifier.weight(1f))
-                if (c.counter.nfcTagId != null) TextButton(onClick = { scope.launch { dao.setTag(id, null) } }) { Text("Unpair") }
-                TextButton(onClick = {
-                    if (nfc.isEnabled) pairing = true else Toast.makeText(ctx, "Turn on NFC first", Toast.LENGTH_SHORT).show()
-                }) { Text(if (c.counter.nfcTagId != null) "Re-pair" else "Pair tag") }
+                Text(stringResource(if (c.counter.nfcTagId != null) R.string.nfc_paired else R.string.no_nfc), Modifier.weight(1f))
+                if (c.counter.nfcTagId != null) TextButton(onClick = { cancelAdopt(ctx, id); scope.launch { dao.setTag(id, null) } }) { Text(stringResource(R.string.unpair)) }
+                TextButton(onClick = { pairChoice = true }) { Text(stringResource(if (c.counter.nfcTagId != null) R.string.re_pair else R.string.pair_tag)) }
             }
             // Oldest -> newest intervals between resets.
             val gaps = events.zipWithNext { a, b -> a.at - b.at }.reversed().takeLast(30)
@@ -88,7 +102,7 @@ fun Detail(c: CounterWithLast, dao: CounterDao, now: Long, onBack: () -> Unit, o
             LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
                 itemsIndexed(events, key = { _, e -> e.id }) { i, e ->
                     // Newest first, so the previous entry is the next item in the list.
-                    val gap = events.getOrNull(i + 1)?.let { "after ${since(e.at - it.at)}" }
+                    val gap = events.getOrNull(i + 1)?.let { ctx.getString(R.string.after, since(e.at - it.at)) }
                     Row(Modifier.height(IntrinsicSize.Min)) {
                         Box(Modifier.width(24.dp).fillMaxHeight().drawBehind {
                             val x = size.width / 2; val y = 14.dp.toPx()
@@ -98,7 +112,7 @@ fun Detail(c: CounterWithLast, dao: CounterDao, now: Long, onBack: () -> Unit, o
                         })
                         Column(Modifier.padding(start = 8.dp, bottom = 16.dp)) {
                             Text(fmt.format(Date(e.at)), style = MaterialTheme.typography.titleSmall)
-                            val tag = when (e.source) { "nfc" -> "via NFC"; "create" -> "created"; else -> null }
+                            val tag = when (e.source) { "nfc" -> ctx.getString(R.string.via_nfc); "create" -> ctx.getString(R.string.created); else -> null }
                             Text(listOfNotNull(gap, tag).joinToString(" · "), style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                             e.note?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
@@ -119,8 +133,8 @@ private fun PairDialog(nfc: NfcAdapter, id: Long, dao: CounterDao, onDone: () ->
         nfc.enableReaderMode(activity, { tag ->
             val err = writeTag(tag, id) // binder thread, blocking IO is fine here
             scope.launch {
-                if (err == null) dao.pair(id, tag.id.toHex())
-                Toast.makeText(activity, err ?: "Tag paired", Toast.LENGTH_SHORT).show()
+                if (err == null) { cancelAdopt(activity, id); dao.pair(id, tag.id.toHex()) }
+                Toast.makeText(activity, activity.getString(err ?: R.string.tag_paired), Toast.LENGTH_SHORT).show()
                 if (err == null) onDone()
             }
         }, NfcAdapter.FLAG_READER_NFC_A or NfcAdapter.FLAG_READER_NFC_B or NfcAdapter.FLAG_READER_NFC_F or
@@ -129,18 +143,24 @@ private fun PairDialog(nfc: NfcAdapter, id: Long, dao: CounterDao, onDone: () ->
     }
     AlertDialog(
         onDismissRequest = onDone,
-        title = { Text("Pair NFC tag") },
-        text = { Text("Hold a tag against the back of the phone. It will be overwritten.") },
+        title = { Text(stringResource(R.string.pair_title)) },
+        text = { Text(stringResource(R.string.pair_text)) },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDone) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDone) { Text(stringResource(R.string.cancel)) } },
     )
+}
+
+/** Stop waiting for a tag written by another app (after unpair or an in-app pairing). */
+fun cancelAdopt(ctx: android.content.Context, id: Long) {
+    val p = ctx.getSharedPreferences("settings", 0)
+    if (p.getLong("adoptTag", 0) == id) p.edit().remove("adoptTag").apply()
 }
 
 /** Tiny bar chart of the intervals between resets, oldest left. */
 @Composable
 private fun IntervalChart(gaps: List<Long>) {
     val color = MaterialTheme.colorScheme.primary
-    Text("Intervals · avg ${since(gaps.average().toLong())}", Modifier.padding(top = 12.dp, bottom = 4.dp),
+    Text(stringResource(R.string.intervals, since(gaps.average().toLong())), Modifier.padding(top = 12.dp, bottom = 4.dp),
         style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Canvas(Modifier.fillMaxWidth().height(56.dp)) {
         val max = gaps.max().coerceAtLeast(1).toFloat()

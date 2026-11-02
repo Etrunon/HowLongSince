@@ -50,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
@@ -76,7 +77,7 @@ class MainActivity : ComponentActivity() {
             ShortcutManagerCompat.setDynamicShortcuts(this@MainActivity, list.filter { !it.counter.archived }.sortedByDescending { it.overdue(now) }
                 .take(ShortcutManagerCompat.getMaxShortcutCountPerActivity(this@MainActivity).coerceAtMost(4)).map { c ->
                     ShortcutInfoCompat.Builder(this@MainActivity, "reset-${c.counter.id}")
-                        .setShortLabel("Reset ${c.counter.label}".take(25)).setLongLabel("Reset ${c.counter.label}")
+                        .setShortLabel(getString(R.string.reset_label, c.counter.label).take(25)).setLongLabel(getString(R.string.reset_label, c.counter.label))
                         .setIcon(IconCompat.createWithResource(this@MainActivity, R.mipmap.ic_launcher))
                         .setIntent(Intent(RESET_ACTION, null, this@MainActivity, MainActivity::class.java).putExtra("id", c.counter.id))
                         .build()
@@ -115,9 +116,18 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             val dao = Db.get(this@MainActivity).dao()
             val c = dao.counter(id)
+            // URL copied for another app to write: the first tag that carries it gets paired.
+            val prefs = getSharedPreferences("settings", 0)
+            if (c != null && tag != null && prefs.getLong("adoptTag", 0) == id) {
+                prefs.edit().remove("adoptTag").apply()
+                dao.pair(id, tag.id.toHex())
+                Toast.makeText(this@MainActivity, getString(R.string.tag_paired), Toast.LENGTH_SHORT).show()
+                openId = id
+                return@launch
+            }
             // The tag must still be the one paired to this counter (unpair / re-pair invalidates old tags).
             if (c == null || tag == null || c.counter.nfcTagId != tag.id.toHex()) {
-                Toast.makeText(this@MainActivity, "This tag isn't paired with a counter", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, getString(R.string.tag_not_paired), Toast.LENGTH_SHORT).show()
                 return@launch
             }
             resetAndShow(id, "nfc")
@@ -131,7 +141,7 @@ class MainActivity : ComponentActivity() {
         reschedule(this@MainActivity, id)
         window.decorView.performHapticFeedback(
             if (Build.VERSION.SDK_INT >= 30) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.LONG_PRESS)
-        Toast.makeText(this@MainActivity, "Reset: ${c.counter.label}", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this@MainActivity, getString(R.string.reset_done, c.counter.label), Toast.LENGTH_SHORT).show()
         openId = id
     } }
 }
@@ -183,8 +193,8 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
         Detail(openC, dao, now, onBack = { open = null }, onEdit = { editing = openC.counter })
     } else ModalNavigationDrawer(drawerState = drawer, drawerContent = {
         ModalDrawerSheet {
-            Text("How Long Since?", Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
-            NavigationDrawerItem(label = { Text("Settings") }, selected = false,
+            Text(stringResource(R.string.app_name), Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
+            NavigationDrawerItem(label = { Text(stringResource(R.string.settings)) }, selected = false,
                 onClick = { scope.launch { drawer.close() }; settings = true })
         }
     }) {
@@ -192,15 +202,15 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
       val listState = rememberLazyListState()
       Scaffold(
         modifier = Modifier.nestedScroll(bar.nestedScrollConnection),
-        topBar = { LargeTopAppBar(title = { Text("How Long Since?") }, scrollBehavior = bar, navigationIcon = {
-            IconButton(onClick = { scope.launch { drawer.open() } }) { Icon(Icons.Filled.Menu, contentDescription = "Menu") }
+        topBar = { LargeTopAppBar(title = { Text(stringResource(R.string.app_name)) }, scrollBehavior = bar, navigationIcon = {
+            IconButton(onClick = { scope.launch { drawer.open() } }) { Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.menu)) }
         }, actions = {
-            IconButton(onClick = { searching = !searching; query = "" }) { Icon(Icons.Filled.Search, contentDescription = "Search") }
+            IconButton(onClick = { searching = !searching; query = "" }) { Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.search)) }
             var menu by remember { mutableStateOf(false) }
-            IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Sort") }
+            IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.sort)) }
             DropdownMenu(menu, onDismissRequest = { menu = false }) {
-                listOf("due" to "Most overdue", "recent" to "Recently reset", "name" to "Name").forEach { (k, name) ->
-                    DropdownMenuItem(text = { Text(name) }, onClick = { sort = k; prefs0.edit().putString("sort", k).apply(); menu = false },
+                listOf("due" to R.string.sort_due, "recent" to R.string.sort_recent, "name" to R.string.sort_name).forEach { (k, name) ->
+                    DropdownMenuItem(text = { Text(stringResource(name)) }, onClick = { sort = k; prefs0.edit().putString("sort", k).apply(); menu = false },
                         leadingIcon = { if (sort == k) Icon(Icons.Filled.Check, contentDescription = null) else Spacer(Modifier.size(24.dp)) })
                 }
             }
@@ -208,33 +218,33 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                text = { Text("New") }, icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                text = { Text(stringResource(R.string.new_)) }, icon = { Icon(Icons.Filled.Add, contentDescription = null) },
                 expanded = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0,
                 onClick = { editing = Counter(label = "") })
         },
     ) { pad ->
         Column(Modifier.padding(pad).padding(horizontal = 16.dp)) {
             if (searching) OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                placeholder = { Text("Search labels and tags") }, singleLine = true)
+                placeholder = { Text(stringResource(R.string.search_hint)) }, singleLine = true)
             if (allTags.isNotEmpty() || hasArchived) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 allTags.forEach { t ->
                     FilterChip(selected = filter == t, onClick = { filter = if (filter == t) null else t }, label = { Text(t) },
                         leadingIcon = { Box(Modifier.size(8.dp).background(tagColor(t), CircleShape)) })
                 }
-                if (hasArchived) FilterChip(selected = showArchived, onClick = { showArchived = !showArchived }, label = { Text("Archived") })
+                if (hasArchived) FilterChip(selected = showArchived, onClick = { showArchived = !showArchived }, label = { Text(stringResource(R.string.archived)) })
             }
             if (counters.isEmpty()) Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Nothing tracked yet", style = MaterialTheme.typography.titleLarge)
-                Text("Tap New to start counting", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                Text(stringResource(R.string.empty_title), style = MaterialTheme.typography.titleLarge)
+                Text(stringResource(R.string.empty_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             }
             var refreshing by remember { mutableStateOf(false) }
             // Pull down at the top: fetch from the sync server; show the error if it failed.
             PullToRefreshBox(refreshing, onRefresh = { scope.launch {
                 refreshing = true; sync(ctx); refreshing = false
                 val st = prefs.getString("syncStatus", null)
-                if (prefs.getString("syncUrl", "").isNullOrBlank()) snackbar.showSnackbar("Sync is off: set a server in Settings")
-                else if (st?.startsWith("Sync failed") == true) snackbar.showSnackbar(st)
+                if (prefs.getString("syncUrl", "").isNullOrBlank()) snackbar.showSnackbar(ctx.getString(R.string.sync_off))
+                else if (st != null && prefs.getBoolean("syncFailed", false)) snackbar.showSnackbar(st)
             } }) {
             LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp)) {
@@ -244,7 +254,7 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
                             val id = c.counter.id
                             val event = dao.reset(id); reschedule(ctx, id)
                             snackbar.currentSnackbarData?.dismiss()
-                            if (snackbar.showSnackbar("Reset ${c.counter.label}", "Undo", duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) {
+                            if (snackbar.showSnackbar(ctx.getString(R.string.reset_label, c.counter.label), ctx.getString(R.string.undo), duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) {
                                 dao.deleteEvent(event); reschedule(ctx, id)
                             }
                         }
@@ -266,7 +276,9 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
     }
 }
 
+// Keys stay English (logic below matches on them); the chips show the translated name.
 private val units = listOf("minutes" to 60_000L, "hours" to 3_600_000L, "days" to 86_400_000L, "weeks" to 604_800_000L)
+private val unitNames = mapOf("minutes" to R.string.unit_minutes, "hours" to R.string.unit_hours, "days" to R.string.unit_days, "weeks" to R.string.unit_weeks)
 
 @Composable
 fun EditDialog(c: Counter, debug: Boolean, dao: CounterDao, onDismiss: () -> Unit, onDelete: () -> Unit, onSave: (Counter) -> Unit) {
@@ -284,35 +296,35 @@ fun EditDialog(c: Counter, debug: Boolean, dao: CounterDao, onDismiss: () -> Uni
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (c.id == 0L) "New counter" else "Edit counter") },
+        title = { Text(stringResource(if (c.id == 0L) R.string.new_counter else R.string.edit_counter)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(label, { label = it }, label = { Text("Label") }, singleLine = true)
-                OutlinedTextField(tags, { tags = it }, label = { Text("Tags (comma separated)") }, singleLine = true)
-                OutlinedTextField(amount, { amount = it.filter(Char::isDigit) }, label = { Text("Notify after (empty = never)") },
+                OutlinedTextField(label, { label = it }, label = { Text(stringResource(R.string.label)) }, singleLine = true)
+                OutlinedTextField(tags, { tags = it }, label = { Text(stringResource(R.string.tags_hint)) }, singleLine = true)
+                OutlinedTextField(amount, { amount = it.filter(Char::isDigit) }, label = { Text(stringResource(R.string.notify_after)) },
                     singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    units.forEach { u -> FilterChip(selected = unit == u, onClick = { unit = u }, label = { Text(u.first) }) }
+                    units.forEach { u -> FilterChip(selected = unit == u, onClick = { unit = u }, label = { Text(stringResource(unitNames.getValue(u.first))) }) }
                 }
                 // Remind at your usual pace: hours under 2 days, else days (minutes only if offered).
                 avg?.let { a ->
                     TextButton(onClick = {
                         val u = units.first { it.first == if (a < 3_600_000 && units[0].first == "minutes") "minutes" else if (a < 172_800_000) "hours" else "days" }
                         unit = u; amount = maxOf(1, Math.round(a.toDouble() / u.second)).toString()
-                    }) { Text("Use my average (${since(a)})") }
+                    }) { Text(stringResource(R.string.use_average, since(a))) }
                 }
                 if (c.id != 0L) Row {
-                    TextButton(onClick = { onSave(result().copy(archived = !c.archived)) }) { Text(if (c.archived) "Unarchive" else "Archive") }
-                    TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                    TextButton(onClick = { onSave(result().copy(archived = !c.archived)) }) { Text(stringResource(if (c.archived) R.string.unarchive else R.string.archive)) }
+                    TextButton(onClick = onDelete) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
                 }
             }
         },
         confirmButton = {
             TextButton(enabled = label.isNotBlank(), onClick = {
                 onSave(result())
-            }) { Text("Save") }
+            }) { Text(stringResource(R.string.save)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
@@ -320,45 +332,66 @@ fun EditDialog(c: Counter, debug: Boolean, dao: CounterDao, onDismiss: () -> Uni
 @Composable
 fun Settings(dark: Boolean, onDark: (Boolean) -> Unit, debug: Boolean, onDebug: (Boolean) -> Unit, onBack: () -> Unit) {
     Scaffold(topBar = {
-        TopAppBar(title = { Text("Settings") }, navigationIcon = { TextButton(onClick = onBack) { Text("Back") } })
+        TopAppBar(title = { Text(stringResource(R.string.settings)) }, navigationIcon = { TextButton(onClick = onBack) { Text(stringResource(R.string.back)) } })
     }) { pad -> Column(Modifier.padding(pad)) {
         ListItem(
             modifier = Modifier.clickable { onDark(!dark) },
-            headlineContent = { Text("Dark theme") },
+            headlineContent = { Text(stringResource(R.string.dark_theme)) },
             trailingContent = { Switch(checked = dark, onCheckedChange = onDark) },
         )
         ListItem(
             modifier = Modifier.clickable { onDebug(!debug) },
-            headlineContent = { Text("Debug mode") },
-            supportingContent = { Text("Allow \"notify after\" in minutes") },
+            headlineContent = { Text(stringResource(R.string.debug_mode)) },
+            supportingContent = { Text(stringResource(R.string.debug_hint)) },
             trailingContent = { Switch(checked = debug, onCheckedChange = onDebug) },
         )
-        HorizontalDivider()
         val ctx = LocalContext.current
+        // Per-app language is built in from Android 13; older phones follow the system language.
+        if (Build.VERSION.SDK_INT >= 33) {
+            val lm = remember { ctx.getSystemService(android.app.LocaleManager::class.java) }
+            val current = lm.applicationLocales.takeIf { !it.isEmpty }?.get(0)?.language ?: ""
+            var langMenu by remember { mutableStateOf(false) }
+            val langs = listOf("" to stringResource(R.string.lang_system), "en" to "English", "it" to "Italiano")
+            ListItem(
+                modifier = Modifier.clickable { langMenu = true },
+                headlineContent = { Text(stringResource(R.string.language)) },
+                supportingContent = { Text(langs.firstOrNull { it.first == current }?.second ?: current) },
+                trailingContent = {
+                    DropdownMenu(langMenu, onDismissRequest = { langMenu = false }) {
+                        langs.forEach { (tag, name) -> DropdownMenuItem(text = { Text(name) }, onClick = {
+                            langMenu = false
+                            lm.applicationLocales = android.os.LocaleList.forLanguageTags(tag) // restarts the activity in that language
+                        }) }
+                    }
+                },
+            )
+        }
+        HorizontalDivider()
         val scope = rememberCoroutineScope()
         val prefs = remember { ctx.getSharedPreferences("settings", 0) }
         var url by remember { mutableStateOf(prefs.getString("syncUrl", "")!!) }
         var token by remember { mutableStateOf(prefs.getString("syncToken", "")!!) }
-        var status by remember { mutableStateOf(prefs.getString("syncStatus", "Not synced yet")!!) }
+        val notSynced = stringResource(R.string.not_synced)
+        var status by remember { mutableStateOf(prefs.getString("syncStatus", null) ?: notSynced) }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Sync server", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.sync_server), style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(url, { url = it; prefs.edit().putString("syncUrl", it).apply() }, Modifier.fillMaxWidth(),
-                label = { Text("URL (empty = no sync)") }, placeholder = { Text("https://your-server.example") }, singleLine = true,
+                label = { Text(stringResource(R.string.url_hint)) }, placeholder = { Text("https://your-server.example") }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
             OutlinedTextField(token, { token = it; prefs.edit().putString("syncToken", it).apply() }, Modifier.fillMaxWidth(),
-                label = { Text("Token") }, singleLine = true, visualTransformation = PasswordVisualTransformation(),
+                label = { Text(stringResource(R.string.token)) }, singleLine = true, visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(status, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                 TextButton(enabled = url.isNotBlank(), onClick = { scope.launch {
-                    status = "Syncing…"; sync(ctx); status = prefs.getString("syncStatus", "")!!
-                } }) { Text("Sync now") }
+                    status = ctx.getString(R.string.syncing); sync(ctx); status = prefs.getString("syncStatus", "")!!
+                } }) { Text(stringResource(R.string.sync_now)) }
             }
         }
         HorizontalDivider()
         val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
             if (uri != null) scope.launch {
-                val msg = try { "Exported ${exportJson(ctx, uri)} counters" } catch (e: Exception) { "Export failed: ${e.message}" }
+                val msg = try { exportJson(ctx, uri).let { ctx.resources.getQuantityString(R.plurals.n_exported, it, it) } } catch (e: Exception) { ctx.getString(R.string.export_failed, e.message) }
                 Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
             }
         }
@@ -366,42 +399,43 @@ fun Settings(dark: Boolean, onDark: (Boolean) -> Unit, debug: Boolean, onDebug: 
         val import = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri != null) scope.launch {
                 try { pending = readBackup(ctx, uri) }
-                catch (e: Exception) { Toast.makeText(ctx, "Can't read file: ${e.message}", Toast.LENGTH_LONG).show() }
+                catch (e: Exception) { Toast.makeText(ctx, ctx.getString(R.string.cant_read, e.message), Toast.LENGTH_LONG).show() }
             }
         }
         pending?.let { data ->
             AlertDialog(
                 onDismissRequest = { pending = null },
-                title = { Text("Replace all data?") },
-                text = { Text("Your current counters and logs will be deleted and replaced by the ${data.size} counters in the file. This can't be undone.") },
+                title = { Text(stringResource(R.string.replace_title)) },
+                text = { Text(ctx.resources.getQuantityString(R.plurals.n_replace_text, data.size, data.size)) },
                 confirmButton = {
                     TextButton(onClick = {
                         pending = null
                         scope.launch {
                             restore(ctx, data)
-                            Toast.makeText(ctx, "Imported ${data.size} counters", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(ctx, ctx.resources.getQuantityString(R.plurals.n_imported, data.size, data.size), Toast.LENGTH_SHORT).show()
                         }
-                    }) { Text("Replace", color = MaterialTheme.colorScheme.error) }
+                    }) { Text(stringResource(R.string.replace), color = MaterialTheme.colorScheme.error) }
                 },
-                dismissButton = { TextButton(onClick = { pending = null }) { Text("Cancel") } },
+                dismissButton = { TextButton(onClick = { pending = null }) { Text(stringResource(R.string.cancel)) } },
             )
         }
         ListItem(
             modifier = Modifier.clickable { import.launch(arrayOf("application/json", "application/octet-stream", "text/plain")) },
-            headlineContent = { Text("Import data") },
-            supportingContent = { Text("Replace everything with a previously exported file (also on the sync server)") },
+            headlineContent = { Text(stringResource(R.string.import_data)) },
+            supportingContent = { Text(stringResource(R.string.import_hint)) },
         )
         ListItem(
             modifier = Modifier.clickable { export.launch("howlongsince-${java.time.LocalDate.now()}.json") },
-            headlineContent = { Text("Export data") },
-            supportingContent = { Text("Save all counters and their reset logs as JSON") },
+            headlineContent = { Text(stringResource(R.string.export_data)) },
+            supportingContent = { Text(stringResource(R.string.export_hint)) },
         )
     } }
 }
 
 @Composable
 fun CounterCard(c: CounterWithLast, now: Long, onOpen: () -> Unit, onReset: () -> Unit) {
-    val (n, unit) = sinceBig(now - c.lastAt)
+    val (n, unitRes) = sinceBig(now - c.lastAt)
+    val unit = LocalContext.current.resources.getQuantityString(unitRes, n.toInt())
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val tags = tagList(c.counter.tags)
     val haptic = LocalHapticFeedback.current
@@ -412,7 +446,7 @@ fun CounterCard(c: CounterWithLast, now: Long, onOpen: () -> Unit, onReset: () -
         Box(Modifier.width(8.dp).fillMaxHeight().background(tags.firstOrNull()?.let { tagColor(it) } ?: MaterialTheme.colorScheme.surfaceContainerHigh))
         Row(Modifier.padding(start = 16.dp, end = 20.dp, top = 16.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.width(88.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                AnimatedContent(n, transitionSpec = {
+                AnimatedContent(n.toString(), transitionSpec = {
                     (slideInVertically { -it } + fadeIn()) togetherWith (slideOutVertically { it } + fadeOut())
                 }, label = "count") {
                     Text(it, style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
@@ -445,6 +479,6 @@ fun ResetButton(c: CounterWithLast, now: Long, onReset: () -> Unit) {
                 trackColor = MaterialTheme.colorScheme.surfaceVariant,
             )
         }
-        FilledTonalIconButton(onClick = onReset) { Icon(Icons.Filled.Refresh, contentDescription = "Reset") }
+        FilledTonalIconButton(onClick = onReset) { Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.reset)) }
     }
 }

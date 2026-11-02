@@ -5,7 +5,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-feature android:name="android.hardware.nfc" android:required="false" />
     <application
-        android:label="How Long Since?"
+        android:label="@string/app_name"
+        android:localeConfig="@xml/locales_config"
         android:icon="@mipmap/ic_launcher"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop">
@@ -20,7 +21,7 @@
             </intent-filter>
         </activity>
         <receiver android:name=".ReminderAction" android:exported="false" />
-        <receiver android:name=".Widget" android:exported="false" android:label="Counters">
+        <receiver android:name=".Widget" android:exported="false" android:label="@string/widget_label">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info" />
         </receiver>

@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">How Long Since?</string>
+    <string name="reset_label">Reset %s</string>
+    <string name="reset_done">Reset: %s</string>
+    <string name="tag_not_paired">This tag isn\'t paired with a counter</string>
+    <string name="settings">Settings</string>
+    <string name="menu">Menu</string>
+    <string name="search">Search</string>
+    <string name="sort">Sort</string>
+    <string name="sort_due">Most overdue</string>
+    <string name="sort_recent">Recently reset</string>
+    <string name="sort_name">Name</string>
+    <string name="new_">New</string>
+    <string name="search_hint">Search labels and tags</string>
+    <string name="archived">Archived</string>
+    <string name="empty_title">Nothing tracked yet</string>
+    <string name="empty_hint">Tap New to start counting</string>
+    <string name="sync_off">Sync is off: set a server in Settings</string>
+    <string name="undo">Undo</string>
+    <string name="new_counter">New counter</string>
+    <string name="edit_counter">Edit counter</string>
+    <string name="label">Label</string>
+    <string name="tags_hint">Tags (comma separated)</string>
+    <string name="notify_after">Notify after (empty = never)</string>
+    <string name="unit_minutes">minutes</string>
+    <string name="unit_hours">hours</string>
+    <string name="unit_days">days</string>
+    <string name="unit_weeks">weeks</string>
+    <string name="use_average">Use my average (%s)</string>
+    <string name="archive">Archive</string>
+    <string name="unarchive">Unarchive</string>
+    <string name="delete">Delete</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="back">Back</string>
+    <string name="edit">Edit</string>
+    <string name="dark_theme">Dark theme</string>
+    <string name="debug_mode">Debug mode</string>
+    <string name="debug_hint">Allow \"notify after\" in minutes</string>
+    <string name="sync_server">Sync server</string>
+    <string name="url_hint">URL (empty = no sync)</string>
+    <string name="token">Token</string>
+    <string name="not_synced">Not synced yet</string>
+    <string name="syncing">Syncing…</string>
+    <string name="sync_now">Sync now</string>
+    <string name="synced">Synced %s</string>
+    <string name="sync_failed">Sync failed: %s</string>
+    <string name="wrong_token">wrong token</string>
+    <string name="export_failed">Export failed: %s</string>
+    <string name="cant_read">Can\'t read file: %s</string>
+    <string name="replace_title">Replace all data?</string>
+    <string name="replace">Replace</string>
+    <string name="import_data">Import data</string>
+    <string name="import_hint">Replace everything with a previously exported file (also on the sync server)</string>
+    <string name="export_data">Export data</string>
+    <string name="export_hint">Save all counters and their reset logs as JSON</string>
+    <string name="reset">Reset</string>
+    <string name="archived_hint">Archived: no reminders, hidden from the list</string>
+    <string name="reset_dots">Reset…</string>
+    <string name="note_optional">Note (optional)</string>
+    <string name="now">Now</string>
+    <string name="earlier">Earlier…</string>
+    <string name="pick_past">Pick a time in the past</string>
+    <string name="nfc_paired">NFC tag paired</string>
+    <string name="no_nfc">No NFC tag</string>
+    <string name="unpair">Unpair</string>
+    <string name="re_pair">Re-pair</string>
+    <string name="pair_tag">Pair tag</string>
+    <string name="turn_on_nfc">Turn on NFC first</string>
+    <string name="after">after %s</string>
+    <string name="via_nfc">via NFC</string>
+    <string name="created">created</string>
+    <string name="tag_paired">Tag paired</string>
+    <string name="pair_title">Pair NFC tag</string>
+    <string name="pair_text">Hold a tag against the back of the phone. It will be overwritten.</string>
+    <string name="intervals">Intervals · avg %s</string>
+    <string name="tag_read_only">Tag is read-only</string>
+    <string name="tag_too_small">Tag is too small</string>
+    <string name="tag_no_ndef">Tag doesn\'t support NDEF</string>
+    <string name="tag_write_failed">Write failed, hold the tag still and try again</string>
+    <string name="channel_reminders">Reminders</string>
+    <string name="its_been">It\'s been %s</string>
+    <string name="reset_now">Reset now</string>
+    <string name="snooze">Snooze 1 day</string>
+    <string name="widget_empty">No counters yet</string>
+    <string name="widget_label">Counters</string>
+    <string name="language">Language</string>
+    <string name="pair_now">Pair now</string>
+    <string name="copy_url">Copy URL</string>
+    <string name="url_copied">URL copied. Write it to a tag with any NFC app, then tap the tag here to pair it.</string>
+    <string name="pair_choice_text">Pair now writes this counter\'s URL to a tag, replacing what is on it.\n\nOr copy the URL and write it with another NFC app; the first tap of that tag then pairs it.\n\n%s</string>
+    <string name="lang_system">System default</string>
+    <plurals name="n_minutes"><item quantity="one">minute</item><item quantity="other">minutes</item></plurals>
+    <plurals name="n_hours"><item quantity="one">hour</item><item quantity="other">hours</item></plurals>
+    <plurals name="n_days"><item quantity="one">day</item><item quantity="other">days</item></plurals>
+    <plurals name="n_years"><item quantity="one">year</item><item quantity="other">years</item></plurals>
+    <plurals name="n_entries"><item quantity="one">%d entry</item><item quantity="other">%d entries</item></plurals>
+    <plurals name="n_exported"><item quantity="one">Exported %d counter</item><item quantity="other">Exported %d counters</item></plurals>
+    <plurals name="n_imported"><item quantity="one">Imported %d counter</item><item quantity="other">Imported %d counters</item></plurals>
+    <plurals name="n_replace_text"><item quantity="one">Your current counters and logs will be deleted and replaced by the %d counter in the file. This can\'t be undone.</item><item quantity="other">Your current counters and logs will be deleted and replaced by the %d counters in the file. This can\'t be undone.</item></plurals>
+</resources>

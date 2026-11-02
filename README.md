@@ -44,6 +44,7 @@ An optional self-hosted server keeps the counters in sync between the phone and 
   - Debug mode, which allows minute-based reminders.
   - JSON export, and an import that replaces all data. The file is checked and you confirm before anything is overwritten. With sync on, the import replaces the data on the server too.
   - Sync server URL and token, with the last sync status and a "Sync now" button. Leave the URL empty to turn sync off.
+- **Languages**: English and Italian, following the phone or browser language. On Android 13+ the app's language can also be set on its own in the system settings (Settings → Apps → How Long Since? → Language).
 - **Look**: Material 3 with colors from your wallpaper (Android 12+) and a large title bar that collapses as you scroll.
 
 ## Tech

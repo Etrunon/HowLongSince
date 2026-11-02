@@ -39,6 +39,7 @@
   .overdue .since { color: #d33; }
   #tools { margin-bottom: 12px; }
   .note { display: block; margin-left: 8px; }
+  footer { margin-top: 24px; text-align: center; }
 </style>
 </head>
 <body>
@@ -46,28 +47,57 @@
 <form id="login" hidden>
   <input name="username" autocomplete="username" value="howlongsince" readonly>
   <input id="token" name="password" type="password" autocomplete="current-password" placeholder="Token" required>
-  <button>Log in</button>
+  <button data-i18n="login">Log in</button>
 </form>
-<form id="add"><input id="label" placeholder="New counter" required><button>Add</button></form>
+<form id="add"><input id="label" data-i18n-ph="new_counter" placeholder="New counter" required><button data-i18n="add">Add</button></form>
 <p id="err"></p>
-<p id="undo" hidden><span></span> <button>Undo</button></p>
-<div class="row" id="tools"><input id="q" type="search" placeholder="Search labels and tags">
-  <select id="sort"><option value="due">Most overdue</option><option value="recent">Recently reset</option><option value="name">Name</option></select></div>
+<p id="undo" hidden><span></span> <button data-i18n="undo">Undo</button></p>
+<div class="row" id="tools"><input id="q" type="search" data-i18n-ph="search" placeholder="Search labels and tags">
+  <select id="sort"><option value="due" data-i18n="sort_due">Most overdue</option><option value="recent" data-i18n="sort_recent">Recently reset</option><option value="name" data-i18n="sort_name">Name</option></select></div>
 <div id="tags"></div>
 <div id="list"></div>
+<footer><select id="lang" aria-label="Language"><option value="">Auto</option><option value="en">English</option><option value="it">Italiano</option></select></footer>
 <script>
 let state = { counters: [], events: [] };
 const $ = s => document.querySelector(s);
 const esc = s => s.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
 
+// English and Italian, picked from the browser; same wording as the app's strings.xml.
+const T = {
+  en: { login: 'Log in', new_counter: 'New counter', add: 'Add', undo: 'Undo', search: 'Search labels and tags',
+    sort_due: 'Most overdue', sort_recent: 'Recently reset', sort_name: 'Name',
+    unreachable: 'Server unreachable, last change not saved. Retrying every minute.', sync_failed: 'Sync failed: %s',
+    label: 'Label', tags: 'Tags', comma: 'comma separated', notify_after: 'Notify after', never: 'never',
+    minutes: 'minutes', hours: 'hours', days: 'days', weeks: 'weeks', use_average: 'Use my average (%s)',
+    reset_note: 'Reset with a note, or at a past time', note: 'note (optional)', reset: 'Reset',
+    nfc_paired: 'NFC tag paired', unpair: 'Unpair', save: 'Save', archive: 'Archive', unarchive: 'Unarchive',
+    intervals: 'Intervals · avg %s', archived: 'Archived', delete_counter: 'Delete counter', confirm_delete: 'Delete this counter?',
+    reset_label: 'Reset %s', pick_past: 'Pick a time in the past', create: 'created', manual: 'manual', nfc: 'via NFC', d: 'd' },
+  it: { login: 'Accedi', new_counter: 'Nuovo contatore', add: 'Aggiungi', undo: 'Annulla', search: 'Cerca tra etichette e tag',
+    sort_due: 'Più in ritardo', sort_recent: 'Azzerati di recente', sort_name: 'Nome',
+    unreachable: 'Server irraggiungibile, ultima modifica non salvata. Nuovo tentativo ogni minuto.', sync_failed: 'Sincronizzazione non riuscita: %s',
+    label: 'Etichetta', tags: 'Tag', comma: 'separati da virgole', notify_after: 'Avvisa dopo', never: 'mai',
+    minutes: 'minuti', hours: 'ore', days: 'giorni', weeks: 'settimane', use_average: 'Usa la mia media (%s)',
+    reset_note: 'Azzera con una nota, o in un momento passato', note: 'nota (facoltativa)', reset: 'Azzera',
+    nfc_paired: 'Tag NFC abbinato', unpair: 'Disabbina', save: 'Salva', archive: 'Archivia', unarchive: 'Ripristina',
+    intervals: 'Intervalli · media %s', archived: 'Archiviati', delete_counter: 'Elimina contatore', confirm_delete: 'Eliminare questo contatore?',
+    reset_label: 'Azzera %s', pick_past: 'Scegli un momento nel passato', create: 'creato', manual: 'manuale', nfc: 'via NFC', d: 'g' },
+};
+let saved = null; try { saved = localStorage.getItem('lang'); } catch {}
+const lang = saved || ((navigator.languages?.[0] || navigator.language).toLowerCase().startsWith('it') ? 'it' : 'en'); // chosen, else first preferred language
+document.documentElement.lang = lang;
+const t = (k, ...a) => (T[lang][k] ?? T.en[k]).replace(/%s/g, () => a.shift());
+document.querySelectorAll('[data-i18n]').forEach(el => el.textContent = t(el.dataset.i18n));
+document.querySelectorAll('[data-i18n-ph]').forEach(el => el.placeholder = t(el.dataset.i18nPh));
+
 async function sync(change = { counters: [], events: [] }) {
   let token = localStorage.getItem('token') || '';
   let r;
   try { r = await fetch('sync', { method: 'POST', headers: token ? { Authorization: 'Bearer ' + token } : {}, body: JSON.stringify(change) }); }
-  catch { $('#err').textContent = 'Server unreachable, last change not saved. Retrying every minute.'; return; }
+  catch { $('#err').textContent = t('unreachable'); return; }
   if (r.status === 401) { $('#login').hidden = false; $('#token').focus(); return; }
   $('#login').hidden = true;
-  if (!r.ok) { $('#err').textContent = 'Sync failed: ' + await r.text(); return; }
+  if (!r.ok) { $('#err').textContent = t('sync_failed', await r.text()); return; }
   $('#err').textContent = '';
   state = await r.json();
   render();
@@ -75,7 +105,7 @@ async function sync(change = { counters: [], events: [] }) {
 
 function since(ms) {
   const s = Math.max(0, (Date.now() - ms) / 1000), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
-  return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
+  return d ? `${d}${t('d')} ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
 }
 
 const event = (counterId, source, at = Date.now()) => ({ id: crypto.randomUUID(), counterId, at, source, deleted: false });
@@ -88,14 +118,14 @@ function editForm(c, avg) {
   // Largest unit that divides the stored value evenly, like the app.
   const [unit, size] = ms ? UNITS.filter(([, n]) => ms % n === 0).pop() ?? UNITS[0] : UNITS[2];
   return `<form data-edit="${c.id}">
-    <label>Label <input name="label" value="${esc(c.label)}" required></label>
-    <label>Tags <input name="tags" value="${esc(tagList(c.tags).join(', '))}" placeholder="comma separated"></label>
-    <label>Notify after <span class="row"><input name="amount" type="number" min="1" value="${ms ? ms / size : ''}" placeholder="never">
-      <select name="unit">${UNITS.map(([u]) => `<option ${u === unit ? 'selected' : ''}>${u}</option>`).join('')}</select>
-      ${avg ? `<button type="button" data-avg="${avg}">Use my average (${since(Date.now() - avg)})</button>` : ''}</span></label>
-    <label>Reset with a note, or at a past time <span class="row"><input name="note" placeholder="note (optional)"><input type="datetime-local" name="at"><button type="button" data-reset-at="${c.id}">Reset</button></span></label>
-    ${c.nfcTagId ? `<p class="muted">NFC tag paired <button type="button" data-unpair="${c.id}">Unpair</button></p>` : ''}
-    <span class="row"><button>Save</button><button type="button" data-archive="${c.id}">${c.archived ? 'Unarchive' : 'Archive'}</button></span>
+    <label>${t('label')} <input name="label" value="${esc(c.label)}" required></label>
+    <label>${t('tags')} <input name="tags" value="${esc(tagList(c.tags).join(', '))}" placeholder="${t('comma')}"></label>
+    <label>${t('notify_after')} <span class="row"><input name="amount" type="number" min="1" value="${ms ? ms / size : ''}" placeholder="${t('never')}">
+      <select name="unit">${UNITS.map(([u]) => `<option value="${u}" ${u === unit ? 'selected' : ''}>${t(u)}</option>`).join('')}</select>
+      ${avg ? `<button type="button" data-avg="${avg}">${t('use_average', since(Date.now() - avg))}</button>` : ''}</span></label>
+    <label>${t('reset_note')} <span class="row"><input name="note" placeholder="${t('note')}"><input type="datetime-local" name="at"><button type="button" data-reset-at="${c.id}">${t('reset')}</button></span></label>
+    ${c.nfcTagId ? `<p class="muted">${t('nfc_paired')} <button type="button" data-unpair="${c.id}">${t('unpair')}</button></p>` : ''}
+    <span class="row"><button>${t('save')}</button><button type="button" data-archive="${c.id}">${t(c.archived ? 'unarchive' : 'archive')}</button></span>
   </form>`;
 }
 
@@ -105,7 +135,7 @@ function chart(ev) {
   if (gaps.length < 2) return '';
   const max = Math.max(...gaps, 1), w = 100 / gaps.length;
   const avg = gaps.reduce((a, b) => a + b) / gaps.length;
-  return `<p class="muted">Intervals · avg ${since(Date.now() - avg)}</p>
+  return `<p class="muted">${t('intervals', since(Date.now() - avg))}</p>
     <svg class="chart" viewBox="0 0 100 56" preserveAspectRatio="none">${gaps.map((g, i) => {
       const h = Math.max(g / max * 56, 1.5);
       return `<rect x="${i * w + w * .15}" y="${56 - h}" width="${w * .7}" height="${h}"><title>${since(Date.now() - g)}</title></rect>`;
@@ -128,7 +158,7 @@ function render() {
   const allTags = [...new Set(live.flatMap(c => tagList(c.tags)))].sort();
   if (!allTags.includes(filter)) filter = null;
   $('#tags').innerHTML = allTags.map(t => `<button data-tag="${esc(t)}" class="${t === filter ? 'on' : ''}">${dot(t)}${esc(t)}</button>`).join('')
-    + (hasArchived ? `<button data-archived class="${showArchived ? 'on' : ''}">Archived</button>` : '');
+    + (hasArchived ? `<button data-archived class="${showArchived ? 'on' : ''}">${t('archived')}</button>` : '');
   const q = $('#q').value.trim().toLowerCase(), sort = $('#sort').value;
   const rows = live.filter(c => !filter || tagList(c.tags).includes(filter))
     .filter(c => !q || c.label.toLowerCase().includes(q) || c.tags.includes(q)).map(c => {
@@ -141,11 +171,11 @@ function render() {
   $('#list').innerHTML = rows.map(({ c, ev, last, overdue }) => `
     <details data-id="${c.id}" class="${overdue ? 'overdue' : ''}" ${open.has(c.id) ? 'open' : ''} style="border-left-color:${tagList(c.tags).length ? `hsl(${tagHue(tagList(c.tags)[0])} 55% var(--tag-l))` : 'var(--card)'}">
       <summary><span><b>${esc(c.label)}</b><br><span class="muted">${tagList(c.tags).map(t => '#' + esc(t)).join(' ')}${c.notifyAfterMs ? ' · ⏰' : ''}</span></span>
-        <span class="since">${since(last)}</span><button data-reset="${c.id}">↻ Reset</button></summary>
+        <span class="since">${since(last)}</span><button data-reset="${c.id}">↻ ${t('reset')}</button></summary>
       ${chart(ev)}
       ${editForm(c, ev.length >= 3 ? (ev[0].at - ev.at(-1).at) / (ev.length - 1) : 0)}
-      <ul>${ev.map(e => `<li>${new Date(e.at).toLocaleString()} <span class="muted">${e.source}</span>${ev.length > 1 ? `<button data-del-event="${e.id}">✕</button>` : ''}${e.note ? `<span class="note">${esc(e.note)}</span>` : ''}</li>`).join('')}</ul>
-      <button data-del="${c.id}">Delete counter</button>
+      <ul>${ev.map(e => `<li>${new Date(e.at).toLocaleString()} <span class="muted">${t(e.source)}</span>${ev.length > 1 ? `<button data-del-event="${e.id}">✕</button>` : ''}${e.note ? `<span class="note">${esc(e.note)}</span>` : ''}</li>`).join('')}</ul>
+      <button data-del="${c.id}">${t('delete_counter')}</button>
     </details>`).join('');
 }
 
@@ -183,11 +213,11 @@ $('#list').onclick = e => {
     e.preventDefault();
     const ev = event(d.reset, 'manual');
     sync({ counters: [], events: [ev] });
-    showUndo(`Reset ${state.counters.find(x => x.id === d.reset).label}`, ev);
+    showUndo(t('reset_label', state.counters.find(x => x.id === d.reset).label), ev);
   }
   if (d.resetAt) {
     const f = e.target.closest('form').elements, v = f.at.value, at = v ? new Date(v).getTime() : Date.now();
-    if (at > Date.now()) return alert('Pick a time in the past');
+    if (at > Date.now()) return alert(t('pick_past'));
     sync({ counters: [], events: [{ ...event(d.resetAt, 'manual', at), ...(f.note.value.trim() && { note: f.note.value.trim() }) }] });
     document.activeElement.blur();
   }
@@ -203,7 +233,7 @@ $('#list').onclick = e => {
   }
   if (d.delEvent) sync({ counters: [], events: [{ ...state.events.find(x => x.id === d.delEvent), deleted: true }] });
   if (d.unpair) sync({ counters: [{ ...state.counters.find(x => x.id === d.unpair), nfcTagId: null, updatedAt: Date.now() }], events: [] });
-  if (d.del && confirm('Delete this counter?'))
+  if (d.del && confirm(t('confirm_delete')))
     sync({ counters: [{ ...state.counters.find(x => x.id === d.del), deleted: true, updatedAt: Date.now() }], events: [] });
 };
 
@@ -214,6 +244,8 @@ function showUndo(text, ev) {
   clearTimeout(undoTimer); undoTimer = setTimeout(() => $('#undo').hidden = true, 8000);
 }
 $('#q').oninput = render;
+$('#lang').value = saved || '';
+$('#lang').onchange = () => { try { $('#lang').value ? localStorage.setItem('lang', $('#lang').value) : localStorage.removeItem('lang'); } catch {} location.reload(); };
 $('#sort').onchange = () => { localStorage.setItem('sort', $('#sort').value); render(); };
 
 sync();

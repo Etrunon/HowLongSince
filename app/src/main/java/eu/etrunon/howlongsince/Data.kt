@@ -147,24 +147,24 @@ abstract class Db : RoomDatabase() {
     }
 }
 
-/** Auto units: "5m", "3h 12m", "4d 2h", "1y 30d". */
-fun since(ms: Long): String {
+/** Auto units: "5m", "3h 12m", "4d 2h", "1y 30d" (Italian: "4g 2h", "1a 30g"). */
+fun since(ms: Long, italian: Boolean = java.util.Locale.getDefault().language == "it"): String {
+    val (dd, yy) = if (italian) "g" to "a" else "d" to "y"
     val m = maxOf(ms, 0) / 60_000
     val h = m / 60; val d = h / 24; val y = d / 365
     return when {
         h < 1 -> "${m}m"
         d < 1 -> "${h}h ${m % 60}m"
-        y < 1 -> "${d}d ${h % 24}h"
-        else -> "${y}y ${d % 365}d"
+        y < 1 -> "${d}$dd ${h % 24}h"
+        else -> "${y}$yy ${d % 365}$dd"
     }
 }
 
-/** Big-number form for cards: 12 to "days". Same thresholds as [since]. */
-fun sinceBig(ms: Long): Pair<String, String> {
+/** Big-number form for cards: 12 to the plural resource for "days". Same thresholds as [since]. */
+fun sinceBig(ms: Long): Pair<Long, Int> {
     val m = maxOf(ms, 0) / 60_000
     val h = m / 60; val d = h / 24; val y = d / 365
-    val (n, unit) = when { h < 1 -> m to "minute"; d < 1 -> h to "hour"; y < 1 -> d to "day"; else -> y to "year" }
-    return n.toString() to if (n == 1L) unit else unit + "s"
+    return when { h < 1 -> m to R.plurals.n_minutes; d < 1 -> h to R.plurals.n_hours; y < 1 -> d to R.plurals.n_days; else -> y to R.plurals.n_years }
 }
 
 /** "Home, health ,home" -> [home, health]. Tags are stored normalized, comma-joined. */
