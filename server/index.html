@@ -12,7 +12,7 @@
   form { display: flex; gap: 8px; margin-bottom: 16px; }
   input { flex: 1; padding: 8px; font-size: 1rem; }
   button { padding: 8px 12px; font-size: 1rem; cursor: pointer; }
-  details { background: var(--card); border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+  details { background: var(--card); border-radius: 8px; padding: 12px; margin-bottom: 8px; border-left: 4px solid; } /* first tag's color, like the app */
   summary { display: flex; justify-content: space-between; align-items: center; gap: 8px; cursor: pointer; list-style: none; }
   .since { font-size: 1.3rem; font-weight: 600; color: var(--accent); }
   .muted { color: var(--muted); font-size: .9rem; }
@@ -117,7 +117,7 @@ function render() {
     return { c, ev, last: ev[0]?.at ?? 0 };
   }).sort((a, b) => a.last - b.last);
   $('#list').innerHTML = rows.map(({ c, ev, last }) => `
-    <details data-id="${c.id}" ${open.has(c.id) ? 'open' : ''}>
+    <details data-id="${c.id}" ${open.has(c.id) ? 'open' : ''} style="border-left-color:${tagList(c.tags).length ? `hsl(${tagHue(tagList(c.tags)[0])} 55% var(--tag-l))` : 'var(--card)'}">
       <summary><span><b>${esc(c.label)}</b><br><span class="muted">${tagList(c.tags).map(t => '#' + esc(t)).join(' ')}${c.notifyAfterMs ? ' · ⏰' : ''}</span></span>
         <span class="since">${since(last)}</span><button data-reset="${c.id}">Reset</button></summary>
       ${chart(ev)}
