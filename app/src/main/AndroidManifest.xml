@@ -6,6 +6,7 @@
     <uses-feature android:name="android.hardware.nfc" android:required="false" />
     <application
         android:label="How Long Since?"
+        android:icon="@mipmap/ic_launcher"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop">
             <intent-filter>
