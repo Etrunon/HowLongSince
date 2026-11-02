@@ -35,7 +35,7 @@ Un server opzionale, ospitato da te, sincronizza i contatori tra il telefono e u
   - Un anello attorno al pulsante di azzeramento si riempie man mano che si avvicina il promemoria e diventa rosso quando è scaduto.
   - Toccando la notifica si apre la pagina del contatore. I suoi pulsanti azzerano il contatore o rimandano di un giorno.
 - **Tag NFC**
-  - Abbina un tag dalla pagina di dettaglio del contatore. L'app scrive `howlongsince://reset/<id>` sul tag e ne ricorda l'ID.
+  - Abbina un tag dalla pagina di dettaglio del contatore. L'app scrive `howlongsince://reset/<uuid>` (l'id di sincronizzazione del contatore, così il tag funziona su ogni telefono sincronizzato) sul tag e ne ricorda l'ID.
   - Toccare il tag azzera il contatore, anche ad app chiusa.
   - I tag non abbinati vengono rifiutati, e Unpair o Re-pair fanno smettere di funzionare un vecchio tag.
 - **Tag**: una riga di filtri in cima all'elenco, con un colore fisso per ogni tag.
@@ -147,7 +147,7 @@ Poi:
 **API**: `GET /` web app, `GET /health` risponde `ok`, `POST /sync` riceve `{counters, events}` (tutti o solo quelli modificati) e restituisce lo stato completo unito.
 
 **Come funziona la sincronizzazione**
-- Contatori e azzeramenti hanno un UUID per la sincronizzazione. Il telefono mantiene i suoi id locali, quindi tag NFC e promemoria non ne risentono.
+- Contatori e azzeramenti hanno un UUID per la sincronizzazione. Il telefono mantiene i suoi id locali per i promemoria; i tag NFC contengono l'UUID.
 - Modifiche ai contatori: vince l'`updatedAt` più recente. Gli azzeramenti vengono uniti per id.
 - Le eliminazioni sono tombstone (`deleted: true`), così raggiungono ogni dispositivo.
 - L'app invia tutto all'apertura, poco dopo ogni modifica e ogni 15 minuti in background (il minimo di Android), poi applica il risultato unito. La web app si sincronizza ogni 15 minuti e quando la sua scheda torna visibile.
@@ -161,7 +161,7 @@ Poi:
 - Gli azzeramenti non vanno mai persi: ognuno ha un UUID e il server li tiene tutti, anche quando due telefoni azzerano nello stesso istante.
 - Le modifiche valgono per l'intero contatore: l'`updatedAt` più recente sostituisce insieme etichetta, tag e promemoria, quindi due persone che cambiano campi diversi quasi nello stesso momento perdono una delle due modifiche.
 - L'ordine delle modifiche usa l'orologio di ogni telefono; un telefono con l'orologio sballato di qualche minuto può vincere o perdere una modifica a torto.
-- I promemoria scattano su ogni telefono che ha il contatore, e un abbinamento NFC fatto su un telefono funziona su tutti.
+- I promemoria scattano su ogni telefono che ha il contatore. Un tag abbinato su un telefono funziona su tutti: il tag contiene l'id di sincronizzazione del contatore, e l'abbinamento si sincronizza.
 - Il server gestisce una sincronizzazione alla volta, e ogni sincronizzazione trasporta lo stato completo, il che va bene per pochi telefoni e centinaia di contatori (le richieste sono limitate a 10 MB).
 
 ## Licenza

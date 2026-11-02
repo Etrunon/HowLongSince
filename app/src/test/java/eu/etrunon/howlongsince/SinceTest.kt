@@ -33,7 +33,10 @@ class NotifyDelayTest {
 
 class NfcUriTest {
     @Test fun roundTrip() {
-        assertEquals(42L, parseResetUri(resetUri(42)))
+        val uuid = "0b9e8f3a-1c2d-4e5f-8a9b-0c1d2e3f4a5b"
+        assertEquals(uuid, parseResetUri(resetUri(uuid)))
+        assertEquals("0123456789abcdef0123456789abcdef", parseResetUri(resetUri("0123456789abcdef0123456789abcdef"))) // uid of a migrated counter
+        assertEquals(null, parseResetUri("howlongsince://reset/42"))
         assertEquals(null, parseResetUri("howlongsince://reset/abc"))
         assertEquals(null, parseResetUri("https://evil/howlongsince://reset/1"))
         assertEquals(null, parseResetUri(null))

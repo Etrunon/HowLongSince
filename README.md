@@ -35,7 +35,7 @@ An optional self-hosted server keeps the counters in sync between the phone and 
   - A ring around the reset button fills up as the reminder time gets closer and turns red when overdue.
   - Tapping the notification opens that counter's page. Its buttons reset the counter or snooze for a day.
 - **NFC tags**
-  - Pair a tag from the counter's detail page. The app writes `howlongsince://reset/<id>` to the tag and remembers the tag's ID.
+  - Pair a tag from the counter's detail page. The app writes `howlongsince://reset/<uuid>` (the counter's sync id, so the tag works on every synced phone) to the tag and remembers the tag's ID.
   - Tapping the tag resets the counter, even when the app is closed.
   - Tags that aren't paired are rejected, and Unpair or Re-pair makes an old tag stop working.
 - **Tags**: a filter row at the top of the list, with a stable color for each tag.
@@ -147,7 +147,7 @@ Then:
 **API**: `GET /` web app, `GET /health` returns `ok`, `POST /sync` takes `{counters, events}` (all or only the changed ones) and returns the merged full state.
 
 **How sync works**
-- Counters and resets have a UUID for sync. The phone keeps its local ids, so NFC tags and reminders are not affected.
+- Counters and resets have a UUID for sync. The phone keeps its local ids for reminders; NFC tags hold the UUID.
 - Counter edits: the newer `updatedAt` wins. Resets are merged by id.
 - Deletes are tombstones (`deleted: true`), so they reach every device.
 - The app sends everything when it opens, shortly after every change, and every 15 minutes in the background (the Android minimum), then applies the merged result. The web app syncs every 15 minutes and when its tab comes back into view.
@@ -161,7 +161,7 @@ Then:
 - Resets are never lost: each has a UUID and the server keeps them all, even when two phones reset at the same moment.
 - Edits are whole-counter: the newer `updatedAt` replaces label, tags and reminder together, so two people changing different fields at almost the same time lose one change.
 - Edit order uses each phone's clock; a phone whose clock is off by minutes can win or lose an edit it shouldn't.
-- Reminders fire on every phone that has the counter, and an NFC pairing made on one phone works on all of them.
+- Reminders fire on every phone that has the counter. A tag paired on one phone works on all of them: the tag holds the counter's sync id, and the pairing syncs.
 - The server handles one sync at a time, and each sync carries the full state, which is fine for a few phones and hundreds of counters (requests are capped at 10 MB).
 
 ## License

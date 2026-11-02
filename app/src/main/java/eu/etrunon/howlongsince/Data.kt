@@ -43,6 +43,8 @@ interface CounterDao {
     @Query("SELECT Counter.*, MAX(Event.at) AS lastAt FROM Counter JOIN Event ON Event.counterId = Counter.id AND Event.deleted = 0 WHERE Counter.deleted = 0 AND Counter.id = :id GROUP BY Counter.id")
     suspend fun counter(id: Long): CounterWithLast?
 
+    @Query("SELECT id FROM Counter WHERE uid = :uid AND deleted = 0") suspend fun idOf(uid: String): Long?
+
     @Query("SELECT * FROM Event WHERE counterId = :id AND deleted = 0 ORDER BY at DESC")
     fun events(id: Long): Flow<List<Event>>
 

@@ -38,10 +38,10 @@ fun Detail(c: CounterWithLast, dao: CounterDao, now: Long, onBack: () -> Unit, o
     var resetting by remember { mutableStateOf(false) }
     val fmt = remember { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT) }
 
-    if (pairing && nfc != null) PairDialog(nfc, id, dao) { pairing = false }
+    if (pairing && nfc != null) PairDialog(nfc, id, c.counter.uid, dao) { pairing = false }
     // Pair here, or copy the URL to write the tag with another app (then the first tap pairs it).
     if (pairChoice) AlertDialog(onDismissRequest = { pairChoice = false }, title = { Text(stringResource(R.string.pair_title)) },
-        text = { Text(stringResource(R.string.pair_choice_text, resetUri(id))) },
+        text = { Text(stringResource(R.string.pair_choice_text, resetUri(c.counter.uid))) },
         confirmButton = { TextButton(onClick = {
             pairChoice = false
             if (nfc?.isEnabled == true) pairing = true else Toast.makeText(ctx, ctx.getString(R.string.turn_on_nfc), Toast.LENGTH_SHORT).show()
@@ -49,7 +49,7 @@ fun Detail(c: CounterWithLast, dao: CounterDao, now: Long, onBack: () -> Unit, o
         dismissButton = { TextButton(onClick = {
             pairChoice = false
             ctx.getSystemService(android.content.ClipboardManager::class.java)
-                .setPrimaryClip(android.content.ClipData.newPlainText("NFC URL", resetUri(id)))
+                .setPrimaryClip(android.content.ClipData.newPlainText("NFC URL", resetUri(c.counter.uid)))
             ctx.getSharedPreferences("settings", 0).edit().putLong("adoptTag", id).apply()
             Toast.makeText(ctx, ctx.getString(R.string.url_copied), Toast.LENGTH_LONG).show()
         }) { Text(stringResource(R.string.copy_url)) } })
@@ -125,13 +125,13 @@ fun Detail(c: CounterWithLast, dao: CounterDao, now: Long, onBack: () -> Unit, o
 }
 
 @Composable
-private fun PairDialog(nfc: NfcAdapter, id: Long, dao: CounterDao, onDone: () -> Unit) {
+private fun PairDialog(nfc: NfcAdapter, id: Long, uid: String, dao: CounterDao, onDone: () -> Unit) {
     val activity = LocalContext.current as Activity
     val scope = rememberCoroutineScope()
     // Reader mode: while this dialog is open, taps go to us instead of the normal tag dispatch.
     DisposableEffect(Unit) {
         nfc.enableReaderMode(activity, { tag ->
-            val err = writeTag(tag, id) // binder thread, blocking IO is fine here
+            val err = writeTag(tag, uid) // binder thread, blocking IO is fine here
             scope.launch {
                 if (err == null) { cancelAdopt(activity, id); dao.pair(id, tag.id.toHex()) }
                 Toast.makeText(activity, activity.getString(err ?: R.string.tag_paired), Toast.LENGTH_SHORT).show()

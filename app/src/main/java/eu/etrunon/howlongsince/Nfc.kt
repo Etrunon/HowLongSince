@@ -8,13 +8,14 @@ import android.nfc.tech.NdefFormatable
 
 private const val PREFIX = "howlongsince://reset/"
 
-fun resetUri(id: Long) = "$PREFIX$id"
-fun parseResetUri(s: String?): Long? = s?.takeIf { it.startsWith(PREFIX) }?.removePrefix(PREFIX)?.toLongOrNull()
+// The counter's sync uid, not its local id, so a tag works on every phone synced to the same server.
+fun resetUri(uid: String) = "$PREFIX$uid"
+fun parseResetUri(s: String?): String? = s?.takeIf { it.startsWith(PREFIX) }?.removePrefix(PREFIX)?.takeIf { it.matches(Regex("[0-9a-f-]{32,36}")) }
 fun ByteArray.toHex() = joinToString("") { "%02x".format(it) }
 
 /** Writes the counter's reset URI to the tag. Returns an error message (string resource), or null on success. Blocking. */
-fun writeTag(tag: Tag, id: Long): Int? = try {
-    val msg = NdefMessage(NdefRecord.createUri(resetUri(id)))
+fun writeTag(tag: Tag, uid: String): Int? = try {
+    val msg = NdefMessage(NdefRecord.createUri(resetUri(uid)))
     val ndef = Ndef.get(tag)
     val formatable = NdefFormatable.get(tag)
     when {

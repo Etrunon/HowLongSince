@@ -111,10 +111,11 @@ class MainActivity : ComponentActivity() {
         intent.getLongExtra("id", 0).takeIf { it != 0L }?.let { openId = it } // notification tap
         if (intent.action == RESET_ACTION) return resetAndShow(intent.getLongExtra("id", 0), "manual")
         if (intent.action != NfcAdapter.ACTION_NDEF_DISCOVERED) return
-        val id = parseResetUri(intent.dataString) ?: return
+        val uid = parseResetUri(intent.dataString) ?: return
         @Suppress("DEPRECATION") val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG)
         lifecycleScope.launch {
             val dao = Db.get(this@MainActivity).dao()
+            val id = dao.idOf(uid) ?: 0L
             val c = dao.counter(id)
             // URL copied for another app to write: the first tag that carries it gets paired.
             val prefs = getSharedPreferences("settings", 0)
