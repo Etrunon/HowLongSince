@@ -79,8 +79,11 @@ fun Groups(groups: List<CounterGroup>, dao: CounterDao, onMenu: () -> Unit, onJo
             text = { Text(stringResource(R.string.delete_group_text, c.name)) },
             confirmButton = {
                 TextButton(onClick = {
-                    scope.launch { dao.deleteGroup(c.id) }
-                    ctx.getSharedPreferences("sync_keys", 0).edit().remove("k${c.id}").remove("t${c.id}").apply() // its counters stay here, local only
+                    scope.launch {
+                        leaveGroup(ctx, c)
+                        dao.deleteGroup(c.id)
+                        ctx.getSharedPreferences("sync_keys", 0).edit().remove("k${c.id}").remove("t${c.id}").apply() // its counters stay here, local only
+                    }
                     deleting = null
                 }) {
                     Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
@@ -138,8 +141,11 @@ private fun SyncDialog(g: CounterGroup, dao: CounterDao, prefs: android.content.
         text = { Text(stringResource(R.string.turn_off_text)) },
         confirmButton = {
             TextButton(onClick = {
-                keys.edit().remove("k${g.id}").remove("t${g.id}").apply()
-                scope.launch { dao.setSyncUrl(g.id, null) }
+                scope.launch {
+                    leaveGroup(ctx, g)
+                    keys.edit().remove("k${g.id}").remove("t${g.id}").apply()
+                    dao.setSyncUrl(g.id, null)
+                }
                 onDismiss()
             }) { Text(stringResource(R.string.turn_off), color = MaterialTheme.colorScheme.error) }
         },

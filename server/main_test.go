@@ -35,4 +35,24 @@ func TestBlobs(t *testing.T) {
 	if idRe.MatchString("../etc/passwd") || idRe.MatchString("ABC") {
 		t.Error("ids must be 32 lowercase hex chars")
 	}
+	if err := addDevices(dir, id, 1); err != nil { // 1 (creator) + 1
+		t.Fatal(err)
+	}
+	if bl, _ := readBlob(dir, id); bl.LastSynced == 0 || bl.LastJoined == 0 || bl.LastLeft != 0 {
+		t.Error("join and sync must be stamped, leave not yet")
+	}
+	addDevices(dir, id, -1)
+	if bl, _ := readBlob(dir, id); bl.LastLeft == 0 {
+		t.Error("leave must be stamped")
+	}
+	if _, _, err := getBlob(dir, id); err != nil {
+		t.Error("group with a device left must stay")
+	}
+	addDevices(dir, id, -1)
+	if _, _, err := getBlob(dir, id); !errors.Is(err, os.ErrNotExist) {
+		t.Error("group with no devices must be deleted")
+	}
+	if err := addDevices(dir, id, 1); !errors.Is(err, os.ErrNotExist) {
+		t.Error("join of a missing group must be ErrNotExist")
+	}
 }

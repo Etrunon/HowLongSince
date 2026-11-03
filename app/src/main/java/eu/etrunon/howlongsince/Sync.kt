@@ -140,11 +140,24 @@ suspend fun peekGroup(j: Join): Remote? {
 
 /** Adds the group from [j] (its blob [r] already read) and runs its first sync. */
 suspend fun joinGroup(ctx: Context, j: Join, r: Remote) {
+    count(j.url, keysOf(j.secret).id, j.token, "join")
     lock.withLock { // so a running sync never sees the URL without its key
         val id = Db.get(ctx).dao().insert(CounterGroup(name = r.name ?: ctx.getString(R.string.synced_group), nameUpdatedAt = r.nameUpdatedAt, syncUrl = j.url))
         keyPrefs(ctx).edit().putString("k$id", j.secret).putString("t$id", j.token).commit()
     }
     sync(ctx)
+}
+
+/** Tells the server this phone stopped syncing [g], so it can delete the group once no device is left. Call before the key is removed. */
+suspend fun leaveGroup(ctx: Context, g: CounterGroup) {
+    val keys = keyPrefs(ctx)
+    val secret = keys.getString("k${g.id}", null) ?: return
+    count(g.syncUrl ?: return, keysOf(secret).id, keys.getString("t${g.id}", "")!!, "leave")
+}
+
+/** Best effort: a failure only leaves the server's device count off by one. */
+private suspend fun count(url: String, id: String, token: String, what: String) {
+    try { withContext(Dispatchers.IO) { http("POST", "${url.trim().trimEnd('/')}/s/$id/$what", token) } } catch (_: IOException) {}
 }
 
 private fun httpError(code: Int) = IOException(if (code == 401) "wrong token" else "HTTP $code")

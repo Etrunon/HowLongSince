@@ -390,6 +390,11 @@ const linkServer = link => {
   return /^https?:/.test(link) ? link.split('#')[0] : null;
 };
 
+/** Tells the server a device joined or left a group, so it can count them and delete an abandoned one. Best effort. */
+async function count(secret, what, token) {
+  try { await fetch(`${base}/s/${(await deriveKeys(secret)).id}/${what}`, { method: 'POST', headers: headers({ token }), keepalive: true }); } catch {}
+}
+
 /** Reads a group's name from its blob, asking for the token if the server wants one. Null if nothing is stored under the key. */
 async function peek(secret, token) {
   const keys = await deriveKeys(secret);
@@ -417,6 +422,7 @@ async function join(link) {
     if (!found) return alert(t('no_data'));
     if (!confirm(t('join_question', found.state.name || '…'))) return;
     groups.push({ secret, token: found.token, name: found.state.name || '' });
+    count(secret, 'join', found.token);
     view = secret; saveGroups(); render(); commit(secret);
   } catch (e) { alert(e instanceof TypeError ? t('unreachable') : e.name === 'OperationError' ? t('decrypt_failed') : e.message); }
 }
@@ -457,6 +463,7 @@ function renameGroup() {
 function forgetGroup() {
   const g = groups.find(g => g.secret === view);
   if (prompt(t('forget_backup'), shareLink(g)) === null) return; // a text box, so the link can be copied
+  count(g.secret, 'leave', g.token);
   groups = groups.filter(x => x !== g); stores.delete(g.secret); view = 'all'; saveGroups(); render();
 }
 

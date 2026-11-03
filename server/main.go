@@ -1,4 +1,5 @@
-// How Long Since sync server: the web app, and encrypted blobs at GET/PUT /s/{id} (one file per synced group) that it cannot read.
+// How Long Since sync server: the web app, and encrypted blobs at GET/PUT /s/{id} (one file per synced group) that it cannot read,
+// plus POST /s/{id}/join and /leave, which keep a device count per group (the group is deleted when it reaches 0).
 // Config (env): DATA_DIR (default /data), ADDR (default :8080), TOKEN (bearer token, required unless INSECURE=1).
 package main
 
@@ -44,37 +45,85 @@ func etagOf(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(
 
 func blobPath(dir, id string) string { return filepath.Join(dir, "s", id) }
 
-// getBlob returns the stored bytes and their etag; os.ErrNotExist if there is none.
+// blob is the file on disk: the ciphertext plus a device count only the server sees (never sent to clients).
+type blob struct {
+	Devices    int    `json:"devices"`
+	LastSynced int64  `json:"lastSynced"` // unix seconds of the last GET or PUT
+	LastJoined int64  `json:"lastJoined"`
+	LastLeft   int64  `json:"lastLeft"`
+	Ciphertext []byte `json:"ciphertext"`
+}
+
+func readBlob(dir, id string) (blob, error) {
+	var bl blob
+	b, err := os.ReadFile(blobPath(dir, id))
+	if err == nil {
+		err = json.Unmarshal(b, &bl)
+	}
+	return bl, err
+}
+
+func writeBlob(dir, id string, bl blob) error {
+	p := blobPath(dir, id)
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return err
+	}
+	b, _ := json.Marshal(bl)
+	if err := os.WriteFile(p+".tmp", b, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(p+".tmp", p) // atomic replace
+}
+
+// getBlob returns the stored ciphertext and its etag; os.ErrNotExist if there is none.
 func getBlob(dir, id string) ([]byte, string, error) {
 	blobMu.Lock()
 	defer blobMu.Unlock()
-	b, err := os.ReadFile(blobPath(dir, id))
-	return b, etagOf(b), err
+	bl, err := readBlob(dir, id)
+	if err == nil {
+		bl.LastSynced = time.Now().Unix()
+		writeBlob(dir, id, bl) // best effort: a failed stamp must not fail the read
+	}
+	return bl.Ciphertext, etagOf(bl.Ciphertext), err
 }
 
-// putBlob stores b if ifMatch is the current etag; "" means create only. errConflict otherwise.
+// putBlob stores b if ifMatch is the current etag; "" means create only (the creator is the first device). errConflict otherwise.
 func putBlob(dir, id string, b []byte, ifMatch string) (string, error) {
 	blobMu.Lock()
 	defer blobMu.Unlock()
-	old, err := os.ReadFile(blobPath(dir, id))
+	old, err := readBlob(dir, id)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 		if ifMatch != "" {
 			return "", errConflict
 		}
+		old.Devices = 1
 	case err != nil:
 		return "", err
-	case ifMatch != etagOf(old):
+	case ifMatch != etagOf(old.Ciphertext):
 		return "", errConflict
 	}
-	p := blobPath(dir, id)
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
-		return "", err
+	old.Ciphertext, old.LastSynced = b, time.Now().Unix()
+	return etagOf(b), writeBlob(dir, id, old)
+}
+
+// addDevices adds delta (+1 join, -1 leave) to the group's device count; at 0 the group is deleted. os.ErrNotExist if missing.
+func addDevices(dir, id string, delta int) error {
+	blobMu.Lock()
+	defer blobMu.Unlock()
+	bl, err := readBlob(dir, id)
+	if err != nil {
+		return err
 	}
-	if err := os.WriteFile(p+".tmp", b, 0o600); err != nil {
-		return "", err
+	if delta > 0 {
+		bl.LastJoined = time.Now().Unix()
+	} else {
+		bl.LastLeft = time.Now().Unix()
 	}
-	return etagOf(b), os.Rename(p+".tmp", p) // atomic replace
+	if bl.Devices += delta; bl.Devices <= 0 {
+		return os.Remove(blobPath(dir, id))
+	}
+	return writeBlob(dir, id, bl)
 }
 
 func main() {
@@ -146,6 +195,20 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"etag": etag})
 	}))
+	for name, delta := range map[string]int{"join": 1, "leave": -1} {
+		http.HandleFunc("POST /s/{id}/"+name, authed(func(w http.ResponseWriter, r *http.Request) {
+			id := r.PathValue("id")
+			if !idRe.MatchString(id) {
+				http.Error(w, "bad id", 400)
+				return
+			}
+			if err := addDevices(dir, id, delta); errors.Is(err, os.ErrNotExist) {
+				http.Error(w, "not found", 404)
+			} else if err != nil {
+				http.Error(w, err.Error(), 500)
+			}
+		}))
+	}
 	addr := env("ADDR", ":8080")
 	log.Printf("listening on %s, data %s", addr, dir)
 	srv := &http.Server{Addr: addr, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second,
