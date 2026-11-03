@@ -118,4 +118,17 @@
     <string name="move_title">Spostare da un gruppo sincronizzato?</string>
     <string name="move_text">Il contatore verrà rimosso per tutti gli altri nel gruppo che lascia.</string>
     <string name="move">Sposta</string>
+    <string name="join">Unisciti</string>
+    <string name="join_title">Unisciti a un gruppo</string>
+    <string name="join_question">Unirti a «%1$s» su %2$s?</string>
+    <string name="link">Link</string>
+    <string name="next">Avanti</string>
+    <string name="bad_link">Questo non è un link di gruppo</string>
+    <string name="already_joined">Già unito come «%s»</string>
+    <string name="no_data">Niente trovato per questo link su quel server</string>
+    <string name="share">Condividi</string>
+    <string name="copy_link">Copia link</string>
+    <string name="link_copied">Link copiato</string>
+    <string name="close">Chiudi</string>
+    <string name="share_warning">Chiunque abbia questo link può leggere e modificare questo gruppo, e l\'accesso non si può revocare. Per escludere qualcuno, crea un nuovo gruppo e sposta i contatori.</string>
 </resources>

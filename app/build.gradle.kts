@@ -39,6 +39,7 @@ dependencies {
     implementation("androidx.room:room-runtime:$room")
     implementation("androidx.room:room-ktx:$room")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
+    implementation("com.google.zxing:core:3.5.3") // QR code of the share link
     ksp("androidx.room:room-compiler:$room")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303") // real org.json; Android's is a stub in unit tests

@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -91,7 +92,7 @@ class MainActivity : ComponentActivity() {
             var dark by remember { mutableStateOf(if (prefs.contains("dark")) prefs.getBoolean("dark", false) else null) }
             val effective = dark ?: isSystemInDarkTheme()
             AppTheme(effective) {
-                CounterList(dao, openId, onOpened = { openId = null }, dark = effective,
+                CounterList(dao, openId, onOpened = { openId = null }, joinRequest = joinLink, onJoinHandled = { joinLink = null }, dark = effective,
                     onDark = { dark = it; prefs.edit().putBoolean("dark", it).apply() })
             }
         }
@@ -99,6 +100,7 @@ class MainActivity : ComponentActivity() {
 
     // Counter to show, e.g. from a notification tap; cleared once the UI has opened it.
     private var openId by mutableStateOf<Long?>(null)
+    private var joinLink by mutableStateOf<String?>(null) // a group link that opened the app
 
     override fun onResume() {
         super.onResume()
@@ -111,6 +113,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handle(intent: Intent) {
+        if (intent.action == Intent.ACTION_VIEW && intent.data?.host == "join") joinLink = intent.dataString
         intent.getLongExtra("id", 0).takeIf { it != 0L }?.let { openId = it } // notification tap
         if (intent.action == RESET_ACTION) return resetAndShow(intent.getLongExtra("id", 0), "manual")
         if (intent.action != NfcAdapter.ACTION_NDEF_DISCOVERED) return
@@ -154,7 +157,7 @@ const val RESET_ACTION = "eu.etrunon.howlongsince.RESET"
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark: Boolean, onDark: (Boolean) -> Unit) {
+fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, joinRequest: String?, onJoinHandled: () -> Unit, dark: Boolean, onDark: (Boolean) -> Unit) {
     val counters by dao.counters().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
@@ -195,6 +198,9 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
     var settings by remember { mutableStateOf(false) }
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val snackbar = remember { SnackbarHostState() }
+    var sharing by remember { mutableStateOf(false) } // share dialog of the group being viewed
+    var joining by remember { mutableStateOf<String?>(null) } // "" = ask for the link
+    LaunchedEffect(joinRequest) { joinRequest?.let { joining = it; onJoinHandled() } }
     LaunchedEffect(openRequest) { openRequest?.let { open = it; settings = false; groupScreen = false; onOpened() } }
 
     if (openC != null) {
@@ -218,7 +224,7 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
     }) {
       if (groupScreen) {
         BackHandler { groupScreen = false }
-        Groups(groups, dao, onMenu = { scope.launch { drawer.open() } })
+        Groups(groups, dao, onMenu = { scope.launch { drawer.open() } }, onJoin = { joining = "" })
       } else if (settings) {
         BackHandler { settings = false }
         Settings(dark, onDark, debug, onDebug = { debug = it; prefs.edit().putBoolean("debug", it).apply() }, onMenu = { scope.launch { drawer.open() } })
@@ -230,6 +236,9 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
         topBar = { LargeTopAppBar(title = { Text(when (view) { ALL -> stringResource(R.string.app_name); UNCAT -> ungrouped; else -> groups.find { it.id == view }?.name ?: "" }) }, scrollBehavior = bar, navigationIcon = {
             IconButton(onClick = { scope.launch { drawer.open() } }) { Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.menu)) }
         }, actions = {
+            groups.find { it.id == view && it.syncUrl != null }?.let {
+                IconButton(onClick = { sharing = true }) { Icon(Icons.Filled.Share, contentDescription = stringResource(R.string.share)) }
+            }
             IconButton(onClick = { searching = !searching; query = "" }) { Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.search)) }
             var menu by remember { mutableStateOf(false) }
             IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.sort)) }
@@ -304,6 +313,8 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
       }
     }
 
+    if (sharing) groups.find { it.id == view }?.let { g -> shareLinkOf(ctx, g)?.let { ShareDialog(g.name, it) { sharing = false } } }
+    joining?.let { JoinDialog(it, groups) { joining = null } }
     editing?.let { c ->
         EditDialog(c, groups, debug, dao, onDismiss = { editing = null }, onDelete = { scope.launch { dao.delete(c.id); reschedule(ctx, c.id) }; editing = null }) { saved ->
             scope.launch {

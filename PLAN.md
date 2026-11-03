@@ -42,6 +42,7 @@ Today the server merges data and the web app reads plaintext. With end-to-end en
 
 - The group settings screen has a Share button that shows the link `https://host/#k=<base64url secret>[&t=<token>]` and a QR code of it.
 - Opened in a browser, the link is the web app for that group. Its "Open in app" button launches `howlongsince://join?h=<host>#k=…`. This avoids App Links domain verification for self-hosted domains.
+- The Groups screen also has a "Join" button that takes a pasted link (web or `howlongsince://` form), so joining works before the web app does (Phase 4). The QR code uses `zxing-core`, the only new dependency.
 - The app has no QR scanner of its own: the phone's camera app opens the link.
 - Joining asks "Join «name» on host?", then creates the group and runs the first sync.
 - "Copy link" in the group settings doubles as the key backup.

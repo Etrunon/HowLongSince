@@ -128,3 +128,18 @@ class CryptoTest {
         assertEquals("Family" to 7L, r.name to r.nameUpdatedAt)
     }
 }
+
+class JoinTest {
+    private val secret = newSecret()
+    @Test fun roundTrip() {
+        val j = Join("https://hls.example.com/sub", secret, "to ken&1")
+        assertEquals(j, parseJoin(shareLink(j)))
+        assertEquals(j.copy(token = ""), parseJoin(shareLink(j.copy(token = ""))))
+        assertEquals(j, parseJoin("howlongsince://join?h=https%3A%2F%2Fhls.example.com%2Fsub%2F#k=$secret&t=to+ken%261"))
+    }
+
+    @Test fun rejects() {
+        for (s in listOf("", "hello", "https://x.example/", "https://x.example/#k=abc", "ftp://x.example/#k=$secret", "howlongsince://join#k=$secret", "howlongsince://join?h=nope#k=$secret"))
+            assertEquals(s, null, parseJoin(s))
+    }
+}

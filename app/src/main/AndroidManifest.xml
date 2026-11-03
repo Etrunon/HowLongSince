@@ -21,6 +21,12 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="howlongsince" android:host="reset" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="howlongsince" android:host="join" />
+            </intent-filter>
         </activity>
         <receiver android:name=".ReminderAction" android:exported="false" />
         <receiver android:name=".Widget" android:exported="false" android:label="@string/widget_label">

@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -21,15 +22,17 @@ import kotlinx.coroutines.launch
 /** Create, rename and delete groups. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Groups(groups: List<CounterGroup>, dao: CounterDao, onMenu: () -> Unit) {
+fun Groups(groups: List<CounterGroup>, dao: CounterDao, onMenu: () -> Unit, onJoin: () -> Unit) {
     val scope = rememberCoroutineScope()
     var editing by remember { mutableStateOf<CounterGroup?>(null) } // id 0 = new
     var deleting by remember { mutableStateOf<CounterGroup?>(null) }
+    var sharing by remember { mutableStateOf<Long?>(null) } // id of the group being shared
     var syncing by remember { mutableStateOf<Long?>(null) } // id of the group whose sync dialog is open
     val ctx = LocalContext.current
     val prefs = remember { ctx.getSharedPreferences("settings", 0) }
     Scaffold(
-        topBar = { TopAppBar(title = { Text(stringResource(R.string.groups)) }, navigationIcon = { IconButton(onClick = onMenu) { Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.menu)) } }) },
+        topBar = { TopAppBar(title = { Text(stringResource(R.string.groups)) }, navigationIcon = { IconButton(onClick = onMenu) { Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.menu)) } },
+            actions = { TextButton(onClick = onJoin) { Text(stringResource(R.string.join)) } }) },
         floatingActionButton = {
             ExtendedFloatingActionButton(text = { Text(stringResource(R.string.new_group)) }, icon = { Icon(Icons.Filled.Add, contentDescription = null) },
                 onClick = { editing = CounterGroup(name = "") })
@@ -41,12 +44,16 @@ fun Groups(groups: List<CounterGroup>, dao: CounterDao, onMenu: () -> Unit) {
                     supportingContent = { Text(if (c.syncUrl == null) stringResource(R.string.local_only) else stringResource(R.string.synced_with, c.syncUrl.removePrefix("https://"))) },
                     trailingContent = {
                         Row {
+                            if (c.syncUrl != null) IconButton(onClick = { sharing = c.id }) { Icon(Icons.Filled.Share, contentDescription = stringResource(R.string.share)) }
                             TextButton(onClick = { editing = c }) { Text(stringResource(R.string.edit)) }
                             TextButton(onClick = { deleting = c }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
                         }
                     })
             }
         }
+    }
+    groups.find { it.id == sharing }?.let { g ->
+        shareLinkOf(ctx, g)?.let { ShareDialog(g.name, it) { sharing = null } }
     }
     groups.find { it.id == syncing }?.let { SyncDialog(it, dao, prefs) { syncing = null } }
     editing?.let { c ->
@@ -138,4 +145,10 @@ private fun SyncDialog(g: CounterGroup, dao: CounterDao, prefs: android.content.
         },
         dismissButton = { TextButton(onClick = { confirmOff = false }) { Text(stringResource(R.string.cancel)) } },
     )
+}
+
+/** The share link of a synced group, or null if it isn't synced or this phone has no key for it. */
+fun shareLinkOf(ctx: android.content.Context, g: CounterGroup): String? {
+    val keys = ctx.getSharedPreferences("sync_keys", 0)
+    return keys.getString("k${g.id}", null)?.let { shareLink(Join(g.syncUrl ?: return null, it, keys.getString("t${g.id}", "")!!)) }
 }

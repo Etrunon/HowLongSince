@@ -119,4 +119,17 @@
     <string name="move_title">Move out of a synced group?</string>
     <string name="move_text">The counter will be removed for everyone else in the group it leaves.</string>
     <string name="move">Move</string>
+    <string name="join">Join</string>
+    <string name="join_title">Join a group</string>
+    <string name="join_question">Join «%1$s» on %2$s?</string>
+    <string name="link">Link</string>
+    <string name="next">Next</string>
+    <string name="bad_link">That isn\'t a group link</string>
+    <string name="already_joined">Already joined as «%s»</string>
+    <string name="no_data">Nothing found for this link on that server</string>
+    <string name="share">Share</string>
+    <string name="copy_link">Copy link</string>
+    <string name="link_copied">Link copied</string>
+    <string name="close">Close</string>
+    <string name="share_warning">Anyone with this link can read and change this group, and access can\'t be taken back. To cut someone off, make a new group and move the counters.</string>
 </resources>

@@ -127,6 +127,26 @@ private suspend fun syncGroup(ctx: Context, dao: CounterDao, g: CounterGroup, se
     throw IOException("busy, try again")
 }
 
+/** Reads a group's blob without touching anything, to show its name before joining. Null if the server has nothing under that key. */
+suspend fun peekGroup(j: Join): Remote? {
+    val k = keysOf(j.secret)
+    val (code, text) = withContext(Dispatchers.IO) { http("GET", "${j.url}/s/${k.id}", j.token) }
+    return when (code) {
+        200 -> parseState(open(k, Base64.getDecoder().decode(JSONObject(text).getString("ciphertext"))).decodeToString())
+        404 -> null
+        else -> throw httpError(code)
+    }
+}
+
+/** Adds the group from [j] (its blob [r] already read) and runs its first sync. */
+suspend fun joinGroup(ctx: Context, j: Join, r: Remote) {
+    lock.withLock { // so a running sync never sees the URL without its key
+        val id = Db.get(ctx).dao().insert(CounterGroup(name = r.name ?: ctx.getString(R.string.synced_group), nameUpdatedAt = r.nameUpdatedAt, syncUrl = j.url))
+        keyPrefs(ctx).edit().putString("k$id", j.secret).putString("t$id", j.token).commit()
+    }
+    sync(ctx)
+}
+
 private fun httpError(code: Int) = IOException(if (code == 401) "wrong token" else "HTTP $code")
 
 /** Background sync, so web changes and reminders stay current without opening the app. */
