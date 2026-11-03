@@ -133,7 +133,7 @@
     <string name="copy_link">Copy link</string>
     <string name="link_copied">Link copied</string>
     <string name="close">Close</string>
-    <string name="share_warning">A single-use invite, valid for 24 hours. Whoever joins with it can read and change this group until an admin revokes them; they keep what they already saw.</string>
+    <string name="share_warning">A **single-use** invite, valid for **24 hours**.\n\nWhoever joins with it can read and change this group until an admin revokes them; they keep what they already saw.</string>
     <string name="share_backup">Only admins can invite. This link is the backup of the key: joining with it needs the recovery password.</string>
     <string name="need_invite">No access yet: join with an invite, or enter the recovery password in the group\'s sync settings</string>
     <string name="no_access">This phone was removed from the group: ask an admin for an invite</string>

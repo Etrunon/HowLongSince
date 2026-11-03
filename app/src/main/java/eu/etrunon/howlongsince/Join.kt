@@ -17,6 +17,10 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -106,6 +110,11 @@ fun GroupShare(g: CounterGroup, onDismiss: () -> Unit) {
     link?.let { (l, invite) -> ShareDialog(g.name, l, stringResource(if (invite) R.string.share_warning else R.string.share_backup), onDismiss) }
 }
 
+/** Text with `**bold**` parts, as the share strings mark them. */
+fun boldMarks(s: String) = buildAnnotatedString {
+    s.split("**").forEachIndexed { i, part -> if (i % 2 == 1) withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(part) } else append(part) }
+}
+
 /** The link and a QR code of it. */
 @Composable
 fun ShareDialog(name: String, link: String, warning: String, onDismiss: () -> Unit) {
@@ -116,7 +125,7 @@ fun ShareDialog(name: String, link: String, warning: String, onDismiss: () -> Un
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Qr(link, Modifier.fillMaxWidth())
-                Text(warning, style = MaterialTheme.typography.bodySmall)
+                Text(boldMarks(warning), style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = {

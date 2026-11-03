@@ -21,7 +21,7 @@ const T = {
     debug_hint: 'Allow "notify after" in minutes', device_name: 'Device name', device_name_hint: 'Shown next to the resets you log, on every device in a synced group',
     export_data: 'Export', import_data: 'Import', replace: 'Replace', keep_both: 'Keep both', cancel: 'Cancel', imported_name: 'Imported', cant_read: 'Can\'t read file: %s', done_imported: 'Imported %s counters',
     import_q: 'The file has %s counters. Replace: groups with the same name are deleted and replaced by the file\'s. Keep both: they are imported as new groups, renamed if a name is taken. Replacing can\'t be undone.',
-    share_warning: 'A single-use invite, valid for 24 hours. Whoever joins with it can read and change this group until an admin revokes them; they keep what they already saw.',
+    share_warning: 'A **single-use** invite, valid for **24 hours**.\n\nWhoever joins with it can read and change this group until an admin revokes them; they keep what they already saw.',
     forget_backup: 'Copy this link first: with the recovery password it is the backup of the key. Forget removes the group from this browser (the data stays on the server).',
     sync: 'Sync', server: 'Server: %s', sync_now: 'Sync now', devices: 'Devices', change_password: 'Change password', become_admin: 'Become admin',
     pw_join: 'Recovery password, to join as an admin', revoke: 'Revoke', admin: 'Admin', member: 'Member', this_device: 'This device',
@@ -49,7 +49,7 @@ const T = {
     debug_hint: 'Consenti "avvisa dopo" in minuti', device_name: 'Nome del dispositivo', device_name_hint: 'Mostrato accanto agli azzeramenti che registri, su ogni dispositivo di un gruppo sincronizzato',
     export_data: 'Esporta', import_data: 'Importa', replace: 'Sostituisci', keep_both: 'Tieni entrambi', cancel: 'Annulla', imported_name: 'Importati', cant_read: 'Impossibile leggere il file: %s', done_imported: 'Importati %s contatori',
     import_q: 'Il file contiene %s contatori. Sostituisci: i gruppi con lo stesso nome vengono eliminati e sostituiti da quelli del file. Tieni entrambi: vengono importati come nuovi gruppi, rinominati se un nome è già usato. Sostituire non si può annullare.',
-    share_warning: 'Un invito monouso, valido 24 ore. Chi entra con esso può leggere e modificare questo gruppo finché un amministratore non lo revoca; tiene ciò che ha già visto.',
+    share_warning: 'Un invito **monouso**, valido **24 ore**.\n\nChi entra con esso può leggere e modificare questo gruppo finché un amministratore non lo revoca; tiene ciò che ha già visto.',
     forget_backup: 'Copia prima questo link: con la password di recupero è il backup della chiave. Dimentica toglie il gruppo da questo browser (i dati restano sul server).',
     sync: 'Sincronizzazione', server: 'Server: %s', sync_now: 'Sincronizza ora', devices: 'Dispositivi', change_password: 'Cambia password', become_admin: 'Diventa amministratore',
     pw_join: 'Password di recupero, per entrare come amministratore', revoke: 'Revoca', admin: 'Amministratore', member: 'Membro', this_device: 'Questo dispositivo',
@@ -312,7 +312,7 @@ async function share(secret) {
   const nonce = g.admin ? await invite(g) : null;
   const link = shareLink(g, nonce), q = qrcode(0, 'M');
   q.addData(link); q.make();
-  $('#sharetext').textContent = t(nonce ? 'share_warning' : 'share_backup');
+  $('#sharetext').innerHTML = esc(t(nonce ? 'share_warning' : 'share_backup')).split('\n\n').map(p => `<p>${p.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')}</p>`).join('');
   $('#sharename').textContent = g.name || '…';
   $('#qr').innerHTML = q.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
   $('#copy').textContent = t('copy_link');
