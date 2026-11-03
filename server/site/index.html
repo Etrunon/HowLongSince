@@ -37,7 +37,8 @@ try {
 <main>
 <div class="wrap hero">
   <div>
-    <h1>How long since you last <em>…watered the plants?</em></h1>
+    <h1>How long since you last <em data-phrases="…watered the plants?|…paid the electricity bill?|…renewed your passport?|…backed up your laptop?|…called grandma?|…sent the invoice?|…changed the toothbrush?|…filed your tax return?|…had a dentist check-up?|…updated your CV?|…cleaned the coffee machine?|…renewed the car insurance?">…watered the plants?</em></h1>
+    <div id="clock" aria-hidden="true"></div>
     <p>A free, open-source app for Android and the web that tracks when you last did anything: changed the toothbrush, cleaned the coffee machine, had a haircut, called grandma. Tap once when you do it, and it counts the days for you.</p>
     <div class="ctas">
       <a class="btn" href="app/">Open the web app</a>
@@ -113,5 +114,6 @@ try {
   <span>How Long Since? · GPL-3.0 · <a href="https://github.com/Etrunon/HowLongSince">GitHub</a></span>
   <span><a href="features.html">Features</a> · <a href="privacy.html">Privacy</a> · <a href="groups.html">Groups</a> · <a href="self-host.html">Self-host</a> · <a href="contribute.html">Contribute</a> · <a href="it/" hreflang="it" onclick="try{localStorage.setItem('lang','it')}catch{}">Italiano</a></span>
 </div></footer>
+<script src="hero.js"></script>
 </body>
 </html>

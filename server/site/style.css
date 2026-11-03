@@ -69,3 +69,14 @@ pre code { background: none; padding: 0; }
 footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; padding: 28px 0 40px; }
 footer .wrap { display: flex; gap: 20px; flex-wrap: wrap; justify-content: space-between; }
 footer a { color: var(--muted); }
+
+/* Hero: rotating phrase + flip clock */
+.hero h1 em { display: inline-block; transition: opacity .3s, transform .3s; }
+.hero h1 em.out { opacity: 0; transform: translateY(-8px); }
+#clock { display: flex; gap: 6px; align-items: center; margin: 0 0 20px; font-variant-numeric: tabular-nums; }
+.card-d { width: 34px; height: 48px; line-height: 48px; text-align: center; font-size: 30px; font-weight: 700; background: var(--card); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 10px rgb(30 50 100 / .12); position: relative; }
+.card-d::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--line); }
+.card-d.flip { animation: flip .5s ease-out; }
+#clock .sep { font-size: 26px; font-weight: 700; color: var(--muted); }
+@keyframes flip { from { transform: perspective(200px) rotateX(-90deg); } to { transform: perspective(200px) rotateX(0); } }
+@media (prefers-reduced-motion: reduce) { .card-d.flip { animation: none; } .hero h1 em { transition: none; } }
