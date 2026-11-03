@@ -43,8 +43,10 @@ An optional self-hosted server keeps the counters in sync between the phone and 
   <img src="docs/nfc-pairing.png" width="240" alt="Pair dialog: copy the URL or pair now">
 
 - **Groups** (☰ menu → Groups): a group is a collection of counters that is synced, or not, on its own. The home screen shows one foldable section per group, the menu opens a single group, and a counter's edit dialog moves it between groups. Counters without a group stay on the phone. Deleting a group moves its counters back to "Ungrouped".
-  - **Sync is per group**: tap a group, enter your server URL (and token), and turn sync on. The phone makes a random key and encrypts the group before sending it; the server only stores data it can't read.
-  - **Share** (the share icon on a synced group): a link and a QR code that hold the server and the key. On another phone, open Groups → Join and paste the link (or open a `howlongsince://join…` link); it shows the group's name and asks before joining. The link is also your backup of the key, so keep it. Anyone who has it can read and change the group, and access can't be taken back: to cut someone off, make a new group and move the counters into it.
+  - **Sync is per group**: tap a group, enter your server URL and a recovery password, and turn sync on. The phone makes a random key and encrypts the group before sending it: the server never sees a label, tag, note or name, nor which device logged a reset. It does see counter metadata (how many, when they were reset, reminder intervals). This phone becomes the group's admin.
+  - **Share** (the share icon on a synced group): for an admin, a link and a QR code that hold the server, the key and a single-use invite valid for 24 hours. On another phone, open Groups → Join and paste the link (or open a `howlongsince://join…` link). Whoever joins with an invite is a member: they sync, but can't invite or revoke.
+  - **Admins** see the group's devices (tap the group) and can revoke any of them. A revoked device stops syncing but keeps what it already has; to cut someone off completely, make a new group and move the counters into it.
+  - **Recovery password**: with the group link (members' Share shows it without an invite, and it is your backup of the key), it joins a new phone as an admin, even if every other device is lost. A member who knows it becomes admin by entering it. It can't be reset, and anyone who has both the link and the password is an admin.
 - **Tags**: a filter row at the top of the list, with a stable color for each tag.
 - **Settings** (☰ menu)
   - Dark theme switch. It follows the system until you change it.
@@ -115,7 +117,7 @@ NFC needs a real phone and writable NDEF tags (for example NTAG213/215/216).
 **Run it**
 ```bash
 cd server
-echo HLS_TOKEN=$(openssl rand -hex 16) > .env   # the token clients need
+echo HLS_TOKEN=$(openssl rand -hex 16) > .env   # optional: for GET /stats, and for groups made before device tokens
 mkdir -p data                                   # must be writable by uid 1000
 docker compose up -d --build                    # listens on 127.0.0.1:13387
 ```
@@ -149,32 +151,41 @@ With Caddy, the same headers go in a `header` block; rate limiting needs the `ca
 The Android app needs an `https://` URL with a certificate that Android trusts by default (Let's Encrypt, Tailscale, a commercial CA). Self-signed or private-CA certificates installed on the phone are not trusted by the app.
 
 Then:
-- **Web**: open a group's share link. If the server needs a token and the link doesn't carry it, the page asks for it (it works with password managers) and keeps it in the browser.
+- **Web**: open a group's share link: with an invite it joins, without one it asks for the recovery password. "New group" makes one here and asks for its recovery password.
 - **Install the web app** (own window, own icon):
   - Chrome / Chromium / Edge (any OS): the install icon on the right of the address bar.
   - Firefox on Windows (143+): the "add to taskbar" icon in the address bar pins it to the Windows taskbar. If missing, set `browser.taskbarTabs.enabled` to `true` in `about:config`.
   - Firefox on Android: menu → "Add to Home screen".
   - Firefox on Linux: no install option; use a pinned tab or Chromium.
-- **Phone**: Groups → tap a group → enter the URL and the token → Turn on sync. An existing global server from an older version becomes a group called "Synced" the first time the new app syncs.
+- **Phone**: Groups → tap a group → enter the URL and a recovery password → Turn on sync.
+- **Upgrading from the shared `TOKEN`**: keep `TOKEN` set. Each device claims its own token with it on the first sync, as a member; the first one to enter a recovery password (web: it asks; phone: tap the group) becomes admin, and from then on `TOKEN` no longer opens that group. Once every group is claimed, `TOKEN` is only needed for `/stats`.
 
-**Configuration** (environment variables): `TOKEN` (bearer token, required: the server won't start without it), `INSECURE=1` (run without a token, only on a trusted network), `DATA_DIR` (default `/data`, blobs go in `s/` inside it), `ADDR` (default `:8080`). `compose.yml` maps `HLS_TOKEN` from `.env` to `TOKEN`.
+**Configuration** (environment variables): `TOKEN` (optional: claims groups made before device tokens, and reads `/stats`), `CREATES_PER_IP_HOUR` (default 10), `MAX_GROUPS` (default 10000), `DATA_DIR` (default `/data`, blobs go in `s/` inside it), `ADDR` (default `:8080`). `compose.yml` maps `HLS_TOKEN` from `.env` to `TOKEN`. Anyone can create a group, within those caps. The per-IP limits read the last `X-Forwarded-For` address, which the reverse proxy sets. Once a day the server deletes groups not synced for a year, or for half a year with fewer than 3 counters.
 
-**API**: `GET /` web app, `GET /health` returns `ok`, `GET /s/{id}` returns `{etag, ciphertext}` (404 if there is none), `PUT /s/{id}` takes `{ciphertext}` and `If-Match: <etag>` and answers 409 if someone else wrote first (no `If-Match` means create only, and the creator counts as the group's first device). `POST /s/{id}/join` and `POST /s/{id}/leave` add and remove a device; at zero devices the server deletes the group (404 if there is none). Apps call them when joining a group, turning sync off or deleting a synced group. `{id}` is 32 hex characters derived from the group's secret. All of it takes the bearer token.
+**API** (`{id}` is 32 hex characters derived from the group's secret; "device" means the device's token as `Authorization: Bearer`):
+- `GET /` web app, `GET /health` returns `ok`, `GET /stats` (with `TOKEN`) returns totals: groups, devices, live counters, resets in the last 7 and 30 days.
+- `GET /s/{id}` (device) returns `{etag, ciphertext}`. `PUT /s/{id}` (device) takes `{ciphertext}` and `If-Match: <etag>`, and answers 409 if someone else wrote first. Without `If-Match` it creates the group: `{ciphertext, deviceId, recovery}`, no token needed, returns `{etag, token}` and the caller is admin.
+- `POST /s/{id}/invite` (admin) returns `{nonce}`, single use, 24 h. `POST /s/{id}/enroll {deviceId, nonce}` makes a member, `{deviceId, recovery}` an admin; both return `{token}`. `POST /s/{id}/promote {recovery}` (device) makes the caller admin. `POST /s/{id}/recovery {recovery}` (admin) changes the password.
+- `GET /s/{id}/devices` (admin) lists `{id, admin, created, lastSeen}`. `POST /s/{id}/revoke {deviceId}` (admin). `POST /s/{id}/leave` (device); the group is deleted when no device is left.
+- `POST /s/{id}/claim {deviceId}` (with `TOKEN`, only groups without a recovery password) returns a member `{token}`.
+- `recovery` is PBKDF2-HMAC-SHA256 of the password, salted with `{id}`, 600 000 rounds, base64: the password never leaves the device. The server stores SHA-256 of it and of every token, and allows 5 wrong passwords per group per hour and 20 failures per IP per hour.
 
 **How sync works**
-- The key: each synced group has a random 32-byte secret made on the phone. HKDF-SHA256 turns it into the id the server sees and an AES-256-GCM key; the id is also authenticated data, so the server can't hand one group's blob out as another's. The secret is kept in a separate preferences file that backups skip. The server sees an anonymous id, the blob size, timing and your IP address.
+- The key: each synced group has a random 32-byte secret made on the phone. HKDF-SHA256 turns it into the id the server sees and an AES-256-GCM key. The secret and the device token are kept in a separate preferences file that backups skip.
+- The blob (format v2) is JSON: labels, tags, NFC ids, notes, group and device names, and which device logged each reset are each sealed with AES-GCM (authenticated with the group id, record id and field name). The rest is readable: counter ids, `updatedAt`, `deleted`, `archived`, reminder intervals, and reset times. The whole document travels as one string with a MAC (SHA-256 of its exact bytes, sealed with the key), so a server without the key can't change anything unnoticed. Clients still read the older fully encrypted format.
+- The server sees the readable fields above, the blob size, timing and your IP address.
 - A sync is: get the blob, decrypt, merge with the local group, encrypt, put it back with `If-Match`; on a 409 it starts again. The merge is done by the phone and the web app, never the server.
 - Counters and resets have a UUID. The phone keeps its local ids for reminders; NFC tags hold the UUID.
 - Counter edits: the newer `updatedAt` wins. Resets are merged by id. Moving a counter to another group keeps its UUID and writes a tombstone in the old group, so it disappears there for everyone.
 - Deletes are tombstones (`deleted: true`), so they reach every device.
 - The app syncs when it opens, shortly after every change, and every 15 minutes in the background (the Android minimum). The web app syncs every 15 minutes and when its tab comes back into view.
 - Deleted counters are dropped for good after 90 days. A device that has been offline for longer could bring one back. A server that serves an old blob could do the same.
-- If every phone holding a group's key is lost, its data is gone. Keep the share link.
-- Next to the ciphertext the server keeps, for its own use and never sent to clients, the number of devices in the group and when it was last synced (any `GET` or `PUT`), joined and left. The counts are best effort: a join or leave that never reaches the server leaves them off by one.
+- If every device holding a group's key is lost, the link and the recovery password bring it back. Keep both.
+- Next to the blob the server keeps, never sent to clients, the group's devices (id, token hash, role, created, last seen), its open invites, the recovery hash and when it was last synced (stamped at most once an hour).
 - The server drops slow or stuck connections (10 s to send headers, 30 s per request) and writes blobs atomically.
 
 **Several phones on one server**
-- A group is shared with whoever has its link, which suits a household sharing chores; other groups stay private to a phone or go to other people. One server can hold many groups.
+- A group is shared by its admins with invites, which suits a household sharing chores; other groups stay private to a phone or go to other people. One server can hold many groups.
 - Resets are never lost: each has a UUID and the server keeps them all, even when two phones reset at the same moment.
 - Edits are whole-counter: the newer `updatedAt` replaces label, tags and reminder together, so two people changing different fields at almost the same time lose one change.
 - Edit order uses each phone's clock; a phone whose clock is off by minutes can win or lose an edit it shouldn't.

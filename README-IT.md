@@ -43,8 +43,10 @@ Un server opzionale, ospitato da te, sincronizza i contatori tra il telefono e u
   <img src="docs/nfc-pairing.png" width="240" alt="Finestra di abbinamento: copia l'URL o abbina ora">
 
 - **Gruppi** (menu ☰ → Gruppi): un gruppo è una raccolta di contatori che si sincronizza, o no, per conto suo. La schermata Home mostra una sezione comprimibile per gruppo, il menu apre un singolo gruppo, e la finestra di modifica di un contatore lo sposta tra i gruppi. I contatori senza gruppo restano sul telefono. Eliminare un gruppo riporta i suoi contatori in "Senza gruppo".
-  - **La sincronizzazione è per gruppo**: tocca un gruppo, inserisci l'URL del tuo server (e il token) e attiva la sincronizzazione. Il telefono crea una chiave casuale e cifra il gruppo prima di inviarlo; il server conserva solo dati che non può leggere.
-  - **Condividi** (l'icona condividi su un gruppo sincronizzato): un link e un codice QR che contengono server e chiave. Su un altro telefono apri Gruppi → Unisciti e incolla il link (oppure apri un link `howlongsince://join…`); mostra il nome del gruppo e chiede conferma. Il link è anche il tuo backup della chiave, quindi conservalo. Chi lo ha può leggere e modificare il gruppo, e l'accesso non si può revocare: per escludere qualcuno, crea un nuovo gruppo e sposta i contatori.
+  - **La sincronizzazione è per gruppo**: tocca un gruppo, inserisci l'URL del tuo server e una password di recupero, e attiva la sincronizzazione. Il telefono crea una chiave casuale e cifra il gruppo prima di inviarlo: il server non vede mai etichette, tag, note o nomi, né quale dispositivo ha registrato un azzeramento. Vede i metadati dei contatori (quanti, quando sono stati azzerati, intervalli dei promemoria). Questo telefono diventa amministratore del gruppo.
+  - **Condividi** (l'icona condividi su un gruppo sincronizzato): per un amministratore, un link e un codice QR che contengono server, chiave e un invito monouso valido 24 ore. Su un altro telefono apri Gruppi → Unisciti e incolla il link (o apri un link `howlongsince://join…`). Chi entra con un invito è un membro: sincronizza, ma non può invitare né revocare.
+  - **Amministratori**: vedono i dispositivi del gruppo (tocca il gruppo) e possono revocarli. Un dispositivo revocato smette di sincronizzare ma tiene ciò che ha già; per escludere qualcuno del tutto, crea un nuovo gruppo e spostaci i contatori.
+  - **Password di recupero**: con il link del gruppo (il Condividi dei membri lo mostra senza invito, ed è il backup della chiave) fa entrare un nuovo telefono come amministratore, anche se ogni altro dispositivo è perso. Un membro che la conosce diventa amministratore inserendola. Non si può reimpostare, e chi ha sia il link sia la password è amministratore.
 - **Tag**: una riga di filtri in cima all'elenco, con un colore fisso per ogni tag.
 - **Impostazioni** (menu ☰)
   - Interruttore del tema scuro. Segue il sistema finché non lo cambi.
@@ -115,7 +117,7 @@ L'NFC richiede un telefono vero e tag NDEF scrivibili (per esempio NTAG213/215/2
 **Avvio**
 ```bash
 cd server
-echo HLS_TOKEN=$(openssl rand -hex 16) > .env   # il token che serve ai client
+echo HLS_TOKEN=$(openssl rand -hex 16) > .env   # facoltativo: per GET /stats e per i gruppi creati prima dei token per dispositivo
 mkdir -p data                                   # deve essere scrivibile dall'uid 1000
 docker compose up -d --build                    # in ascolto su 127.0.0.1:13387
 ```
@@ -149,32 +151,41 @@ Con Caddy, gli stessi header vanno in un blocco `header`; il rate limiting richi
 L'app Android richiede un URL `https://` con un certificato di cui Android si fida di default (Let's Encrypt, Tailscale, una CA commerciale). I certificati autofirmati o di una CA privata installati sul telefono non sono accettati dall'app.
 
 Poi:
-- **Web**: apri il link di condivisione di un gruppo. Se il server richiede un token e il link non lo contiene, la pagina lo chiede (funziona con i password manager) e lo tiene nel browser.
+- **Web**: apri il link di condivisione di un gruppo: con un invito si unisce, senza chiede la password di recupero. "Nuovo gruppo" ne crea uno qui e chiede la sua password di recupero.
 - **Installa la web app** (finestra e icona proprie):
   - Chrome / Chromium / Edge (qualsiasi OS): l'icona di installazione a destra della barra degli indirizzi.
   - Firefox su Windows (143+): l'icona "aggiungi alla barra delle applicazioni" nella barra degli indirizzi la fissa sulla barra di Windows. Se manca, imposta `browser.taskbarTabs.enabled` a `true` in `about:config`.
   - Firefox su Android: menu → "Aggiungi a schermata Home".
   - Firefox su Linux: nessuna opzione di installazione; usa una scheda fissata o Chromium.
-- **Telefono**: Gruppi → tocca un gruppo → inserisci URL e token → Attiva la sincronizzazione. Un server globale di una versione precedente diventa un gruppo chiamato "Sincronizzati" alla prima sincronizzazione della nuova app.
+- **Telefono**: Gruppi → tocca un gruppo → inserisci URL e una password di recupero → Attiva la sincronizzazione.
+- **Aggiornare dal `TOKEN` condiviso**: lascia `TOKEN` impostato. Ogni dispositivo ci rivendica il proprio token alla prima sincronizzazione, come membro; il primo che inserisce una password di recupero (web: la chiede; telefono: tocca il gruppo) diventa amministratore, e da lì `TOKEN` non apre più quel gruppo. Quando tutti i gruppi sono rivendicati, `TOKEN` serve solo per `/stats`.
 
-**Configurazione** (variabili d'ambiente): `TOKEN` (token bearer, obbligatorio: senza il server non parte), `INSECURE=1` (avvio senza token, solo su una rete fidata), `DATA_DIR` (default `/data`, i blob vanno in `s/` al suo interno), `ADDR` (default `:8080`). `compose.yml` mappa `HLS_TOKEN` da `.env` su `TOKEN`.
+**Configurazione** (variabili d'ambiente): `TOKEN` (facoltativo: rivendica i gruppi creati prima dei token per dispositivo, e legge `/stats`), `CREATES_PER_IP_HOUR` (predefinito 10), `MAX_GROUPS` (predefinito 10000), `DATA_DIR` (predefinito `/data`, i blob vanno in `s/` al suo interno), `ADDR` (predefinito `:8080`). `compose.yml` collega `HLS_TOKEN` da `.env` a `TOKEN`. Chiunque può creare un gruppo, entro questi limiti. I limiti per IP leggono l'ultimo indirizzo di `X-Forwarded-For`, che imposta il reverse proxy. Una volta al giorno il server elimina i gruppi non sincronizzati da un anno, o da sei mesi con meno di 3 contatori.
 
-**API**: `GET /` web app, `GET /health` risponde `ok`, `GET /s/{id}` restituisce `{etag, ciphertext}` (404 se non c'è nulla), `PUT /s/{id}` riceve `{ciphertext}` e `If-Match: <etag>` e risponde 409 se qualcun altro ha scritto prima (senza `If-Match` crea soltanto, e chi crea conta come primo dispositivo del gruppo). `POST /s/{id}/join` e `POST /s/{id}/leave` aggiungono e tolgono un dispositivo; a zero dispositivi il server elimina il gruppo (404 se non c'è). Le app li chiamano quando entrano in un gruppo, spengono la sincronizzazione o eliminano un gruppo sincronizzato. `{id}` è di 32 caratteri esadecimali derivati dal segreto del gruppo. Tutto richiede il token bearer.
+**API** (`{id}` sono 32 caratteri esadecimali derivati dal segreto del gruppo; "dispositivo" significa il token del dispositivo come `Authorization: Bearer`):
+- `GET /` web app, `GET /health` risponde `ok`, `GET /stats` (con `TOKEN`) restituisce i totali: gruppi, dispositivi, contatori attivi, azzeramenti negli ultimi 7 e 30 giorni.
+- `GET /s/{id}` (dispositivo) restituisce `{etag, ciphertext}`. `PUT /s/{id}` (dispositivo) riceve `{ciphertext}` e `If-Match: <etag>`, e risponde 409 se qualcun altro ha scritto prima. Senza `If-Match` crea il gruppo: `{ciphertext, deviceId, recovery}`, senza token, restituisce `{etag, token}` e chi chiama è amministratore.
+- `POST /s/{id}/invite` (amministratore) restituisce `{nonce}`, monouso, 24 h. `POST /s/{id}/enroll {deviceId, nonce}` crea un membro, `{deviceId, recovery}` un amministratore; entrambi restituiscono `{token}`. `POST /s/{id}/promote {recovery}` (dispositivo) rende amministratore chi chiama. `POST /s/{id}/recovery {recovery}` (amministratore) cambia la password.
+- `GET /s/{id}/devices` (amministratore) elenca `{id, admin, created, lastSeen}`. `POST /s/{id}/revoke {deviceId}` (amministratore). `POST /s/{id}/leave` (dispositivo); il gruppo viene eliminato quando non resta nessun dispositivo.
+- `POST /s/{id}/claim {deviceId}` (con `TOKEN`, solo gruppi senza password di recupero) restituisce un `{token}` da membro.
+- `recovery` è PBKDF2-HMAC-SHA256 della password, con `{id}` come sale, 600 000 iterazioni, in base64: la password non lascia mai il dispositivo. Il server salva lo SHA-256 di questo valore e di ogni token, e ammette 5 password errate per gruppo all'ora e 20 errori per IP all'ora.
 
 **Come funziona la sincronizzazione**
-- La chiave: ogni gruppo sincronizzato ha un segreto casuale di 32 byte creato sul telefono. HKDF-SHA256 lo trasforma nell'id che vede il server e in una chiave AES-256-GCM; l'id è anche dato autenticato, così il server non può consegnare il blob di un gruppo come se fosse di un altro. Il segreto sta in un file di preferenze a parte che i backup saltano. Il server vede un id anonimo, la dimensione del blob, gli orari e il tuo indirizzo IP.
+- La chiave: ogni gruppo sincronizzato ha un segreto casuale di 32 byte creato sul telefono. HKDF-SHA256 lo trasforma nell'id che vede il server e in una chiave AES-256-GCM. Il segreto e il token del dispositivo stanno in un file di preferenze separato che i backup saltano.
+- Il blob (formato v2) è JSON: etichette, tag, id NFC, note, nomi di gruppi e dispositivi, e quale dispositivo ha registrato ogni azzeramento sono cifrati uno per uno con AES-GCM (autenticati con id del gruppo, id del record e nome del campo). Il resto è leggibile: id dei contatori, `updatedAt`, `deleted`, `archived`, intervalli dei promemoria e orari degli azzeramenti. Il documento viaggia come un'unica stringa con un MAC (SHA-256 dei suoi byte esatti, sigillato con la chiave), così un server senza la chiave non può cambiare nulla senza che si veda. I client leggono ancora il vecchio formato tutto cifrato.
+- Il server vede i campi leggibili qui sopra, la dimensione del blob, i tempi e il tuo indirizzo IP.
 - Una sincronizzazione è: scarica il blob, decifra, unisci con il gruppo locale, cifra, rimettilo con `If-Match`; con un 409 ricomincia. L'unione la fanno il telefono e la web app, mai il server.
 - Contatori e azzeramenti hanno un UUID. Il telefono mantiene i suoi id locali per i promemoria; i tag NFC contengono l'UUID.
 - Modifiche ai contatori: vince l'`updatedAt` più recente. Gli azzeramenti vengono uniti per id. Spostare un contatore in un altro gruppo mantiene il suo UUID e scrive un tombstone nel vecchio gruppo, così lì sparisce per tutti.
 - Le eliminazioni sono tombstone (`deleted: true`), così raggiungono ogni dispositivo.
 - L'app si sincronizza all'apertura, poco dopo ogni modifica e ogni 15 minuti in background (il minimo di Android). La web app si sincronizza ogni 15 minuti e quando la sua scheda torna visibile.
 - I contatori eliminati vengono rimossi definitivamente dopo 90 giorni. Un dispositivo offline più a lungo potrebbe riportarne indietro uno. Può farlo anche un server che serve un blob vecchio.
-- Se vanno persi tutti i telefoni che hanno la chiave di un gruppo, i suoi dati sono persi. Conserva il link di condivisione.
-- Accanto al testo cifrato il server tiene, per uso proprio e senza mai inviarli ai client, il numero di dispositivi del gruppo e quando è stato sincronizzato (ogni `GET` o `PUT`), quando qualcuno è entrato e quando è uscito. I conteggi sono approssimativi: un join o leave che non arriva al server lascia il numero sbagliato di uno.
+- Se vanno persi tutti i dispositivi che hanno la chiave di un gruppo, il link e la password di recupero lo riportano indietro. Conserva entrambi.
+- Accanto al blob il server tiene, senza mai inviarli ai client, i dispositivi del gruppo (id, hash del token, ruolo, creazione, ultimo accesso), gli inviti aperti, l'hash di recupero e quando è stato sincronizzato l'ultima volta (aggiornato al massimo una volta all'ora).
 - Il server chiude le connessioni lente o bloccate (10 s per inviare gli header, 30 s per richiesta) e scrive i blob in modo atomico.
 
 **Più telefoni sullo stesso server**
-- Un gruppo è condiviso con chiunque abbia il suo link, ideale per una famiglia che si divide le faccende; gli altri gruppi restano privati di un telefono o vanno ad altre persone. Un server può contenere molti gruppi.
+- Un gruppo è condiviso dai suoi amministratori con inviti, il che va bene per una famiglia che si divide le faccende; gli altri gruppi restano privati su un telefono o vanno ad altre persone. Un server può ospitare molti gruppi.
 - Gli azzeramenti non vanno mai persi: ognuno ha un UUID e il server li tiene tutti, anche quando due telefoni azzerano nello stesso istante.
 - Le modifiche valgono per l'intero contatore: l'`updatedAt` più recente sostituisce insieme etichetta, tag e promemoria, quindi due persone che cambiano campi diversi quasi nello stesso momento perdono una delle due modifiche.
 - L'ordine delle modifiche usa l'orologio di ogni telefono; un telefono con l'orologio sballato di qualche minuto può vincere o perdere una modifica a torto.

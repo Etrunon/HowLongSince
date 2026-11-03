@@ -1,6 +1,12 @@
 # Plan: format v2 and group access control
 
-Agreed 2026-11-03, not started. Groups, encrypted sync, sharing and the web app (earlier phases 1–5) are done. Each phase below ships on its own.
+Agreed 2026-11-03, done 2026-11-03 (phases 0–4).
+
+Where the code differs from the text below:
+- The v2 envelope `{v: 2, doc, mac}` travels as the bytes of the existing `ciphertext` field, so the server API kept its shape.
+- Per-IP limits read the last `X-Forwarded-For` address, since the server always runs behind a reverse proxy on localhost.
+- Phone and web call PBKDF2 "stretch"; the phone writes it out over HMAC so non-ASCII passwords give the same bytes on every Android version.
+- A claimed member becomes admin with "Become admin" (it tries promote, then sets the first password), so no separate first-claimer prompt on the phone; the web asks right after the claim. Groups, encrypted sync, sharing and the web app (earlier phases 1–5) are done. Each phase below ships on its own.
 
 ## Goal
 
@@ -49,7 +55,7 @@ The server never sees a text a user typed (names, labels, tags, notes, NFC ids) 
 - For admins, Share mints a fresh invite for the link and the QR code. Create, join and "Become admin" work as on the web.
 - For admins, the Groups screen gets a device list and revoke. The per-group token field goes away.
 
-## Phase 4: docs
+## Phase 4: docs (done)
 
 READMEs (English and Italian) and this file.
 
