@@ -181,6 +181,10 @@ Poi:
 - L'app si sincronizza all'apertura, poco dopo ogni modifica e ogni 15 minuti in background (il minimo di Android). La web app si sincronizza ogni 15 minuti e quando la sua scheda torna visibile.
 - I contatori eliminati vengono rimossi definitivamente dopo 90 giorni. Un dispositivo offline più a lungo potrebbe riportarne indietro uno. Può farlo anche un server che serve un blob vecchio.
 - Se vanno persi tutti i dispositivi che hanno la chiave di un gruppo, il link e la password di recupero lo riportano indietro. Conserva entrambi.
+- Chi ha sia il link sia la password di recupero è amministratore, e gli amministratori sono pari, quindi uno può revocare l'altro. Chi ha solo il link può provare password online, 5 all'ora; il gestore del server può provarle offline contro l'hash salvato, rallentato da PBKDF2. Una password dimenticata senza più dispositivi amministratori significa che nessuno può più invitare o revocare; i membri continuano a sincronizzare, e la via d'uscita è un nuovo gruppo.
+- La revoca impedisce a un dispositivo di sincronizzare, ma gli restano la chiave e ciò che ha già scaricato. Per escludere qualcuno del tutto, crea un nuovo gruppo e spostaci i contatori.
+- Le app precedenti al formato v2 non leggono i gruppi v2.
+- L'app web tiene chiavi e token in `localStorage`: cancellare i dati del sito li perde, insieme ai contatori Senza gruppo che esistono solo lì. "Copia link" salva i gruppi; Esporta salva i Senza gruppo.
 - Accanto al blob il server tiene, senza mai inviarli ai client, i dispositivi del gruppo (id, hash del token, ruolo, creazione, ultimo accesso), gli inviti aperti, l'hash di recupero e quando è stato sincronizzato l'ultima volta (aggiornato al massimo una volta all'ora).
 - Il server chiude le connessioni lente o bloccate (10 s per inviare gli header, 30 s per richiesta) e scrive i blob in modo atomico.
 

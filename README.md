@@ -181,6 +181,10 @@ Then:
 - The app syncs when it opens, shortly after every change, and every 15 minutes in the background (the Android minimum). The web app syncs every 15 minutes and when its tab comes back into view.
 - Deleted counters are dropped for good after 90 days. A device that has been offline for longer could bring one back. A server that serves an old blob could do the same.
 - If every device holding a group's key is lost, the link and the recovery password bring it back. Keep both.
+- Anyone with both the link and the recovery password is an admin, and admins are equal, so one can revoke another. Someone with only the link can guess passwords online, 5 per hour; the server operator can guess offline against the stored hash, slowed by PBKDF2. A forgotten password with no admin device left means nobody can invite or revoke again; members still sync, and the way back is a new group.
+- Revoking stops a device from syncing, but it keeps the key and whatever it already fetched. To cut someone off completely, make a new group and move the counters into it.
+- Apps older than format v2 can't read v2 groups.
+- The web app keeps keys and tokens in `localStorage`: clearing site data loses them, along with Ungrouped counters that live only there. "Copy link" backs up groups; Export backs up Ungrouped.
 - Next to the blob the server keeps, never sent to clients, the group's devices (id, token hash, role, created, last seen), its open invites, the recovery hash and when it was last synced (stamped at most once an hour).
 - The server drops slow or stuck connections (10 s to send headers, 30 s per request) and writes blobs atomically.
 

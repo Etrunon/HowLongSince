@@ -101,6 +101,8 @@
     <string name="group_name">Nome</string>
     <string name="ungrouped">Senza gruppo</string>
     <string name="all_groups">Tutti</string>
+    <string name="group_settings">Impostazioni del gruppo</string>
+    <string name="delete_group">Elimina gruppo</string>
     <string name="delete_group_title">Eliminare il gruppo?</string>
     <string name="delete_group_text">«%s» viene rimosso. I suoi contatori passano a Senza gruppo.</string>
     <string name="imported">Importati</string>

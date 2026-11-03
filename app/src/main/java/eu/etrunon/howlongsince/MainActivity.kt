@@ -37,8 +37,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -162,24 +166,33 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, joinR
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) { while (true) { delay(30_000); now = System.currentTimeMillis() } }
+    // Tick every second while some counter shows seconds (under an hour), else every 30s.
+    LaunchedEffect(Unit) { while (true) {
+        delay(if (counters.any { System.currentTimeMillis() - it.lastAt < 3_600_000 }) 1_000 else 30_000)
+        now = System.currentTimeMillis()
+    } }
     var editing by remember { mutableStateOf<Counter?>(null) } // id 0 = new
     var filter by remember { mutableStateOf<String?>(null) }
 
     var showArchived by remember { mutableStateOf(false) }
-    var searching by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     val groups by dao.groups().collectAsState(initial = emptyList())
+    var settings by remember { mutableStateOf(false) }
     var view by remember { mutableLongStateOf(ALL) } // ALL, UNCAT or a group id
-    var groupScreen by remember { mutableStateOf(false) }
+    var groupSettings by remember { mutableStateOf(false) } // settings of the group in view
+    var creating by remember { mutableStateOf(false) }
+    var newGroup by remember { mutableStateOf<Long?>(null) } // just created: open its page once it shows up
     val groupIds = groups.map { it.id }.toSet()
     fun groupOf(c: CounterWithLast) = c.counter.groupId?.takeIf { it in groupIds } ?: UNCAT
+    newGroup?.let { if (it in groupIds) { view = it; groupSettings = false; settings = false; newGroup = null } }
     if (view != ALL && view != UNCAT && view !in groupIds) view = ALL
     val pool = counters.filter { it.counter.archived == showArchived && (view == ALL || groupOf(it) == view) }
     val hasArchived = counters.any { it.counter.archived }
     if (!hasArchived) showArchived = false
     val allTags = pool.flatMap { tagList(it.counter.tags) }.distinct().sorted()
-    if (filter !in allTags) filter = null
+    val bar = pool.size > 5 // filter bar: search, sort and tags
+    if (!bar) query = ""
+    if (filter !in allTags || !bar) filter = null
     val prefs0 = remember { ctx.getSharedPreferences("settings", 0) }
     var sort by remember { mutableStateOf(prefs0.getString("sort", "due")!!) }
     var folded by remember { mutableStateOf(prefs0.getStringSet("folded", emptySet())!!.toSet()) } // group ids, "0" = Ungrouped
@@ -195,59 +208,59 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, joinR
     val openC = counters.find { it.counter.id == open }
     val prefs = remember { ctx.getSharedPreferences("settings", 0) }
     var debug by remember { mutableStateOf(prefs.getBoolean("debug", false)) }
-    var settings by remember { mutableStateOf(false) }
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val snackbar = remember { SnackbarHostState() }
     var sharing by remember { mutableStateOf(false) } // share dialog of the group being viewed
     var joining by remember { mutableStateOf<String?>(null) } // "" = ask for the link
     LaunchedEffect(joinRequest) { joinRequest?.let { joining = it; onJoinHandled() } }
-    LaunchedEffect(openRequest) { openRequest?.let { open = it; settings = false; groupScreen = false; onOpened() } }
+    LaunchedEffect(openRequest) { openRequest?.let { open = it; settings = false; groupSettings = false; onOpened() } }
 
     if (openC != null) {
         BackHandler { open = null }
         Detail(openC, dao, now, onBack = { open = null }, onEdit = { editing = openC.counter })
     } else ModalNavigationDrawer(drawerState = drawer, drawerContent = {
         ModalDrawerSheet { Column(Modifier.verticalScroll(rememberScrollState())) {
-            Text(stringResource(R.string.app_name), Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
+            fun close() = scope.launch { drawer.close() }
+            fun pick(v: Long) { view = v; groupSettings = false; settings = false; close() }
+            Row(Modifier.fillMaxWidth().clickable { pick(ALL) }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Logo(); Spacer(Modifier.width(12.dp))
+                Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge)
+            }
             if (groups.isNotEmpty()) {
-                fun pick(v: Long) { view = v; groupScreen = false; settings = false; scope.launch { drawer.close() } }
                 NavigationDrawerItem(label = { Text(stringResource(R.string.all_groups)) }, selected = view == ALL, onClick = { pick(ALL) })
                 if (counters.any { groupOf(it) == UNCAT }) NavigationDrawerItem(label = { Text(ungrouped) }, selected = view == UNCAT, onClick = { pick(UNCAT) })
                 groups.forEach { c -> NavigationDrawerItem(label = { Text(c.name) }, selected = view == c.id, onClick = { pick(c.id) }) }
                 HorizontalDivider()
             }
-            NavigationDrawerItem(label = { Text(stringResource(R.string.groups)) }, selected = false,
-                onClick = { scope.launch { drawer.close() }; groupScreen = true; settings = false })
-            NavigationDrawerItem(label = { Text(stringResource(R.string.settings)) }, selected = false,
-                onClick = { scope.launch { drawer.close() }; settings = true; groupScreen = false })
+            NavigationDrawerItem(label = { Text(stringResource(R.string.join_title)) }, selected = false, icon = { Icon(Icons.Filled.Person, contentDescription = null) },
+                onClick = { close(); joining = "" })
+            NavigationDrawerItem(label = { Text(stringResource(R.string.new_group)) }, selected = false, icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                onClick = { close(); creating = true })
+            NavigationDrawerItem(label = { Text(stringResource(R.string.settings)) }, selected = false, icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
+                onClick = { close(); settings = true; groupSettings = false })
         } }
     }) {
-      if (groupScreen) {
-        BackHandler { groupScreen = false }
-        Groups(groups, dao, onMenu = { scope.launch { drawer.open() } }, onJoin = { joining = "" })
+      val viewed = groups.find { it.id == view }
+      if (groupSettings && viewed != null) {
+        BackHandler { groupSettings = false }
+        GroupSettings(viewed, groups, dao, onBack = { groupSettings = false })
       } else if (settings) {
         BackHandler { settings = false }
         Settings(dark, onDark, debug, onDebug = { debug = it; prefs.edit().putBoolean("debug", it).apply() }, onMenu = { scope.launch { drawer.open() } })
       } else {
-      val bar = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+      val topBar = TopAppBarDefaults.pinnedScrollBehavior()
       val listState = rememberLazyListState()
       Scaffold(
-        modifier = Modifier.nestedScroll(bar.nestedScrollConnection),
-        topBar = { LargeTopAppBar(title = { Text(when (view) { ALL -> stringResource(R.string.app_name); UNCAT -> ungrouped; else -> groups.find { it.id == view }?.name ?: "" }) }, scrollBehavior = bar, navigationIcon = {
+        modifier = Modifier.nestedScroll(topBar.nestedScrollConnection),
+        topBar = { TopAppBar(title = { Row(verticalAlignment = Alignment.CenterVertically) {
+            Logo(); Spacer(Modifier.width(12.dp))
+            val title = when (view) { ALL -> stringResource(R.string.app_name); UNCAT -> ungrouped; else -> viewed?.name ?: "" }
+            Text(if (title.length > 20) title.take(20).trimEnd() + "…" else title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        } }, scrollBehavior = topBar, navigationIcon = {
             IconButton(onClick = { scope.launch { drawer.open() } }) { Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.menu)) }
         }, actions = {
-            groups.find { it.id == view && it.syncUrl != null }?.let {
-                IconButton(onClick = { sharing = true }) { Icon(Icons.Filled.Share, contentDescription = stringResource(R.string.share)) }
-            }
-            IconButton(onClick = { searching = !searching; query = "" }) { Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.search)) }
-            var menu by remember { mutableStateOf(false) }
-            IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.sort)) }
-            DropdownMenu(menu, onDismissRequest = { menu = false }) {
-                listOf("due" to R.string.sort_due, "recent" to R.string.sort_recent, "name" to R.string.sort_name).forEach { (k, name) ->
-                    DropdownMenuItem(text = { Text(stringResource(name)) }, onClick = { sort = k; prefs0.edit().putString("sort", k).apply(); menu = false },
-                        leadingIcon = { if (sort == k) Icon(Icons.Filled.Check, contentDescription = null) else Spacer(Modifier.size(24.dp)) })
-                }
-            }
+            if (viewed?.syncUrl != null) IconButton(onClick = { sharing = true }) { Icon(Icons.Filled.Share, contentDescription = stringResource(R.string.share)) }
+            if (viewed != null) IconButton(onClick = { groupSettings = true }) { Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.group_settings)) }
         }) },
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
@@ -258,10 +271,15 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, joinR
         },
     ) { pad ->
         Column(Modifier.padding(pad).padding(horizontal = 16.dp)) {
-            if (searching) OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                placeholder = { Text(stringResource(R.string.search_hint)) }, singleLine = true)
-            if (allTags.isNotEmpty() || hasArchived) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                allTags.forEach { t ->
+            if (bar) OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                placeholder = { Text(stringResource(R.string.search_hint)) }, leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) }, singleLine = true)
+            if (bar || hasArchived) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // One chip cycles the sort: due, recent, name.
+                val sorts = listOf("due" to R.string.sort_due, "recent" to R.string.sort_recent, "name" to R.string.sort_name)
+                if (bar) AssistChip(onClick = {
+                    sort = sorts[(sorts.indexOfFirst { it.first == sort } + 1) % sorts.size].first; prefs0.edit().putString("sort", sort).apply()
+                }, label = { Text("↕ " + stringResource(sorts.firstOrNull { it.first == sort }?.second ?: R.string.sort_due)) })
+                if (bar) allTags.forEach { t ->
                     FilterChip(selected = filter == t, onClick = { filter = if (filter == t) null else t }, label = { Text(t) },
                         leadingIcon = { Box(Modifier.size(8.dp).background(tagColor(t), CircleShape)) })
                 }
@@ -315,6 +333,7 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, joinR
     }
 
     if (sharing) groups.find { it.id == view }?.let { g -> GroupShare(g) { sharing = false } }
+    if (creating) CreateGroupDialog(groups, dao, onDismiss = { creating = false }) { creating = false; newGroup = it }
     joining?.let { JoinDialog(it, groups) { joining = null } }
     editing?.let { c ->
         EditDialog(c, groups, debug, dao, onDismiss = { editing = null }, onDelete = { scope.launch { dao.delete(c.id); reschedule(ctx, c.id) }; editing = null }) { saved ->
@@ -507,8 +526,7 @@ fun Settings(dark: Boolean, onDark: (Boolean) -> Unit, debug: Boolean, onDebug: 
 
 @Composable
 fun CounterCard(c: CounterWithLast, now: Long, group: String?, onOpen: () -> Unit, onReset: () -> Unit) {
-    val (n, unitRes) = sinceBig(now - c.lastAt)
-    val unit = LocalContext.current.resources.getQuantityString(unitRes, n.toInt())
+    val (n, unit) = sinceTwo(now - c.lastAt)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val tags = tagList(c.counter.tags)
     val haptic = LocalHapticFeedback.current
@@ -519,12 +537,12 @@ fun CounterCard(c: CounterWithLast, now: Long, group: String?, onOpen: () -> Uni
         Box(Modifier.width(8.dp).fillMaxHeight().background(tags.firstOrNull()?.let { tagColor(it) } ?: MaterialTheme.colorScheme.surfaceContainerHigh))
         Row(Modifier.padding(start = 16.dp, end = 20.dp, top = 16.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.width(88.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                AnimatedContent(n.toString(), transitionSpec = {
+                AnimatedContent(n, transitionSpec = {
                     (slideInVertically { -it } + fadeIn()) togetherWith (slideOutVertically { it } + fadeOut())
                 }, label = "count") {
-                    Text(it, style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    Text(it, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, maxLines = 1, softWrap = false)
                 }
-                Text(unit, style = MaterialTheme.typography.labelLarge, color = muted)
+                Text(unit, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, maxLines = 1, softWrap = false)
             }
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
@@ -557,15 +575,20 @@ fun ResetButton(c: CounterWithLast, now: Long, onReset: () -> Unit) {
     }
 }
 
+/** The app icon: its drawing on its background color. */
+@Composable
+fun Logo() = Image(painterResource(R.drawable.ic_logo_fg), contentDescription = null,
+    Modifier.size(36.dp).background(colorResource(R.color.logo_bg), CircleShape))
+
 const val ALL = -1L // drawer/home view: every group
 const val UNCAT = 0L // counters without a (live) group
 
 @Composable
 fun SectionHeader(name: String, count: Int, folded: Boolean, onAdd: () -> Unit, onToggle: () -> Unit) {
     Surface(Modifier.fillMaxWidth().clickable(onClick = onToggle), color = MaterialTheme.colorScheme.surface) {
-        Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.heightIn(min = 48.dp).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("$name · $count", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-            IconButton(onAdd) { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.new_)) }
+            if (!folded) IconButton(onAdd) { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.new_)) }
             Icon(if (folded) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp, contentDescription = null)
         }
     }

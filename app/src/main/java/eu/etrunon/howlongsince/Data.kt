@@ -239,11 +239,17 @@ fun since(ms: Long, italian: Boolean = java.util.Locale.getDefault().language ==
     }
 }
 
-/** Big-number form for cards: 12 to the plural resource for "days". Same thresholds as [since]. */
-fun sinceBig(ms: Long): Pair<Long, Int> {
-    val m = maxOf(ms, 0) / 60_000
-    val h = m / 60; val d = h / 24; val y = d / 365
-    return when { h < 1 -> m to R.plurals.n_minutes; d < 1 -> h to R.plurals.n_hours; y < 1 -> d to R.plurals.n_days; else -> y to R.plurals.n_years }
+/** Two-row form for cards: big unit over the next one down ("12m" / "34s", "5h" / "12m", "3d" / "4h", "1y" / "12d"). */
+fun sinceTwo(ms: Long, italian: Boolean = java.util.Locale.getDefault().language == "it"): Pair<String, String> {
+    val (dd, yy) = if (italian) "g" to "a" else "d" to "y"
+    val s = maxOf(ms, 0) / 1000
+    val m = s / 60; val h = m / 60; val d = h / 24; val y = d / 365
+    return when {
+        h < 1 -> "${m}m" to "${s % 60}s"
+        d < 1 -> "${h}h" to "${m % 60}m"
+        y < 1 -> "${d}$dd" to "${h % 24}h"
+        else -> "${y}$yy" to "${d % 365}$dd"
+    }
 }
 
 /** "Home, health ,home" -> [home, health]. Tags are stored normalized, comma-joined. */

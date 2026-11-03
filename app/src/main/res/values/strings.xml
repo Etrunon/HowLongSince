@@ -102,6 +102,8 @@
     <string name="group_name">Name</string>
     <string name="ungrouped">Ungrouped</string>
     <string name="all_groups">All</string>
+    <string name="group_settings">Group settings</string>
+    <string name="delete_group">Delete group</string>
     <string name="delete_group_title">Delete group?</string>
     <string name="delete_group_text">«%s» is removed. Its counters move to Ungrouped.</string>
     <string name="imported">Imported</string>

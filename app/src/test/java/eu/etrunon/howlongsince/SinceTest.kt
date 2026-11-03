@@ -44,12 +44,14 @@ class NfcUriTest {
     }
 }
 
-class SinceBigTest {
-    @Test fun big() {
-        assertEquals(0L to R.plurals.n_minutes, sinceBig(0))
-        assertEquals(1L to R.plurals.n_hours, sinceBig(3_600_000))
-        assertEquals(12L to R.plurals.n_days, sinceBig(12 * 86_400_000L + 5))
-        assertEquals(2L to R.plurals.n_years, sinceBig(800 * 86_400_000L))
+class SinceTwoTest {
+    @Test fun two() {
+        assertEquals("0m" to "0s", sinceTwo(-5, false))
+        assertEquals("12m" to "34s", sinceTwo(12 * 60_000L + 34_000, false))
+        assertEquals("1h" to "0m", sinceTwo(3_600_000, false))
+        assertEquals("12d" to "0h", sinceTwo(12 * 86_400_000L + 5, false))
+        assertEquals("3g" to "4h", sinceTwo(3 * 86_400_000L + 4 * 3_600_000L, true))
+        assertEquals("2y" to "70d", sinceTwo(800 * 86_400_000L, false))
     }
 }
 

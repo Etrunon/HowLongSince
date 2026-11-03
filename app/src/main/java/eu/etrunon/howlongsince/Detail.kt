@@ -14,12 +14,16 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import java.text.DateFormat
@@ -58,17 +62,21 @@ fun Detail(c: CounterWithLast, dao: CounterDao, now: Long, onBack: () -> Unit, o
     Scaffold(topBar = {
         TopAppBar(
             title = { Text(c.counter.label) },
-            navigationIcon = { TextButton(onClick = onBack) { Text(stringResource(R.string.back)) } },
-            actions = { TextButton(onClick = onEdit) { Text(stringResource(R.string.edit)) } },
+            navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = stringResource(R.string.back)) } },
+            actions = { IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.edit)) } },
         )
     }) { pad ->
         Column(Modifier.padding(pad).padding(horizontal = 16.dp)) {
-            Text(since(now - c.lastAt), style = MaterialTheme.typography.displaySmall)
-            if (c.counter.archived) Text(stringResource(R.string.archived_hint), style = MaterialTheme.typography.bodySmall)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(ctx.resources.getQuantityString(R.plurals.n_entries, events.size, events.size), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                TextButton(onClick = { resetting = true }) { Text(stringResource(R.string.reset_dots)) }
+                val (big, small) = sinceTwo(now - c.lastAt)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(big, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, maxLines = 1, softWrap = false)
+                    Text(small, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, maxLines = 1, softWrap = false)
+                }
+                Text(ctx.resources.getQuantityString(R.plurals.n_entries, events.size, events.size), Modifier.weight(1f).padding(start = 16.dp), style = MaterialTheme.typography.bodySmall)
+                ResetButton(c, now) { resetting = true }
             }
+            if (c.counter.archived) Text(stringResource(R.string.archived_hint), style = MaterialTheme.typography.bodySmall)
             // Reset with a note, now or (forgot to log it) at a past date and time.
             if (resetting) {
                 var note by remember { mutableStateOf("") }

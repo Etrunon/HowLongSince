@@ -176,7 +176,7 @@ const T = {
     last_seen: 'last seen %s', confirm_revoke: 'Revoke «%s»? It stops syncing this group, but keeps what it already has.',
     recovery_new: 'Recovery password for «%s». With the group link, it lets you rejoin as an admin (new phone, lost devices). Keep it safe: it can\'t be reset.',
     recovery_join: 'This link has no invite. Recovery password, to join as an admin:', recovery_ask: 'Recovery password:',
-    set_recovery: '«%s» has no recovery password yet. Set one now to become its admin (Cancel: ask again later)', wrong_password: 'Wrong password, or too many attempts: try later',
+    set_recovery: '«%s» has no recovery password yet. Set one now to become its admin (Cancel: ask again later)', wrong_password: 'Wrong password, or too many attempts: try later', pw_short: 'The recovery password needs at least 6 characters',
     join_here: 'Join this group in this browser? Cancel opens the phone app instead (the invite works once).',
     need_invite: 'No access: ask an admin for an invite', no_access: 'This device was removed from the group: ask an admin for an invite',
     share_backup: 'Only admins can invite. This link is the backup of the key: joining with it needs the recovery password.' },
@@ -199,7 +199,7 @@ const T = {
     last_seen: 'visto %s', confirm_revoke: 'Revocare «%s»? Smette di sincronizzare questo gruppo, ma tiene ciò che ha già.',
     recovery_new: 'Password di recupero per «%s». Con il link del gruppo ti fa rientrare come amministratore (nuovo telefono, dispositivi persi). Conservala: non si può reimpostare.',
     recovery_join: 'Questo link non ha un invito. Password di recupero, per entrare come amministratore:', recovery_ask: 'Password di recupero:',
-    set_recovery: '«%s» non ha ancora una password di recupero. Impostala ora per diventarne amministratore (Annulla: lo chiede più tardi)', wrong_password: 'Password errata, o troppi tentativi: riprova più tardi',
+    set_recovery: '«%s» non ha ancora una password di recupero. Impostala ora per diventarne amministratore (Annulla: lo chiede più tardi)', wrong_password: 'Password errata, o troppi tentativi: riprova più tardi', pw_short: 'La password di recupero deve avere almeno 6 caratteri',
     join_here: 'Unirsi a questo gruppo in questo browser? Annulla apre invece l\'app sul telefono (l\'invito vale una volta).',
     need_invite: 'Nessun accesso: chiedi un invito a un amministratore', no_access: 'Questo dispositivo è stato rimosso dal gruppo: chiedi un invito a un amministratore',
     share_backup: 'Solo gli amministratori possono invitare. Questo link è il backup della chiave: per unirsi serve la password di recupero.' },
@@ -398,6 +398,7 @@ async function claim(g) {
 async function setRecovery(g, first) {
   const pw = prompt(first ? t('set_recovery', g.name || '…') : t('recovery_ask'));
   if (!pw) return;
+  if (pw.length < 6) return alert(t('pw_short'));
   const r = await api(g, 'recovery', { recovery: await stretch(pw, (await deriveKeys(g.secret)).id) });
   if (r.ok) { g.admin = true; saveGroups(); render(); } else if (!first) alert(t('sync_failed', await r.text()));
 }
@@ -512,6 +513,7 @@ async function join(link) {
 async function makeGroup(name) {
   const pw = prompt(t('recovery_new', name));
   if (!pw) return null;
+  if (pw.length < 6) { alert(t('pw_short')); return null; }
   const secret = newSecret();
   const g = { secret, name, nameUpdatedAt: Date.now(), fresh: true, recovery: await stretch(pw, (await deriveKeys(secret)).id) };
   groups.push(g); saveGroups();
