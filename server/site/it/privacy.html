@@ -36,7 +36,7 @@
 </ul>
 
 <h2>Il server non può modificare nulla senza che si veda</h2>
-<p>L'intero documento porta un MAC fatto con la chiave del gruppo, quindi le app rifiutano un blob manomesso. Quello che un server può ancora fare è rifiutarsi di servire un gruppo, eliminarlo, o servirne una copia più vecchia (che potrebbe riportare indietro un contatore eliminato di recente).</p>
+<p>L'intero documento è protetto da un MAC calcolato con la chiave del gruppo, quindi le app rifiutano un blob manomesso. Quello che un server può ancora fare è rifiutarsi di servire un gruppo, eliminarlo, o servirne una copia più vecchia (che potrebbe riportare indietro un contatore eliminato di recente).</p>
 
 <h2>Il server può leggere</h2>
 <p>Questi metadati restano in chiaro perché il server possa contare i gruppi attivi e ripulire quelli abbandonati:</p>
@@ -52,7 +52,7 @@
 <h2>Chiavi e password</h2>
 <ul>
   <li>Ogni gruppo ha un segreto casuale di 32 byte creato sul dispositivo che l'ha creato. Viaggia solo dentro il link di condivisione, dopo il <code>#</code>, una parte che i browser non inviano mai al server.</li>
-  <li>La password di recupero non lascia mai il dispositivo: viene inviato solo un suo hash lento e con sale (PBKDF2, 600 000 iterazioni), e il server salva un hash di quello.</li>
+  <li>La password di recupero non lascia mai il dispositivo: viene inviato solo un suo hash lento e salato (PBKDF2, 600 000 iterazioni), e il server salva un hash di quello.</li>
   <li>Ogni dispositivo riceve un proprio token di accesso; il server ne salva solo l'hash.</li>
   <li>Su Android, chiavi e token stanno in un file che i backup saltano.</li>
   <li>Chi ha sia il link sia la password di recupero è amministratore. Chi ha solo il link può provare password online, 5 all'ora; il gestore del server può provarle offline contro l'hash salvato, rallentato da PBKDF2. Scegli una password robusta.</li>
@@ -62,14 +62,14 @@
 <ul>
   <li>La chiave: HKDF-SHA256 trasforma il segreto casuale di 32 byte del gruppo nell'id che vede il server e in una chiave AES-256-GCM.</li>
   <li>Il blob (formato v4) è JSON: ogni contatore porta i propri azzeramenti, e un azzeramento è identificato dal suo contatore e dal suo orario, salvato al secondo. Etichette, tag, id NFC, note, e nomi di gruppi e dispositivi sono cifrati uno per uno con AES-GCM (autenticati con id del gruppo, id del record e nome del campo). Quale dispositivo ha registrato ogni azzeramento è cifrato una volta sola per tutto il documento, come un'unica lista (<code>who</code>). Il resto è leggibile: id dei contatori e dei dispositivi, <code>updatedAt</code>, <code>deleted</code>, <code>archived</code>, intervalli dei promemoria, orari e origini degli azzeramenti. L'intero documento viaggia come un'unica stringa con un MAC (SHA-256 dei suoi byte esatti, sigillato con la chiave). Il server salva ogni blob compresso con gzip.</li>
-  <li>Una sincronizzazione è: scarica il blob, decifra, unisci con il gruppo locale, cifra, rimettilo con <code>If-Match</code>; con un 409 ricomincia.</li>
+  <li>Ogni sincronizzazione funziona così: scarica il blob, decifra, unisci con il gruppo locale, cifra, rimettilo con <code>If-Match</code>; con un 409 ricomincia.</li>
   <li>I contatori hanno un UUID; il telefono mantiene i suoi id locali per i promemoria, e i tag NFC contengono l'UUID. Modifiche ai contatori: vince l'<code>updatedAt</code> più recente. Gli azzeramenti vengono uniti per contatore e orario. Spostare un contatore mantiene il suo UUID e scrive un tombstone nel vecchio gruppo.</li>
   <li>Le eliminazioni sono tombstone (<code>deleted: true</code>), così raggiungono ogni dispositivo. Vengono rimosse definitivamente dopo 90 giorni; un dispositivo offline più a lungo, o un server che serve un blob vecchio, potrebbe riportarne indietro una.</li>
   <li>Accanto al blob il server tiene, senza mai inviarli ai client, i dispositivi del gruppo (id, hash del token, ruolo, creazione, ultimo accesso), gli inviti aperti, l'hash di recupero e quando è stato sincronizzato l'ultima volta (aggiornato al massimo una volta all'ora).</li>
   <li>Ogni sincronizzazione trasporta lo stato completo del gruppo, il che va bene per pochi telefoni e centinaia di contatori (le richieste sono limitate a 10 MB dopo la decompressione).</li>
-  <li>Si legge solo il formato v4: app e server precedenti non aprono i gruppi v4, e quelli nuovi non aprono i gruppi più vecchi.</li>
+  <li>Si usa solo il formato v4: le app e i server precedenti non aprono i gruppi v4, e quelle nuove non aprono i gruppi più vecchi.</li>
 </ul>
-<p>Non vuoi fidarti del server di nessuno? <a href="self-host.html">Ospita il tuo</a>.</p>
+<p>Non ti fidi del server di nessuno? <a href="self-host.html">Ospitane uno tuo</a>.</p>
 </main>
 
 <footer><div class="wrap">

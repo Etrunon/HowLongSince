@@ -36,7 +36,7 @@ cd HowLongSince/server
 echo HLS_TOKEN=$(openssl rand -hex 16) &gt; .env   # facoltativo: per GET /stats e per i gruppi creati prima dei token per dispositivo
 mkdir -p data                                   # deve essere scrivibile dall'uid 1000
 docker compose up -d --build                    # in ascolto su 127.0.0.1:13387</code></pre>
-<p>Metti davanti un reverse proxy con HTTPS. Il server parla solo HTTP semplice; il proxy gestisce il certificato, limita i tentativi di indovinare il token e aggiunge gli header di sicurezza per il browser. nginx fa tutto questo senza plugin:</p>
+<p>Metti un reverse proxy con HTTPS davanti al server. Il server parla solo HTTP semplice; il proxy gestisce il certificato, limita i tentativi di indovinare il token e aggiunge gli header di sicurezza per il browser. nginx fa tutto questo senza plugin:</p>
 <pre><code># nel blocco http {}
 limit_req_zone $binary_remote_addr zone=hls:1m rate=30r/m;
 
@@ -85,7 +85,7 @@ server {
   <li><code>POST /s/{id}/invite</code> (amministratore) restituisce <code>{nonce}</code>, monouso, 24 h. <code>POST /s/{id}/enroll {deviceId, nonce}</code> crea un membro, <code>{deviceId, recovery}</code> un amministratore; entrambi restituiscono <code>{token}</code>. <code>POST /s/{id}/promote {recovery}</code> (dispositivo) rende amministratore chi chiama. <code>POST /s/{id}/recovery {recovery}</code> (amministratore) cambia la password.</li>
   <li><code>GET /s/{id}/devices</code> (amministratore) elenca <code>{id, admin, created, lastSeen}</code>. <code>POST /s/{id}/revoke {deviceId}</code> (amministratore). <code>POST /s/{id}/leave</code> (dispositivo); il gruppo viene eliminato quando non resta nessun dispositivo.</li>
   <li><code>POST /s/{id}/claim {deviceId}</code> (con <code>TOKEN</code>, solo gruppi senza password di recupero) restituisce un <code>{token}</code> da membro.</li>
-  <li><code>recovery</code> è PBKDF2-HMAC-SHA256 della password, con <code>{id}</code> come sale, 600 000 iterazioni, in base64. Il server salva lo SHA-256 di questo valore e di ogni token, e ammette 5 password errate per gruppo all'ora e 20 errori per IP all'ora.</li>
+  <li><code>recovery</code> è PBKDF2-HMAC-SHA256 della password, con <code>{id}</code> come sale, 600 000 iterazioni, in base64. Il server salva lo SHA-256 di questo valore e di ogni token, e tollera 5 password errate per gruppo all'ora e 20 errori per IP all'ora.</li>
 </ul>
 <p>Come è fatto il blob cifrato è descritto in <a href="privacy.html#how-sync-works">Privacy → Come funziona la sincronizzazione</a>.</p>
 </main>

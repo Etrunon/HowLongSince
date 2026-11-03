@@ -31,17 +31,17 @@
 <ul>
   <li><strong>Contatori</strong>: ognuno ha un'etichetta e dei tag separati da virgole. Le schede mostrano il tempo trascorso con un numero grande e sotto la data dell'ultimo azzeramento.</li>
   <li><strong>Registro degli azzeramenti</strong>: ogni creazione o azzeramento viene salvato, marcato <code>create</code>, <code>manual</code> o <code>nfc</code>. La pagina di dettaglio di un contatore mostra il registro come una timeline con l'intervallo tra un azzeramento e l'altro, e un piccolo grafico a barre degli intervalli recenti e della loro media.</li>
-  <li><strong>Azzeramento nel passato</strong>: "Reset at…" nella pagina di dettaglio, per quando ti sei dimenticato di registrarlo.</li>
-  <li><strong>Note</strong>: "Reset…" nella pagina di dettaglio accetta una nota opzionale (es. "nuova marca di filtro"), mostrata nella timeline.</li>
-  <li><strong>Annulla</strong>: ogni azzeramento mostra uno snackbar "Undo", e Undo rimuove quella voce dal registro.</li>
-  <li><strong>Archivio</strong>: nasconde un contatore senza perderne la storia; i contatori archiviati non hanno promemoria e stanno dietro il chip "Archived".</li>
+  <li><strong>Azzeramento nel passato</strong>: «Prima…» nella pagina di dettaglio, per quando ti sei dimenticato di registrarlo.</li>
+  <li><strong>Note</strong>: «Azzera…» nella pagina di dettaglio accetta una nota facoltativa (es. "nuova marca di filtro"), mostrata nella timeline.</li>
+  <li><strong>Annulla</strong>: dopo ogni azzeramento compare un messaggio con «Annulla», che rimuove quella voce dal registro.</li>
+  <li><strong>Archivio</strong>: nasconde un contatore senza perderne la storia; i contatori archiviati non hanno promemoria e si trovano sotto il chip «Archiviati».</li>
   <li><strong>Ricerca, ordinamento e tag</strong>: cerca tra etichette e tag; ordina per più in ritardo, azzerati di recente o nome; filtra per tag, ognuno con un colore fisso.</li>
 </ul>
 <p><img class="phone" src="../img/app-detail.png" alt="La pagina di dettaglio di un contatore: grafico degli intervalli e timeline degli azzeramenti"></p>
 
 <h2>Promemoria</h2>
 <ul>
-  <li>Imposta facoltativamente "notify after" in ore, giorni o settimane (o minuti in modalità Debug). "Usa la mia media" lo imposta sul tuo intervallo medio tra gli azzeramenti.</li>
+  <li>Imposta se vuoi «Avvisa dopo» in ore, giorni o settimane (o minuti in modalità Debug). «Usa la mia media» lo imposta sul tuo intervallo medio tra un azzeramento e l'altro.</li>
   <li>Un anello attorno al pulsante di azzeramento si riempie man mano che si avvicina il promemoria e diventa rosso quando è scaduto. I contatori in ritardo compaiono per primi.</li>
   <li>Toccando la notifica si apre la pagina del contatore. I suoi pulsanti azzerano il contatore o rimandano di un giorno.</li>
 </ul>
@@ -49,8 +49,8 @@
 <h2>Tag NFC</h2>
 <ul>
   <li>Abbina un tag dalla pagina di dettaglio del contatore. L'app scrive <code>howlongsince://reset/&lt;uuid&gt;</code> (l'id di sincronizzazione del contatore, così il tag funziona su ogni telefono del gruppo) sul tag e ne ricorda l'ID.</li>
-  <li>Toccare il tag azzera il contatore, anche ad app chiusa. I tag non abbinati vengono rifiutati, e Unpair o Re-pair fanno smettere di funzionare un vecchio tag.</li>
-  <li>Oppure "Copy URL" e scrivi il tag con qualsiasi altra app NFC; il primo tocco di quel tag lo abbina.</li>
+  <li>Toccare il tag azzera il contatore, anche ad app chiusa. I tag non abbinati vengono rifiutati, e «Disabbina» o «Riabbina» fanno smettere di funzionare un vecchio tag.</li>
+  <li>Oppure scegli «Copia URL» e scrivi il tag con qualsiasi altra app NFC; il primo tocco di quel tag lo abbina.</li>
   <li>Funziona qualsiasi tag NDEF scrivibile, per esempio gli adesivi NTAG213/215/216.</li>
 </ul>
 <p><img class="phone" src="../img/nfc-pairing.png" alt="Finestra di abbinamento: copia l'URL o abbina ora"></p>
@@ -68,7 +68,7 @@
 <p>I contatori si possono mettere in gruppi e condividere con altri telefoni e browser, cifrati end-to-end. Vedi <a href="groups.html">Gruppi</a> e <a href="privacy.html">Privacy</a>.</p>
 
 <h2>Esporta e importa</h2>
-<p>Un file JSON, controllato prima che venga sovrascritto qualcosa. "Sostituisci" scambia i gruppi con lo stesso nome con quelli del file, "Tieni entrambi" li importa come nuovi gruppi. Lo stesso file funziona sul telefono e sul web.</p>
+<p>Un file JSON, verificato prima di toccare qualsiasi dato. «Sostituisci» rimpiazza i gruppi con lo stesso nome con quelli del file, «Tieni entrambi» li importa come nuovi gruppi. Lo stesso file funziona sul telefono e sul web.</p>
 
 <h2>Web app</h2>
 <p><img class="shot" src="../img/web.png" alt="La web app in un browser desktop"></p>

@@ -2,7 +2,7 @@
 <resources>
     <string name="reset_label">Azzera %s</string>
     <string name="reset_done">Azzerato: %s</string>
-    <string name="tag_not_paired">Questo tag non è abbinato a un contatore</string>
+    <string name="tag_not_paired">Questo tag non è abbinato a nessun contatore</string>
     <string name="settings">Impostazioni</string>
     <string name="menu">Menu</string>
     <string name="search">Cerca</string>
@@ -15,7 +15,7 @@
     <string name="archived">Archiviati</string>
     <string name="empty_title">Ancora nessun contatore</string>
     <string name="empty_hint">Tocca Nuovo per iniziare a contare</string>
-    <string name="sync_off">Sincronizzazione disattivata: attivala in un gruppo, in Gruppi</string>
+    <string name="sync_off">Sincronizzazione disattivata: puoi attivarla dalle impostazioni di un gruppo, in Gruppi</string>
     <string name="undo">Annulla</string>
     <string name="new_counter">Nuovo contatore</string>
     <string name="edit_counter">Modifica contatore</string>
@@ -37,8 +37,8 @@
     <string name="dark_theme">Tema scuro</string>
     <string name="debug_mode">Modalità debug</string>
     <string name="device_name">Nome del dispositivo</string>
-    <string name="device_name_hint">Mostrato accanto agli azzeramenti che registri, su ogni dispositivo di un gruppo sincronizzato</string>
-    <string name="debug_hint">Consenti \"avvisa dopo\" in minuti</string>
+    <string name="device_name_hint">Compare accanto agli azzeramenti che registri, su tutti i dispositivi di un gruppo sincronizzato</string>
+    <string name="debug_hint">Permetti di impostare l\'avviso in minuti</string>
     <string name="not_synced">Non ancora sincronizzato</string>
     <string name="syncing">Sincronizzazione…</string>
     <string name="sync_now">Sincronizza ora</string>
@@ -49,11 +49,11 @@
     <string name="replace_title">Importare i dati?</string>
     <string name="replace">Sostituisci</string>
     <string name="import_data">Importa dati</string>
-    <string name="import_hint">Importa un file esportato in precedenza: sostituisce i gruppi con lo stesso nome, oppure tieni entrambi</string>
+    <string name="import_hint">Importa un file esportato in precedenza: puoi sostituire i gruppi con lo stesso nome oppure tenere entrambe le versioni</string>
     <string name="export_data">Esporta dati</string>
-    <string name="export_hint">Salva tutti i contatori e i loro registri come JSON</string>
+    <string name="export_hint">Salva tutti i contatori e il loro storico in un file JSON</string>
     <string name="reset">Azzera</string>
-    <string name="archived_hint">Archiviato: nessun promemoria, nascosto dall\'elenco</string>
+    <string name="archived_hint">Archiviato: niente promemoria, nascosto dall\'elenco</string>
     <string name="reset_dots">Azzera…</string>
     <string name="note_optional">Nota (facoltativa)</string>
     <string name="now">Ora</string>
@@ -64,18 +64,18 @@
     <string name="unpair">Disabbina</string>
     <string name="re_pair">Riabbina</string>
     <string name="pair_tag">Abbina tag</string>
-    <string name="turn_on_nfc">Prima attiva l\'NFC</string>
+    <string name="turn_on_nfc">Attiva prima l\'NFC</string>
     <string name="after">dopo %s</string>
     <string name="via_nfc">via NFC</string>
     <string name="created">creato</string>
     <string name="tag_paired">Tag abbinato</string>
     <string name="pair_title">Abbina tag NFC</string>
-    <string name="pair_text">Avvicina un tag al retro del telefono. Verrà sovrascritto.</string>
+    <string name="pair_text">Avvicina un tag al retro del telefono. Il suo contenuto verrà sovrascritto.</string>
     <string name="intervals">Intervalli · media %s</string>
     <string name="tag_read_only">Il tag è di sola lettura</string>
     <string name="tag_too_small">Il tag è troppo piccolo</string>
     <string name="tag_no_ndef">Il tag non supporta NDEF</string>
-    <string name="tag_write_failed">Scrittura non riuscita, tieni fermo il tag e riprova</string>
+    <string name="tag_write_failed">Scrittura non riuscita: tieni fermo il tag e riprova</string>
     <string name="channel_reminders">Promemoria</string>
     <string name="its_been">Sono passati %s</string>
     <string name="reset_now">Azzera ora</string>
@@ -85,8 +85,8 @@
     <string name="language">Lingua</string>
     <string name="pair_now">Abbina ora</string>
     <string name="copy_url">Copia URL</string>
-    <string name="url_copied">URL copiato. Scrivilo su un tag con qualsiasi app NFC, poi avvicina il tag qui per abbinarlo.</string>
-    <string name="pair_choice_text">Abbina ora scrive l\'URL di questo contatore su un tag, sostituendone il contenuto.\n\nOppure copia l\'URL e scrivilo con un\'altra app NFC; il primo tocco di quel tag lo abbinerà.\n\n%s</string>
+    <string name="url_copied">URL copiato. Scrivilo su un tag con un\'altra app NFC, poi avvicina il tag qui per abbinarlo.</string>
+    <string name="pair_choice_text">«Abbina ora» scrive l\'URL di questo contatore su un tag, sostituendone il contenuto.\n\nIn alternativa copia l\'URL e scrivilo con un\'altra app NFC: il primo tocco su quel tag lo abbinerà.\n\n%s</string>
     <string name="lang_system">Predefinita di sistema</string>
     <plurals name="n_minutes"><item quantity="one">minuto</item><item quantity="many">minuti</item><item quantity="other">minuti</item></plurals>
     <plurals name="n_hours"><item quantity="one">ora</item><item quantity="many">ore</item><item quantity="other">ore</item></plurals>
@@ -95,7 +95,7 @@
     <plurals name="n_entries"><item quantity="one">%d voce</item><item quantity="many">%d voci</item><item quantity="other">%d voci</item></plurals>
     <plurals name="n_exported"><item quantity="one">Esportato %d contatore</item><item quantity="many">Esportati %d contatori</item><item quantity="other">Esportati %d contatori</item></plurals>
     <plurals name="n_imported"><item quantity="one">Importato %d contatore</item><item quantity="many">Importati %d contatori</item><item quantity="other">Importati %d contatori</item></plurals>
-    <plurals name="n_replace_text"><item quantity="one">Il file contiene %d contatore. Sostituisci: i gruppi con lo stesso nome vengono eliminati e sostituiti da quelli del file. Tieni entrambi: viene importato come nuovo gruppo, rinominato se il nome è già usato. Sostituire non si può annullare.</item><item quantity="many">Il file contiene %d contatori. Sostituisci: i gruppi con lo stesso nome vengono eliminati e sostituiti da quelli del file. Tieni entrambi: vengono importati come nuovi gruppi, rinominati se un nome è già usato. Sostituire non si può annullare.</item><item quantity="other">Il file contiene %d contatori. Sostituisci: i gruppi con lo stesso nome vengono eliminati e sostituiti da quelli del file. Tieni entrambi: vengono importati come nuovi gruppi, rinominati se un nome è già usato. Sostituire non si può annullare.</item></plurals>
+    <plurals name="n_replace_text"><item quantity="one">Il file contiene %d contatore. «Sostituisci» elimina i gruppi con lo stesso nome e li rimpiazza con quelli del file; «Tieni entrambi» lo importa come nuovo gruppo, rinominato se il nome è già in uso. Sostituire non si può annullare.</item><item quantity="many">Il file contiene %d contatori. «Sostituisci» elimina i gruppi con lo stesso nome e li rimpiazza con quelli del file; «Tieni entrambi» li importa come nuovi gruppi, rinominati se un nome è già in uso. Sostituire non si può annullare.</item><item quantity="other">Il file contiene %d contatori. «Sostituisci» elimina i gruppi con lo stesso nome e li rimpiazza con quelli del file; «Tieni entrambi» li importa come nuovi gruppi, rinominati se un nome è già in uso. Sostituire non si può annullare.</item></plurals>
     <string name="groups">Gruppi</string>
     <string name="new_group">Nuovo gruppo</string>
     <string name="group_name">Nome</string>
@@ -104,7 +104,7 @@
     <string name="group_settings">Impostazioni del gruppo</string>
     <string name="delete_group">Elimina gruppo</string>
     <string name="delete_group_title">Eliminare il gruppo?</string>
-    <string name="delete_group_text">«%s» viene rimosso. Cosa succede ai suoi contatori su questo telefono?</string>
+    <string name="delete_group_text">«%s» sta per essere rimosso. Cosa facciamo dei suoi contatori su questo telefono?</string>
     <string name="delete_group_keep">Sposta in Senza gruppo</string>
     <string name="delete_group_purge">Eliminali</string>
     <string name="imported">Importati</string>
@@ -118,36 +118,36 @@
     <string name="turn_on">Attiva la sincronizzazione</string>
     <string name="turn_off">Disattiva la sincronizzazione</string>
     <string name="turn_off_title">Disattivare la sincronizzazione?</string>
-    <string name="turn_off_text">La chiave viene cancellata da questo telefono e i contatori restano qui, non più sincronizzati. Senza un altro telefono con la chiave non potrai sincronizzare di nuovo questo gruppo.</string>
+    <string name="turn_off_text">La chiave viene cancellata da questo telefono e i contatori restano qui, ma non vengono più sincronizzati. Senza un altro telefono che abbia la chiave non potrai più sincronizzare questo gruppo.</string>
     <string name="move_to">Sposta in</string>
     <string name="n_selected">%d selezionati</string>
     <string name="move_title">Spostare da un gruppo sincronizzato?</string>
-    <string name="move_text">Il contatore verrà rimosso per tutti gli altri nel gruppo che lascia.</string>
+    <string name="move_text">Il contatore sparirà per tutti gli altri membri del gruppo che stai lasciando.</string>
     <string name="move">Sposta</string>
     <string name="join">Unisciti</string>
     <string name="join_title">Unisciti a un gruppo</string>
-    <string name="join_question">Unirti a un gruppo su %1$s?</string>
+    <string name="join_question">Vuoi unirti a un gruppo su %1$s?</string>
     <string name="link">Link</string>
     <string name="next">Avanti</string>
     <string name="bad_link">Questo non è un link di gruppo</string>
-    <string name="already_joined">Già unito come «%s»</string>
-    <string name="no_data">Niente trovato per questo link su quel server</string>
+    <string name="already_joined">Ne fai già parte, come «%s»</string>
+    <string name="no_data">Nessun gruppo trovato per questo link su quel server</string>
     <string name="share">Condividi</string>
     <string name="copy_link">Copia link</string>
     <string name="link_copied">Link copiato</string>
     <string name="close">Chiudi</string>
-    <string name="share_warning">Un invito **monouso**, valido **24 ore**.\n\nChi entra con esso può leggere e modificare questo gruppo finché un amministratore non lo revoca; tiene ciò che ha già visto.</string>
-    <string name="share_backup">Solo gli amministratori possono invitare. Questo link è il backup della chiave: per unirsi serve la password di recupero.</string>
-    <string name="need_invite">Nessun accesso: unisciti con un invito, o inserisci la password di recupero nelle impostazioni di sincronizzazione del gruppo</string>
+    <string name="share_warning">Un invito **monouso**, valido **24 ore**.\n\nChi entra con questo invito può leggere e modificare il gruppo finché un amministratore non lo revoca, e conserva ciò che ha già visto.</string>
+    <string name="share_backup">Solo gli amministratori possono invitare. Questo link è il backup della chiave: per entrare serve la password di recupero.</string>
+    <string name="need_invite">Nessun accesso: entra con un invito oppure inserisci la password di recupero nelle impostazioni di sincronizzazione del gruppo</string>
     <string name="no_access">Questo telefono è stato rimosso dal gruppo: chiedi un invito a un amministratore</string>
-    <string name="wrong_password">Password errata, o troppi tentativi: riprova più tardi</string>
+    <string name="wrong_password">Password errata o troppi tentativi: riprova più tardi</string>
     <string name="admin_of">Amministratore di</string>
     <string name="admin_count">%1$d / %2$s gruppi</string>
-    <string name="admin_limit">Sei già amministratore di tutti i gruppi che questo server consente</string>
+    <string name="admin_limit">Hai raggiunto il numero massimo di gruppi che puoi amministrare su questo server</string>
     <string name="check_limits">Controlla i miei limiti</string>
     <string name="default_server">Server predefinito %s</string>
     <string name="custom_server">Server personalizzato</string>
-    <string name="recovery_new">Password di recupero (con il link del gruppo ti fa rientrare come amministratore)</string>
+    <string name="recovery_new">Password di recupero (insieme al link del gruppo ti permette di rientrare come amministratore)</string>
     <string name="recovery_join">Password di recupero, per entrare come amministratore</string>
     <string name="change_password">Nuova password di recupero</string>
     <string name="become_admin">Password di recupero, per diventare amministratore</string>
@@ -155,5 +155,5 @@
     <string name="admin">amministratore</string>
     <string name="member">membro</string>
     <string name="revoke">Revoca</string>
-    <string name="confirm_revoke">Revocare «%1$s»? Smette di sincronizzare questo gruppo, ma tiene ciò che ha già.</string>
+    <string name="confirm_revoke">Revocare «%1$s»? Non potrà più sincronizzare il gruppo, ma conserverà ciò che ha già.</string>
 </resources>

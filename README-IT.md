@@ -22,26 +22,26 @@
 
 - **Contatori**: ognuno ha un'etichetta e dei tag separati da virgole. Le schede mostrano il tempo trascorso con un numero grande e sotto la data dell'ultimo azzeramento.
 - **Registro degli azzeramenti**: ogni creazione o azzeramento viene salvato, marcato `create`, `manual` o `nfc`. La pagina di dettaglio di un contatore mostra il registro come una timeline con l'intervallo tra un azzeramento e l'altro, e un piccolo grafico a barre degli intervalli recenti e della loro media.
-- **Azzeramento nel passato**: "Reset at…" nella pagina di dettaglio, per quando ti sei dimenticato di registrarlo.
-- **Note**: "Reset…" nella pagina di dettaglio accetta una nota opzionale (es. "nuova marca di filtro"), mostrata nella timeline.
-- **Annulla**: ogni azzeramento mostra uno snackbar "Undo", e Undo rimuove quella voce dal registro.
+- **Azzeramento nel passato**: «Prima…» nella pagina di dettaglio, per quando ti sei dimenticato di registrarlo.
+- **Note**: «Azzera…» nella pagina di dettaglio accetta una nota facoltativa (es. "nuova marca di filtro"), mostrata nella timeline.
+- **Annulla**: dopo ogni azzeramento compare un messaggio con «Annulla», che rimuove quella voce dal registro.
 - **Promemoria**
-  - Imposta facoltativamente "notify after" in ore, giorni o settimane (o minuti in modalità Debug). "Usa la mia media" lo imposta sul tuo intervallo medio tra gli azzeramenti.
+  - Imposta se vuoi «Avvisa dopo» in ore, giorni o settimane (o minuti in modalità Debug). «Usa la mia media» lo imposta sul tuo intervallo medio tra un azzeramento e l'altro.
   - Un anello attorno al pulsante di azzeramento si riempie man mano che si avvicina il promemoria e diventa rosso quando è scaduto. I contatori in ritardo compaiono per primi.
   - Toccando la notifica si apre la pagina del contatore. I suoi pulsanti azzerano il contatore o rimandano di un giorno.
 - **Tag NFC**
   - Abbina un tag dalla pagina di dettaglio del contatore. L'app scrive `howlongsince://reset/<uuid>` (l'id di sincronizzazione del contatore, così il tag funziona su ogni telefono del gruppo) sul tag e ne ricorda l'ID.
-  - Toccare il tag azzera il contatore, anche ad app chiusa. I tag non abbinati vengono rifiutati, e Unpair o Re-pair fanno smettere di funzionare un vecchio tag.
-  - Oppure "Copy URL" e scrivi il tag con qualsiasi altra app NFC; il primo tocco di quel tag lo abbina.
+  - Toccare il tag azzera il contatore, anche ad app chiusa. I tag non abbinati vengono rifiutati, e «Disabbina» o «Riabbina» fanno smettere di funzionare un vecchio tag.
+  - Oppure scegli «Copia URL» e scrivi il tag con qualsiasi altra app NFC; il primo tocco di quel tag lo abbina.
 
   <img src="server/site/img/nfc-pairing.png" width="240" alt="Finestra di abbinamento: copia l'URL o abbina ora">
 
-- **Archivio**: nasconde un contatore senza perderne la storia; i contatori archiviati non hanno promemoria e stanno dietro il chip "Archived".
+- **Archivio**: nasconde un contatore senza perderne la storia; i contatori archiviati non hanno promemoria e si trovano sotto il chip «Archiviati».
 - **Ricerca, ordinamento e tag**: cerca tra etichette e tag; ordina per più in ritardo, azzerati di recente o nome; filtra per tag, ognuno con un colore fisso.
 - **Widget per la schermata Home**: i contatori che più hanno bisogno di un azzeramento, ognuno con il suo pulsante. I tempi si aggiornano a ogni modifica e ogni 30 minuti.
 - **Scorciatoie del launcher**: tieni premuta l'icona dell'app per azzerare i 4 contatori che ne hanno più bisogno.
 - **Gruppi e sincronizzazione**: vedi [Gruppi](#gruppi).
-- **Esporta e importa**: un file JSON, controllato prima che venga sovrascritto qualcosa. "Sostituisci" scambia i gruppi con lo stesso nome con quelli del file, "Tieni entrambi" li importa come nuovi gruppi. Lo stesso file funziona sul telefono e sul web.
+- **Esporta e importa**: un file JSON, verificato prima di toccare qualsiasi dato. «Sostituisci» rimpiazza i gruppi con lo stesso nome con quelli del file, «Tieni entrambi» li importa come nuovi gruppi. Lo stesso file funziona sul telefono e sul web.
 - **Impostazioni** (menu ☰): tema scuro (segue il sistema finché non lo cambi), modalità Debug (promemoria in minuti).
 - **Lingue**: inglese e italiano, secondo la lingua del telefono o del browser. Da Android 13 la lingua dell'app si può anche impostare a parte (Impostazioni → App → How Long Since? → Lingua).
 - **Aspetto**: Material 3 con i colori del tuo sfondo (Android 12+) e una barra del titolo grande che si riduce scorrendo.
@@ -112,7 +112,7 @@ Per mantenere equo un server condiviso, ogni dispositivo può essere **amministr
 
 - Il limite è per dispositivo e per server: un telefono e un browser sono dispositivi diversi, e i gruppi su un altro server hanno il loro limite.
 - Il menu ☰ (app) e la barra laterale (web) mostrano "Amministratore di X / N gruppi" per ogni server.
-- Raggiunto il limite, creare un gruppo o diventarne amministratore viene rifiutato con "Sei già amministratore di tutti i gruppi che questo server consente". Lascia o elimina un gruppo che amministri per fare spazio.
+- Raggiunto il limite, creare un gruppo o diventarne amministratore viene rifiutato con «Hai raggiunto il numero massimo di gruppi che puoi amministrare su questo server». Lascia o elimina un gruppo che amministri per fare spazio.
 
 Il server limita anche quanti gruppi un indirizzo IP può creare all'ora (10 di default) e il numero totale di gruppi (10 000 di default), ed elimina i gruppi non sincronizzati da un anno (sei mesi se hanno meno di 3 contatori).
 
