@@ -89,3 +89,17 @@ class AvgGapTest {
         assertEquals(5L, avgGap(listOf(0, 4, 10)))
     }
 }
+
+class GroupTest {
+    @Test fun uniqueNames() {
+        assertEquals("Family", uniqueName("Family", listOf("Home")))
+        assertEquals("Family (2)", uniqueName("Family", listOf("family")))
+        assertEquals("Family (3)", uniqueName("Family", listOf("Family", "Family (2)")))
+    }
+
+    @Test fun backupKeepsGroup() {
+        val c = listOf(Counter(3, "Water", groupId = 9), Counter(7, "Run"))
+        val e = listOf(Event(1, 3, 100, "create"), Event(2, 7, 50, "create"))
+        assertEquals(listOf("Home", null), fromJson(toJson(c, e, mapOf(9L to "Home"))).map { it.third })
+    }
+}

@@ -48,10 +48,10 @@
     <string name="wrong_token">token errato</string>
     <string name="export_failed">Esportazione non riuscita: %s</string>
     <string name="cant_read">Impossibile leggere il file: %s</string>
-    <string name="replace_title">Sostituire tutti i dati?</string>
+    <string name="replace_title">Importare i dati?</string>
     <string name="replace">Sostituisci</string>
     <string name="import_data">Importa dati</string>
-    <string name="import_hint">Sostituisce tutto con un file esportato in precedenza (anche sul server di sincronizzazione)</string>
+    <string name="import_hint">Importa un file esportato in precedenza: sostituisce i gruppi con lo stesso nome, oppure tieni entrambi</string>
     <string name="export_data">Esporta dati</string>
     <string name="export_hint">Salva tutti i contatori e i loro registri come JSON</string>
     <string name="reset">Azzera</string>
@@ -97,5 +97,14 @@
     <plurals name="n_entries"><item quantity="one">%d voce</item><item quantity="many">%d voci</item><item quantity="other">%d voci</item></plurals>
     <plurals name="n_exported"><item quantity="one">Esportato %d contatore</item><item quantity="many">Esportati %d contatori</item><item quantity="other">Esportati %d contatori</item></plurals>
     <plurals name="n_imported"><item quantity="one">Importato %d contatore</item><item quantity="many">Importati %d contatori</item><item quantity="other">Importati %d contatori</item></plurals>
-    <plurals name="n_replace_text"><item quantity="one">I contatori e i registri attuali verranno eliminati e sostituiti dal %d contatore nel file. Non si può annullare.</item><item quantity="many">I contatori e i registri attuali verranno eliminati e sostituiti dai %d contatori nel file. Non si può annullare.</item><item quantity="other">I contatori e i registri attuali verranno eliminati e sostituiti dai %d contatori nel file. Non si può annullare.</item></plurals>
+    <plurals name="n_replace_text"><item quantity="one">Il file contiene %d contatore. Sostituisci: i gruppi con lo stesso nome vengono eliminati e sostituiti da quelli del file. Tieni entrambi: viene importato come nuovo gruppo, rinominato se il nome è già usato. Sostituire non si può annullare.</item><item quantity="many">Il file contiene %d contatori. Sostituisci: i gruppi con lo stesso nome vengono eliminati e sostituiti da quelli del file. Tieni entrambi: vengono importati come nuovi gruppi, rinominati se un nome è già usato. Sostituire non si può annullare.</item><item quantity="other">Il file contiene %d contatori. Sostituisci: i gruppi con lo stesso nome vengono eliminati e sostituiti da quelli del file. Tieni entrambi: vengono importati come nuovi gruppi, rinominati se un nome è già usato. Sostituire non si può annullare.</item></plurals>
+    <string name="groups">Gruppi</string>
+    <string name="new_group">Nuovo gruppo</string>
+    <string name="group_name">Nome</string>
+    <string name="ungrouped">Senza gruppo</string>
+    <string name="all_groups">Tutti</string>
+    <string name="delete_group_title">Eliminare il gruppo?</string>
+    <string name="delete_group_text">«%s» viene rimosso. I suoi contatori passano a Senza gruppo.</string>
+    <string name="imported">Importati</string>
+    <string name="keep_both">Tieni entrambi</string>
 </resources>

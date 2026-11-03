@@ -17,6 +17,17 @@ data class Counter(
     val updatedAt: Long = System.currentTimeMillis(), // last-write-wins on sync
     val deleted: Boolean = false, // tombstone, so deletes reach the server
     val archived: Boolean = false, // hidden from the list, no reminders, history kept
+    val groupId: Long? = null, // null = Ungrouped. Local only for now: the sync protocol doesn't carry it
+)
+
+@Entity
+data class CounterGroup(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val nameUpdatedAt: Long = System.currentTimeMillis(), // newest rename wins on sync
+    val deleted: Boolean = false,
+    val syncUrl: String? = null, // phase 2: null = local only
+    val syncKey: String? = null,
 )
 
 @Entity(foreignKeys = [ForeignKey(entity = Counter::class, parentColumns = ["id"], childColumns = ["counterId"], onDelete = ForeignKey.CASCADE)],
@@ -66,17 +77,31 @@ interface CounterDao {
     @Query("SELECT * FROM Counter") suspend fun rawCounters(): List<Counter> // including tombstones, for sync
     @Query("SELECT * FROM Event") suspend fun rawEvents(): List<Event>
 
+    @Query("SELECT * FROM CounterGroup WHERE deleted = 0 ORDER BY name COLLATE NOCASE") fun groups(): Flow<List<CounterGroup>>
+    @Query("SELECT * FROM CounterGroup WHERE deleted = 0") suspend fun allGroups(): List<CounterGroup>
+    @Insert suspend fun insert(c: CounterGroup): Long
+    @Query("UPDATE CounterGroup SET name = :name, nameUpdatedAt = :now WHERE id = :id") suspend fun rename(id: Long, name: String, now: Long = System.currentTimeMillis())
+    @Query("UPDATE Counter SET groupId = NULL WHERE groupId = :id") suspend fun ungroup(id: Long)
+    @Query("UPDATE CounterGroup SET deleted = 1, nameUpdatedAt = :now WHERE id = :id") suspend fun tombstone(id: Long, now: Long)
+    /** Its counters fall back to Ungrouped. */
+    @Transaction
+    suspend fun deleteGroup(id: Long) { ungroup(id); tombstone(id, System.currentTimeMillis()) }
+    @Query("UPDATE Counter SET groupId = :group WHERE id = :id") suspend fun setGroup(id: Long, group: Long?)
+
     @Query("DELETE FROM Counter WHERE uid IN (:uids)") suspend fun purge(uids: List<String>) // events go too (cascade)
-    @Query("UPDATE Counter SET deleted = 1, updatedAt = :now WHERE deleted = 0") suspend fun deleteAll(now: Long)
+    @Query("UPDATE Counter SET deleted = 1, updatedAt = :now WHERE deleted = 0 AND groupId IS :group") suspend fun deleteAll(now: Long, group: Long?)
     /** Drops tombstones older than [cutoff] for good, like the server does. */
     @Query("DELETE FROM Counter WHERE deleted = 1 AND updatedAt < :cutoff") suspend fun pruneDeleted(cutoff: Long)
 
-    /** Import: everything else is tombstoned (so the server drops it too), imported counters win as of now. */
+    /** Import into group [group] (null = Ungrouped): the rest of that group is tombstoned (so the server drops it too), imported counters win as of now. */
     @Transaction
-    suspend fun replaceAll(data: List<Pair<Counter, List<Event>>>) {
+    suspend fun replaceAll(data: List<Pair<Counter, List<Event>>>, group: Long?) {
         val now = System.currentTimeMillis()
-        purge(data.map { it.first.uid }); deleteAll(now)
-        data.forEach { (c, events) -> insert(c.copy(updatedAt = now)); events.forEach { insert(it) } }
+        purge(data.map { it.first.uid }); deleteAll(now, group)
+        data.forEach { (c, events) ->
+            val id = insert(c.copy(id = 0, groupId = group, updatedAt = now)) // file ids may clash with local ones
+            events.forEach { insert(it.copy(id = 0, counterId = id)) }
+        }
     }
 
     /** Applies the server's state. Returns the local ids of counters that changed (to reschedule). */
@@ -87,7 +112,7 @@ interface CounterDao {
         for (c in remote.counters) {
             val l = local[c.uid]
             if (l == null) local[c.uid] = c.copy(id = insert(c.copy(id = 0))).also { changed += it.id }
-            else if (c.updatedAt > l.updatedAt) { updateRaw(c.copy(id = l.id)); changed += l.id }
+            else if (c.updatedAt > l.updatedAt) { updateRaw(c.copy(id = l.id, groupId = l.groupId)); changed += l.id } // the server doesn't know groups
         }
         val events = rawEvents().associateBy { it.uid }
         for ((counterUid, e) in remote.events) {
@@ -118,7 +143,7 @@ interface CounterDao {
         insert(Event(counterId = id, at = at, source = source, note = note?.trim()?.ifEmpty { null }))
 }
 
-@Database(entities = [Counter::class, Event::class], version = 3, exportSchema = false)
+@Database(entities = [Counter::class, Event::class, CounterGroup::class], version = 4, exportSchema = false)
 abstract class Db : RoomDatabase() {
     abstract fun dao(): CounterDao
 
@@ -142,9 +167,16 @@ abstract class Db : RoomDatabase() {
                 "ALTER TABLE Event ADD COLUMN note TEXT",
             ).forEach(db::execSQL)
         }
+        /** v4: groups. Existing counters stay Ungrouped. */
+        private val v4 = object : Migration(3, 4) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) = listOf(
+                "CREATE TABLE IF NOT EXISTS CounterGroup (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL, nameUpdatedAt INTEGER NOT NULL, deleted INTEGER NOT NULL, syncUrl TEXT, syncKey TEXT)",
+                "ALTER TABLE Counter ADD COLUMN groupId INTEGER",
+            ).forEach(db::execSQL)
+        }
         @Volatile private var instance: Db? = null
         fun get(ctx: Context) = instance ?: synchronized(this) {
-            instance ?: Room.databaseBuilder(ctx.applicationContext, Db::class.java, "hls.db").addMigrations(v2, v3).build().also { instance = it }
+            instance ?: Room.databaseBuilder(ctx.applicationContext, Db::class.java, "hls.db").addMigrations(v2, v3, v4).build().also { instance = it }
         }
     }
 }
@@ -174,3 +206,7 @@ fun tagList(s: String) = s.split(",").map { it.trim().lowercase() }.filter { it.
 
 /** Average gap between resets ([times] ascending), or null with fewer than 2 gaps. */
 fun avgGap(times: List<Long>): Long? = if (times.size < 3) null else (times.last() - times.first()) / (times.size - 1)
+
+/** [name], or "name (2)", "name (3)"... if [taken] (case-insensitive). */
+fun uniqueName(name: String, taken: Collection<String>): String =
+    generateSequence(1) { it + 1 }.map { if (it == 1) name else "$name ($it)" }.first { n -> taken.none { it.equals(n, true) } }

@@ -27,6 +27,9 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -149,7 +152,7 @@ class MainActivity : ComponentActivity() {
 
 const val RESET_ACTION = "eu.etrunon.howlongsince.RESET"
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark: Boolean, onDark: (Boolean) -> Unit) {
     val counters by dao.counters().collectAsState(initial = emptyList())
@@ -163,13 +166,21 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
     var showArchived by remember { mutableStateOf(false) }
     var searching by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
-    val pool = counters.filter { it.counter.archived == showArchived }
+    val groups by dao.groups().collectAsState(initial = emptyList())
+    var view by remember { mutableLongStateOf(ALL) } // ALL, UNCAT or a group id
+    var groupScreen by remember { mutableStateOf(false) }
+    val groupIds = groups.map { it.id }.toSet()
+    fun groupOf(c: CounterWithLast) = c.counter.groupId?.takeIf { it in groupIds } ?: UNCAT
+    if (view != ALL && view != UNCAT && view !in groupIds) view = ALL
+    val pool = counters.filter { it.counter.archived == showArchived && (view == ALL || groupOf(it) == view) }
     val hasArchived = counters.any { it.counter.archived }
     if (!hasArchived) showArchived = false
     val allTags = pool.flatMap { tagList(it.counter.tags) }.distinct().sorted()
     if (filter !in allTags) filter = null
     val prefs0 = remember { ctx.getSharedPreferences("settings", 0) }
     var sort by remember { mutableStateOf(prefs0.getString("sort", "due")!!) }
+    var folded by remember { mutableStateOf(prefs0.getStringSet("folded", emptySet())!!.toSet()) } // group ids, "0" = Ungrouped
+    val ungrouped = stringResource(R.string.ungrouped)
     val shown = pool.filter { filter == null || filter in tagList(it.counter.tags) }
         .filter { query.isBlank() || it.counter.label.contains(query.trim(), true) || it.counter.tags.contains(query.trim(), true) }
         .let { l -> when (sort) {
@@ -184,26 +195,39 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
     var settings by remember { mutableStateOf(false) }
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val snackbar = remember { SnackbarHostState() }
-    LaunchedEffect(openRequest) { openRequest?.let { open = it; settings = false; onOpened() } }
+    LaunchedEffect(openRequest) { openRequest?.let { open = it; settings = false; groupScreen = false; onOpened() } }
 
-    if (settings) {
-        BackHandler { settings = false }
-        Settings(dark, onDark, debug, onDebug = { debug = it; prefs.edit().putBoolean("debug", it).apply() }, onBack = { settings = false })
-    } else if (openC != null) {
+    if (openC != null) {
         BackHandler { open = null }
         Detail(openC, dao, now, onBack = { open = null }, onEdit = { editing = openC.counter })
     } else ModalNavigationDrawer(drawerState = drawer, drawerContent = {
-        ModalDrawerSheet {
+        ModalDrawerSheet { Column(Modifier.verticalScroll(rememberScrollState())) {
             Text(stringResource(R.string.app_name), Modifier.padding(16.dp), style = MaterialTheme.typography.titleLarge)
+            if (groups.isNotEmpty()) {
+                fun pick(v: Long) { view = v; groupScreen = false; settings = false; scope.launch { drawer.close() } }
+                NavigationDrawerItem(label = { Text(stringResource(R.string.all_groups)) }, selected = view == ALL, onClick = { pick(ALL) })
+                if (counters.any { groupOf(it) == UNCAT }) NavigationDrawerItem(label = { Text(ungrouped) }, selected = view == UNCAT, onClick = { pick(UNCAT) })
+                groups.forEach { c -> NavigationDrawerItem(label = { Text(c.name) }, selected = view == c.id, onClick = { pick(c.id) }) }
+                HorizontalDivider()
+            }
+            NavigationDrawerItem(label = { Text(stringResource(R.string.groups)) }, selected = false,
+                onClick = { scope.launch { drawer.close() }; groupScreen = true; settings = false })
             NavigationDrawerItem(label = { Text(stringResource(R.string.settings)) }, selected = false,
-                onClick = { scope.launch { drawer.close() }; settings = true })
-        }
+                onClick = { scope.launch { drawer.close() }; settings = true; groupScreen = false })
+        } }
     }) {
+      if (groupScreen) {
+        BackHandler { groupScreen = false }
+        Groups(groups, dao, onMenu = { scope.launch { drawer.open() } })
+      } else if (settings) {
+        BackHandler { settings = false }
+        Settings(dark, onDark, debug, onDebug = { debug = it; prefs.edit().putBoolean("debug", it).apply() }, onMenu = { scope.launch { drawer.open() } })
+      } else {
       val bar = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
       val listState = rememberLazyListState()
       Scaffold(
         modifier = Modifier.nestedScroll(bar.nestedScrollConnection),
-        topBar = { LargeTopAppBar(title = { Text(stringResource(R.string.app_name)) }, scrollBehavior = bar, navigationIcon = {
+        topBar = { LargeTopAppBar(title = { Text(when (view) { ALL -> stringResource(R.string.app_name); UNCAT -> ungrouped; else -> groups.find { it.id == view }?.name ?: "" }) }, scrollBehavior = bar, navigationIcon = {
             IconButton(onClick = { scope.launch { drawer.open() } }) { Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.menu)) }
         }, actions = {
             IconButton(onClick = { searching = !searching; query = "" }) { Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.search)) }
@@ -221,7 +245,7 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
             ExtendedFloatingActionButton(
                 text = { Text(stringResource(R.string.new_)) }, icon = { Icon(Icons.Filled.Add, contentDescription = null) },
                 expanded = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0,
-                onClick = { editing = Counter(label = "") })
+                onClick = { editing = Counter(label = "", groupId = view.takeIf { it > 0 }) })
         },
     ) { pad ->
         Column(Modifier.padding(pad).padding(horizontal = 16.dp)) {
@@ -239,6 +263,19 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
                 Text(stringResource(R.string.empty_title), style = MaterialTheme.typography.titleLarge)
                 Text(stringResource(R.string.empty_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             }
+            val byGroup = shown.groupBy(::groupOf)
+            // Headers only while looking at everything and at least one group exists.
+            val sections = if (view == ALL && groups.isNotEmpty()) (listOf(UNCAT) + groups.map { it.id }).mapNotNull { k -> byGroup[k]?.let { k to it } } else null
+            @Composable fun card(c: CounterWithLast) = CounterCard(c, now, groups.find { it.id == c.counter.groupId }?.name.takeIf { groups.size >= 2 }, onOpen = { open = c.counter.id }) {
+                scope.launch {
+                    val id = c.counter.id
+                    val event = dao.reset(id); reschedule(ctx, id)
+                    snackbar.currentSnackbarData?.dismiss()
+                    if (snackbar.showSnackbar(ctx.getString(R.string.reset_label, c.counter.label), ctx.getString(R.string.undo), duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) {
+                        dao.deleteEvent(event); reschedule(ctx, id)
+                    }
+                }
+            }
             var refreshing by remember { mutableStateOf(false) }
             // Pull down at the top: fetch from the sync server; show the error if it failed.
             PullToRefreshBox(refreshing, onRefresh = { scope.launch {
@@ -249,25 +286,26 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
             } }) {
             LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp)) {
-                items(shown, key = { it.counter.id }) { c ->
-                    CounterCard(c, now, onOpen = { open = c.counter.id }) {
-                        scope.launch {
-                            val id = c.counter.id
-                            val event = dao.reset(id); reschedule(ctx, id)
-                            snackbar.currentSnackbarData?.dismiss()
-                            if (snackbar.showSnackbar(ctx.getString(R.string.reset_label, c.counter.label), ctx.getString(R.string.undo), duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) {
-                                dao.deleteEvent(event); reschedule(ctx, id)
-                            }
+                if (sections == null) items(shown, key = { "c${it.counter.id}" }) { card(it) }
+                else sections.forEach { (k, list) ->
+                    val fold = k.toString() in folded && query.isBlank() // a search opens every section
+                    stickyHeader(key = "h$k") {
+                        SectionHeader(if (k == UNCAT) ungrouped else groups.first { it.id == k }.name, list.size, fold) {
+                            folded = if (fold) folded - k.toString() else folded + k.toString()
+                            prefs0.edit().putStringSet("folded", folded).apply()
                         }
                     }
+                    if (!fold) items(list, key = { "c${it.counter.id}" }) { card(it) }
                 }
             }
             }
         }
-    } }
+    }
+      }
+    }
 
     editing?.let { c ->
-        EditDialog(c, debug, dao, onDismiss = { editing = null }, onDelete = { scope.launch { dao.delete(c.id); reschedule(ctx, c.id) }; editing = null }) { saved ->
+        EditDialog(c, groups, debug, dao, onDismiss = { editing = null }, onDelete = { scope.launch { dao.delete(c.id); reschedule(ctx, c.id) }; editing = null }) { saved ->
             scope.launch {
                 val id = if (saved.id == 0L) dao.create(saved) else saved.id.also { dao.update(saved) }
                 reschedule(ctx, id)
@@ -282,8 +320,9 @@ private val units = listOf("minutes" to 60_000L, "hours" to 3_600_000L, "days" t
 private val unitNames = mapOf("minutes" to R.string.unit_minutes, "hours" to R.string.unit_hours, "days" to R.string.unit_days, "weeks" to R.string.unit_weeks)
 
 @Composable
-fun EditDialog(c: Counter, debug: Boolean, dao: CounterDao, onDismiss: () -> Unit, onDelete: () -> Unit, onSave: (Counter) -> Unit) {
+fun EditDialog(c: Counter, groups: List<CounterGroup>, debug: Boolean, dao: CounterDao, onDismiss: () -> Unit, onDelete: () -> Unit, onSave: (Counter) -> Unit) {
     var label by remember { mutableStateOf(c.label) }
+    var group by remember { mutableStateOf(c.groupId) }
     var tags by remember { mutableStateOf(c.tags.replace(",", ", ")) }
     // Minutes only in debug mode, or if this counter already uses them (else it couldn't be shown).
     val units = if (debug || (c.notifyAfterMs ?: 0) % 3_600_000 != 0L) units else units.drop(1)
@@ -293,7 +332,7 @@ fun EditDialog(c: Counter, debug: Boolean, dao: CounterDao, onDismiss: () -> Uni
     var amount by remember { mutableStateOf(c.notifyAfterMs?.let { (it / start.second).toString() } ?: "") }
     val n = amount.toLongOrNull()?.takeIf { it > 0 }
     val avg by produceState<Long?>(null) { if (c.id != 0L) value = avgGap(dao.times(c.id)) }
-    fun result() = c.copy(label = label.trim(), tags = tagList(tags).joinToString(","), notifyAfterMs = n?.times(unit.second))
+    fun result() = c.copy(label = label.trim(), tags = tagList(tags).joinToString(","), notifyAfterMs = n?.times(unit.second), groupId = group)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -301,6 +340,10 @@ fun EditDialog(c: Counter, debug: Boolean, dao: CounterDao, onDismiss: () -> Uni
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(label, { label = it }, label = { Text(stringResource(R.string.label)) }, singleLine = true)
+                if (groups.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = group == null, onClick = { group = null }, label = { Text(stringResource(R.string.ungrouped)) })
+                    groups.forEach { k -> FilterChip(selected = group == k.id, onClick = { group = k.id }, label = { Text(k.name) }) }
+                }
                 OutlinedTextField(tags, { tags = it }, label = { Text(stringResource(R.string.tags_hint)) }, singleLine = true)
                 OutlinedTextField(amount, { amount = it.filter(Char::isDigit) }, label = { Text(stringResource(R.string.notify_after)) },
                     singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
@@ -331,9 +374,9 @@ fun EditDialog(c: Counter, debug: Boolean, dao: CounterDao, onDismiss: () -> Uni
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Settings(dark: Boolean, onDark: (Boolean) -> Unit, debug: Boolean, onDebug: (Boolean) -> Unit, onBack: () -> Unit) {
+fun Settings(dark: Boolean, onDark: (Boolean) -> Unit, debug: Boolean, onDebug: (Boolean) -> Unit, onMenu: () -> Unit) {
     Scaffold(topBar = {
-        TopAppBar(title = { Text(stringResource(R.string.settings)) }, navigationIcon = { TextButton(onClick = onBack) { Text(stringResource(R.string.back)) } })
+        TopAppBar(title = { Text(stringResource(R.string.settings)) }, navigationIcon = { IconButton(onClick = onMenu) { Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.menu)) } })
     }) { pad -> Column(Modifier.padding(pad)) {
         ListItem(
             modifier = Modifier.clickable { onDark(!dark) },
@@ -409,13 +452,17 @@ fun Settings(dark: Boolean, onDark: (Boolean) -> Unit, debug: Boolean, onDebug: 
                 title = { Text(stringResource(R.string.replace_title)) },
                 text = { Text(ctx.resources.getQuantityString(R.plurals.n_replace_text, data.size, data.size)) },
                 confirmButton = {
-                    TextButton(onClick = {
+                    fun go(replace: Boolean) {
                         pending = null
                         scope.launch {
-                            restore(ctx, data)
+                            restore(ctx, data, replace)
                             Toast.makeText(ctx, ctx.resources.getQuantityString(R.plurals.n_imported, data.size, data.size), Toast.LENGTH_SHORT).show()
                         }
-                    }) { Text(stringResource(R.string.replace), color = MaterialTheme.colorScheme.error) }
+                    }
+                    Row {
+                        TextButton(onClick = { go(false) }) { Text(stringResource(R.string.keep_both)) }
+                        TextButton(onClick = { go(true) }) { Text(stringResource(R.string.replace), color = MaterialTheme.colorScheme.error) }
+                    }
                 },
                 dismissButton = { TextButton(onClick = { pending = null }) { Text(stringResource(R.string.cancel)) } },
             )
@@ -434,7 +481,7 @@ fun Settings(dark: Boolean, onDark: (Boolean) -> Unit, debug: Boolean, onDebug: 
 }
 
 @Composable
-fun CounterCard(c: CounterWithLast, now: Long, onOpen: () -> Unit, onReset: () -> Unit) {
+fun CounterCard(c: CounterWithLast, now: Long, group: String?, onOpen: () -> Unit, onReset: () -> Unit) {
     val (n, unitRes) = sinceBig(now - c.lastAt)
     val unit = LocalContext.current.resources.getQuantityString(unitRes, n.toInt())
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -459,6 +506,7 @@ fun CounterCard(c: CounterWithLast, now: Long, onOpen: () -> Unit, onReset: () -
                 Text(c.counter.label, style = MaterialTheme.typography.titleMedium)
                 val fmt = remember { java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT) }
                 Text(fmt.format(java.util.Date(c.lastAt)), style = MaterialTheme.typography.bodySmall, color = muted)
+                if (group != null) Text(group, style = MaterialTheme.typography.bodySmall, color = muted)
                 if (tags.isNotEmpty()) Text(tags.joinToString(" · ") { "#$it" }, style = MaterialTheme.typography.bodySmall, color = muted)
             }
             ResetButton(c, now) { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onReset() }
@@ -481,5 +529,18 @@ fun ResetButton(c: CounterWithLast, now: Long, onReset: () -> Unit) {
             )
         }
         FilledTonalIconButton(onClick = onReset) { Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.reset)) }
+    }
+}
+
+const val ALL = -1L // drawer/home view: every group
+const val UNCAT = 0L // counters without a (live) group
+
+@Composable
+fun SectionHeader(name: String, count: Int, folded: Boolean, onToggle: () -> Unit) {
+    Surface(Modifier.fillMaxWidth().clickable(onClick = onToggle), color = MaterialTheme.colorScheme.surface) {
+        Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("$name · $count", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Icon(if (folded) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp, contentDescription = null)
+        }
     }
 }

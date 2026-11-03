@@ -10,9 +10,10 @@ import org.json.JSONObject
 import java.time.Instant
 import java.util.UUID
 
-typealias Backup = List<Pair<Counter, List<Event>>>
+/** Counter, its events, and its group's name (null = Ungrouped). */
+typealias Backup = List<Triple<Counter, List<Event>, String?>>
 
-fun toJson(counters: List<Counter>, events: List<Event>, now: Instant = Instant.now()): String {
+fun toJson(counters: List<Counter>, events: List<Event>, groups: Map<Long, String> = emptyMap(), now: Instant = Instant.now()): String {
     val byCounter = events.groupBy { it.counterId }
     return JSONObject()
         .put("version", 1)
@@ -27,6 +28,7 @@ fun toJson(counters: List<Counter>, events: List<Event>, now: Instant = Instant.
                 .put("uid", c.uid)
                 .put("updatedAt", c.updatedAt)
                 .put("archived", c.archived)
+                .put("group", groups[c.groupId] ?: JSONObject.NULL)
                 .put("events", JSONArray(byCounter[c.id].orEmpty().map { e ->
                     JSONObject().put("at", e.at).put("time", Instant.ofEpochMilli(e.at).toString()).put("source", e.source).put("uid", e.uid).putOpt("note", e.note)
                 }))
@@ -47,19 +49,21 @@ fun fromJson(s: String): Backup {
         val tags = o.optJSONArray("tags")?.let { t -> (0 until t.length()).joinToString(",") { t.getString(it) } } ?: ""
         val ev = o.getJSONArray("events")
         require(ev.length() > 0) { "\"$label\" has no events" }
-        Counter(
+        val counter = Counter(
             id = id, label = label, tags = tagList(tags).joinToString(","),
             notifyAfterMs = if (o.isNull("notifyAfterMs")) null else o.getLong("notifyAfterMs"),
             nfcTagId = if (o.isNull("nfcTagId")) null else o.getString("nfcTagId"),
             uid = o.optString("uid").ifEmpty { UUID.randomUUID().toString() }, // older exports have none
             updatedAt = o.optLong("updatedAt", System.currentTimeMillis()),
             archived = o.optBoolean("archived"),
-        ) to (0 until ev.length()).map { j ->
+        )
+        val events = (0 until ev.length()).map { j ->
             val e = ev.getJSONObject(j)
             Event(counterId = id, at = e.getLong("at"), source = e.optString("source", "manual"),
                 uid = e.optString("uid").ifEmpty { UUID.randomUUID().toString() },
                 note = if (e.isNull("note")) null else e.getString("note"))
         }
+        Triple(counter, events, if (o.isNull("group")) null else o.getString("group").trim().ifEmpty { null })
     }
     require(out.map { it.first.id }.toSet().size == out.size) { "Duplicate counter ids" }
     return out
@@ -69,7 +73,7 @@ fun fromJson(s: String): Backup {
 suspend fun exportJson(ctx: Context, uri: Uri): Int = withContext(Dispatchers.IO) {
     val dao = Db.get(ctx).dao()
     val counters = dao.allCounters()
-    val json = toJson(counters, dao.allEvents())
+    val json = toJson(counters, dao.allEvents(), dao.allGroups().associate { it.id to it.name })
     ctx.contentResolver.openOutputStream(uri, "wt")!!.use { it.write(json.toByteArray()) }
     counters.size
 }
@@ -78,9 +82,26 @@ suspend fun readBackup(ctx: Context, uri: Uri): Backup = withContext(Dispatchers
     fromJson(ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes().decodeToString() })
 }
 
-/** Replaces ALL data with [data] and rebuilds the reminders. */
-suspend fun restore(ctx: Context, data: Backup) {
-    Db.get(ctx).dao().replaceAll(data)
-    WorkManager.getInstance(ctx).cancelAllWork() // only our reminders live in WorkManager
-    data.forEach { reschedule(ctx, it.first.id) }
+/**
+ * [replace]: each group in the file replaces the local one of the same name (created if missing; no group = Ungrouped).
+ * Otherwise every group in the file is imported as a new one, renamed if its name is taken, with fresh uids so it never merges with the originals.
+ * Groups not in the file are untouched. Rebuilds the reminders.
+ */
+suspend fun restore(ctx: Context, data: Backup, replace: Boolean) {
+    val dao = Db.get(ctx).dao()
+    val names = dao.allGroups().toMutableList()
+    for ((name, items) in data.groupBy { it.third }) {
+        var rows = items.map { it.first to it.second }
+        val group = if (replace && name == null) null else {
+            val old = names.find { it.name.equals(name, true) }.takeIf { replace }
+            old?.id ?: CounterGroup(name = uniqueName(name ?: ctx.getString(R.string.imported), names.map { it.name })).let { new ->
+                if (!replace) rows = rows.map { (c, ev) -> c.copy(uid = UUID.randomUUID().toString(), nfcTagId = null) to ev.map { it.copy(uid = UUID.randomUUID().toString()) } }
+                dao.insert(new).also { names += new.copy(id = it) }
+            }
+        }
+        dao.replaceAll(rows, group)
+    }
+    WorkManager.getInstance(ctx).cancelAllWork() // only our reminders live in WorkManager (and the sync, put back below)
+    schedulePeriodicSync(ctx)
+    dao.allCounters().forEach { reschedule(ctx, it.id) }
 }

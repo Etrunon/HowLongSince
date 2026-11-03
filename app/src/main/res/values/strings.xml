@@ -49,10 +49,10 @@
     <string name="wrong_token">wrong token</string>
     <string name="export_failed">Export failed: %s</string>
     <string name="cant_read">Can\'t read file: %s</string>
-    <string name="replace_title">Replace all data?</string>
+    <string name="replace_title">Import data?</string>
     <string name="replace">Replace</string>
     <string name="import_data">Import data</string>
-    <string name="import_hint">Replace everything with a previously exported file (also on the sync server)</string>
+    <string name="import_hint">Import a previously exported file: replace the groups with the same name, or keep both</string>
     <string name="export_data">Export data</string>
     <string name="export_hint">Save all counters and their reset logs as JSON</string>
     <string name="reset">Reset</string>
@@ -98,5 +98,14 @@
     <plurals name="n_entries"><item quantity="one">%d entry</item><item quantity="other">%d entries</item></plurals>
     <plurals name="n_exported"><item quantity="one">Exported %d counter</item><item quantity="other">Exported %d counters</item></plurals>
     <plurals name="n_imported"><item quantity="one">Imported %d counter</item><item quantity="other">Imported %d counters</item></plurals>
-    <plurals name="n_replace_text"><item quantity="one">Your current counters and logs will be deleted and replaced by the %d counter in the file. This can\'t be undone.</item><item quantity="other">Your current counters and logs will be deleted and replaced by the %d counters in the file. This can\'t be undone.</item></plurals>
+    <plurals name="n_replace_text"><item quantity="one">The file has %d counter. Replace: groups with the same name are deleted and replaced by the file\'s. Keep both: it is imported as a new group, renamed if the name is taken. Replacing can\'t be undone.</item><item quantity="other">The file has %d counters. Replace: groups with the same name are deleted and replaced by the file\'s. Keep both: they are imported as new groups, renamed if a name is taken. Replacing can\'t be undone.</item></plurals>
+    <string name="groups">Groups</string>
+    <string name="new_group">New group</string>
+    <string name="group_name">Name</string>
+    <string name="ungrouped">Ungrouped</string>
+    <string name="all_groups">All</string>
+    <string name="delete_group_title">Delete group?</string>
+    <string name="delete_group_text">«%s» is removed. Its counters move to Ungrouped.</string>
+    <string name="imported">Imported</string>
+    <string name="keep_both">Keep both</string>
 </resources>
