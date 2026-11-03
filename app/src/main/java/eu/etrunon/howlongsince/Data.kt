@@ -39,7 +39,12 @@ data class Event(
     val uid: String = UUID.randomUUID().toString(),
     val deleted: Boolean = false,
     val note: String? = null, // set when logged, never edited (sync merges events by union)
+    val deviceId: String? = null, // who logged it; the name lives in [Device] so a rename reaches old events. null = before this existed
 )
+
+/** A phone or browser that logs resets. No registration: the id is random, made on first launch; the newest rename wins on sync. */
+@Entity
+data class Device(@PrimaryKey val id: String, val name: String, val updatedAt: Long = System.currentTimeMillis())
 
 data class CounterWithLast(@Embedded val counter: Counter, val lastAt: Long) {
     fun overdue(now: Long) = counter.notifyAfterMs?.let { now - lastAt >= it } == true
@@ -75,6 +80,12 @@ interface CounterDao {
     @Query("SELECT * FROM Event WHERE deleted = 0 ORDER BY at") suspend fun allEvents(): List<Event>
     @Query("SELECT * FROM Counter") suspend fun rawCounters(): List<Counter> // including tombstones, for sync
     @Query("SELECT * FROM Event") suspend fun rawEvents(): List<Event>
+
+    @Query("SELECT * FROM Device") fun devices(): Flow<List<Device>>
+    @Query("SELECT * FROM Device WHERE id = :id") fun device(id: String): Flow<Device?>
+    @Query("SELECT * FROM Device") suspend fun allDevices(): List<Device>
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(d: Device)
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun addDevice(d: Device)
 
     @Query("SELECT * FROM CounterGroup WHERE deleted = 0 ORDER BY name COLLATE NOCASE") fun groups(): Flow<List<CounterGroup>>
     @Query("SELECT * FROM CounterGroup WHERE deleted = 0") suspend fun allGroups(): List<CounterGroup>
@@ -129,6 +140,8 @@ interface CounterDao {
             if (l == null) { insert(e.copy(id = 0, counterId = cid)); changed += cid }
             else if (e.deleted && !l.deleted) { deleteEvent(l.id); changed += cid }
         }
+        val devices = allDevices().associateBy { it.id }
+        remote.devices.filter { it.updatedAt > (devices[it.id]?.updatedAt ?: -1) }.forEach { upsert(it) }
         val mine = group(g)
         if (mine != null && remote.name != null && remote.nameUpdatedAt > mine.nameUpdatedAt) rename(g, remote.name, remote.nameUpdatedAt)
         return changed
@@ -145,15 +158,15 @@ interface CounterDao {
     @Transaction
     suspend fun create(c: Counter): Long {
         val id = insert(c)
-        insert(Event(counterId = id, at = System.currentTimeMillis(), source = "create"))
+        insert(Event(counterId = id, at = System.currentTimeMillis(), source = "create", deviceId = Db.deviceId))
         return id
     }
 
     suspend fun reset(id: Long, source: String = "manual", at: Long = System.currentTimeMillis(), note: String? = null) =
-        insert(Event(counterId = id, at = at, source = source, note = note?.trim()?.ifEmpty { null }))
+        insert(Event(counterId = id, at = at, source = source, note = note?.trim()?.ifEmpty { null }, deviceId = Db.deviceId))
 }
 
-@Database(entities = [Counter::class, Event::class, CounterGroup::class], version = 5, exportSchema = false)
+@Database(entities = [Counter::class, Event::class, CounterGroup::class, Device::class], version = 6, exportSchema = false)
 abstract class Db : RoomDatabase() {
     abstract fun dao(): CounterDao
 
@@ -193,9 +206,22 @@ abstract class Db : RoomDatabase() {
                 "ALTER TABLE CounterGroup_new RENAME TO CounterGroup",
             ).forEach(db::execSQL)
         }
+        /** v6: who logged each event, and the device names. */
+        private val v6 = object : Migration(5, 6) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) = listOf(
+                "ALTER TABLE Event ADD COLUMN deviceId TEXT",
+                "CREATE TABLE IF NOT EXISTS Device (id TEXT NOT NULL, name TEXT NOT NULL, updatedAt INTEGER NOT NULL, PRIMARY KEY(id))",
+            ).forEach(db::execSQL)
+        }
+        /** This install's id. Kept in the "sync_keys" prefs, which backups skip, so a restored phone doesn't impersonate the old one. */
+        @Volatile var deviceId = ""
         @Volatile private var instance: Db? = null
         fun get(ctx: Context) = instance ?: synchronized(this) {
-            instance ?: Room.databaseBuilder(ctx.applicationContext, Db::class.java, "hls.db").addMigrations(v2, v3, v4, v5).build().also { instance = it }
+            instance ?: Room.databaseBuilder(ctx.applicationContext, Db::class.java, "hls.db").addMigrations(v2, v3, v4, v5, v6).build().also {
+                val p = ctx.applicationContext.getSharedPreferences("sync_keys", 0)
+                deviceId = p.getString("device", null) ?: UUID.randomUUID().toString().also { id -> p.edit().putString("device", id).commit() }
+                instance = it
+            }
         }
     }
 }

@@ -45,6 +45,13 @@ test('merge: renames, drops and old tombstones', () => {
   assert.deepEqual(re.events.map(x => x.id), ['e9']);
 });
 
+test('merge: the newest device rename wins, old events keep the id', () => {
+  const s = { ...empty, devices: [{ id: 'd1', name: 'Old', updatedAt: 1 }], events: [e('e1', 'a', 1, { deviceId: 'd1' })] };
+  const out = merge(s, { counters: [], events: [], devices: [{ id: 'd1', name: 'New', updatedAt: 2 }, { id: 'd2', name: 'Other', updatedAt: 1 }] });
+  assert.deepEqual(out.devices.map(d => d.name), ['New', 'Other']);
+  assert.equal(merge(out, { counters: [], events: [], devices: [{ id: 'd1', name: 'Stale', updatedAt: 1 }] }).devices[0].name, 'New');
+});
+
 test('reads what the phone writes', () => {
   const items = parseBackup(FIXTURE);
   assert.deepEqual(items.map(i => [i.counter.label, i.group, i.events.length]), [['Water plants', 'Home', 2], ['Run', null, 1]]);

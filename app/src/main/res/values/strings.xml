@@ -37,6 +37,8 @@
     <string name="edit">Edit</string>
     <string name="dark_theme">Dark theme</string>
     <string name="debug_mode">Debug mode</string>
+    <string name="device_name">Device name</string>
+    <string name="device_name_hint">Shown next to the resets you log, on every device in a synced group</string>
     <string name="debug_hint">Allow \"notify after\" in minutes</string>
     <string name="token">Token</string>
     <string name="not_synced">Not synced yet</string>

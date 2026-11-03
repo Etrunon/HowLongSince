@@ -103,6 +103,8 @@
     <label><input type="checkbox" id="dark"> <span data-i18n="dark_theme">Dark theme</span></label>
     <label><input type="checkbox" id="debug"> <span data-i18n="debug_mode">Debug mode</span></label>
     <span class="muted" data-i18n="debug_hint">Allow "notify after" in minutes</span>
+    <label><span data-i18n="device_name">Device name</span> <input id="devname" maxlength="40"></label>
+    <span class="muted" data-i18n="device_name_hint">Shown next to the resets you log, on every device in a synced group</span>
     <label><span data-i18n="language">Language</span> <select id="lang" aria-label="Language"><option value="">Auto</option><option value="en">English</option><option value="it">Italiano</option></select></label>
     <button id="export" data-i18n="export_data">Export data</button><button id="import" data-i18n="import_data">Import data</button>
     <input type="file" id="file" accept=".json,application/json" hidden>
@@ -165,7 +167,7 @@ const T = {
     reset_label: 'Reset %s', pick_past: 'Pick a time in the past', create: 'created', manual: 'manual', nfc: 'via NFC', d: 'd',
     open_app: 'Open in app', forget: 'Forget', paste_link: 'Paste a group link', bad_link: 'That isn\'t a group link',
         no_data: 'Nothing found for this link on this server', decrypt_failed: 'Can\'t decrypt: wrong key?', needs_https: 'This page needs https to decrypt (or localhost).', busy: 'Busy, try again', all_groups: 'All', ungrouped: 'Ungrouped', synced: 'Synced %s', group: 'Group', move_title: 'Move out of a synced group?', move_text: 'The counter will be removed for everyone else in the group it leaves.', new_group: 'New group', group_name: 'Group name', rename: 'Rename', join: 'Join', join_question: 'Join «%s»?',
-    already_joined: 'Already joined as «%s»', other_server: 'That link is for %s. Open it on that server\'s page.', token: 'Token', share: 'Share', copy_link: 'Copy link', link_copied: 'Copied', close: 'Close', new_: 'New', settings: 'Settings', language: 'Language', menu: 'Menu', dark_theme: 'Dark theme', debug_mode: 'Debug mode', debug_hint: 'Allow "notify after" in minutes', export_data: 'Export data', import_data: 'Import data', replace: 'Replace', keep_both: 'Keep both', cancel: 'Cancel', imported_name: 'Imported', cant_read: 'Can\'t read file: %s', done_imported: 'Imported %s counters',
+    already_joined: 'Already joined as «%s»', other_server: 'That link is for %s. Open it on that server\'s page.', token: 'Token', share: 'Share', copy_link: 'Copy link', link_copied: 'Copied', close: 'Close', new_: 'New', settings: 'Settings', language: 'Language', menu: 'Menu', dark_theme: 'Dark theme', debug_mode: 'Debug mode', debug_hint: 'Allow "notify after" in minutes', device_name: 'Device name', device_name_hint: 'Shown next to the resets you log, on every device in a synced group', export_data: 'Export data', import_data: 'Import data', replace: 'Replace', keep_both: 'Keep both', cancel: 'Cancel', imported_name: 'Imported', cant_read: 'Can\'t read file: %s', done_imported: 'Imported %s counters',
     import_q: 'The file has %s counters. Replace: groups with the same name are deleted and replaced by the file\'s. Keep both: they are imported as new groups, renamed if a name is taken. Replacing can\'t be undone.',
     share_warning: 'Anyone with this link can read and change this group, and access can\'t be taken back. To cut someone off, make a new group and move the counters.',
     forget_backup: 'Copy this link first: it is the only backup of the key. OK forgets the group in this browser (the data stays on the server), Cancel keeps it.' },
@@ -180,7 +182,7 @@ const T = {
     reset_label: 'Azzera %s', pick_past: 'Scegli un momento nel passato', create: 'creato', manual: 'manuale', nfc: 'via NFC', d: 'g',
     open_app: 'Apri nell\'app', forget: 'Dimentica', paste_link: 'Incolla un link di gruppo', bad_link: 'Questo non è un link di gruppo',
         no_data: 'Niente trovato per questo link su questo server', decrypt_failed: 'Impossibile decifrare: chiave sbagliata?', needs_https: 'Questa pagina richiede https per decifrare (o localhost).', busy: 'Occupato, riprova', all_groups: 'Tutti', ungrouped: 'Senza gruppo', synced: 'Sincronizzato alle %s', group: 'Gruppo', move_title: 'Spostare da un gruppo sincronizzato?', move_text: 'Il contatore verrà rimosso per tutti gli altri nel gruppo che lascia.', new_group: 'Nuovo gruppo', group_name: 'Nome del gruppo', rename: 'Rinomina', join: 'Unisciti', join_question: 'Unirti a «%s»?',
-    already_joined: 'Già unito come «%s»', other_server: 'Quel link è per %s. Aprilo sulla pagina di quel server.', token: 'Token', share: 'Condividi', copy_link: 'Copia link', link_copied: 'Copiato', close: 'Chiudi', new_: 'Nuovo', settings: 'Impostazioni', language: 'Lingua', menu: 'Menu', dark_theme: 'Tema scuro', debug_mode: 'Modalità debug', debug_hint: 'Consenti "avvisa dopo" in minuti', export_data: 'Esporta dati', import_data: 'Importa dati', replace: 'Sostituisci', keep_both: 'Tieni entrambi', cancel: 'Annulla', imported_name: 'Importati', cant_read: 'Impossibile leggere il file: %s', done_imported: 'Importati %s contatori',
+    already_joined: 'Già unito come «%s»', other_server: 'Quel link è per %s. Aprilo sulla pagina di quel server.', token: 'Token', share: 'Condividi', copy_link: 'Copia link', link_copied: 'Copiato', close: 'Chiudi', new_: 'Nuovo', settings: 'Impostazioni', language: 'Lingua', menu: 'Menu', dark_theme: 'Tema scuro', debug_mode: 'Modalità debug', debug_hint: 'Consenti "avvisa dopo" in minuti', device_name: 'Nome del dispositivo', device_name_hint: 'Mostrato accanto agli azzeramenti che registri, su ogni dispositivo di un gruppo sincronizzato', export_data: 'Esporta dati', import_data: 'Importa dati', replace: 'Sostituisci', keep_both: 'Tieni entrambi', cancel: 'Annulla', imported_name: 'Importati', cant_read: 'Impossibile leggere il file: %s', done_imported: 'Importati %s contatori',
     import_q: 'Il file contiene %s contatori. Sostituisci: i gruppi con lo stesso nome vengono eliminati e sostituiti da quelli del file. Tieni entrambi: vengono importati come nuovi gruppi, rinominati se un nome è già usato. Sostituire non si può annullare.',
     share_warning: 'Chiunque abbia questo link può leggere e modificare questo gruppo, e l\'accesso non si può revocare. Per escludere qualcuno, crea un nuovo gruppo e sposta i contatori.',
     forget_backup: 'Copia prima questo link: è l\'unico backup della chiave. OK dimentica il gruppo in questo browser (i dati restano sul server), Annulla lo tiene.' },
@@ -215,6 +217,8 @@ const uniqueName = (name, taken) => { let n = name, i = 1; while (taken.some(x =
 function merge(s, inn) {
   const cs = new Map();
   for (const c of [...s.counters, ...inn.counters]) { const o = cs.get(c.id); if (!o || c.updatedAt > o.updatedAt) cs.set(c.id, c); }
+  const ds = new Map(); // device names: newest rename wins
+  for (const d of [...(s.devices ?? []), ...(inn.devices ?? [])]) { const o = ds.get(d.id); if (!o || d.updatedAt > o.updatedAt) ds.set(d.id, d); }
   const dropped = new Set(inn.drop ?? []), es = new Map();
   for (let e of [...s.events.filter(e => !dropped.has(e.counterId)), ...inn.events]) {
     const o = es.get(e.id);
@@ -225,7 +229,7 @@ function merge(s, inn) {
   const counters = [...cs.values()].filter(c => !c.deleted || c.updatedAt >= cutoff).sort(byId);
   const live = new Set(counters.map(c => c.id));
   const rename = inn.name != null && inn.nameUpdatedAt > (s.nameUpdatedAt ?? 0); // newest rename wins, like the phone
-  return { name: rename ? inn.name : s.name, nameUpdatedAt: rename ? inn.nameUpdatedAt : s.nameUpdatedAt, counters, events: [...es.values()].filter(e => live.has(e.counterId)).sort(byId) };
+  return { name: rename ? inn.name : s.name, nameUpdatedAt: rename ? inn.nameUpdatedAt : s.nameUpdatedAt, devices: [...ds.values()].sort(byId), counters, events: [...es.values()].filter(e => live.has(e.counterId)).sort(byId) };
 }
 
 /** The phone's export file (version 1) for parts = [{ group: name or null, counters, events }]. */
@@ -302,7 +306,12 @@ async function seal(k, obj) {
   return Uint8Array.from([...iv, ...ct]);
 }
 
-const emptyState = () => ({ name: null, nameUpdatedAt: 0, counters: [], events: [] });
+const emptyState = () => ({ name: null, nameUpdatedAt: 0, counters: [], events: [], devices: [] });
+// Who logs resets: a random id made once per browser (no registration) and an editable name; the name travels in each group's blob, so a rename reaches old events.
+const deviceId = localStorage.getItem('device') || (id => (localStorage.setItem('device', id), id))(crypto.randomUUID());
+let deviceName = localStorage.getItem('deviceName') || 'Web', deviceNameAt = +localStorage.getItem('deviceNameAt') || 0;
+const myDevice = () => ({ id: deviceId, name: deviceName, updatedAt: deviceNameAt });
+const nameOfDevice = id => id && (id === deviceId ? deviceName : [...stores.values()].flatMap(s => s.state.devices ?? []).find(d => d.id === id)?.name) || '';
 // One store per group (keyed by its secret), decrypted, plus '' for Ungrouped, which never leaves this browser.
 const stores = new Map();
 const store = k => stores.get(k) ?? stores.set(k, { state: emptyState(), etag: null, keys: null, status: '', failed: false, queue: Promise.resolve() }).get(k);
@@ -346,7 +355,9 @@ const commit = (k, change = { counters: [], events: [] }) => {
   return s.queue = s.queue.then(() => run(k, change)).catch(e => { s.status = String(e); s.failed = true; render(); });
 };
 async function run(k, change) {
-  const s = store(k), has = change.counters.length || change.events.length || change.name != null;
+  const s = store(k), own = myDevice();
+  change = { ...change, devices: [own] };
+  const has = change.counters.length || change.events.length || change.name != null || !s.state.devices?.some(d => d.id === own.id && d.updatedAt >= own.updatedAt);
   if (k === '') { if (has) { s.state = merge(s.state, change); localStorage.setItem('local', JSON.stringify(s.state)); } return render(); }
   for (let i = 0; i < 5; i++) {
     if (!await pull(k)) return;
@@ -472,7 +483,7 @@ function since(ms) {
   return d ? `${d}${t('d')} ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
 }
 
-const event = (counterId, source, at = Date.now()) => ({ id: crypto.randomUUID(), counterId, at, source, deleted: false });
+const event = (counterId, source, at = Date.now()) => ({ id: crypto.randomUUID(), counterId, at, source, deleted: false, deviceId });
 
 
 function editForm(c, avg, k) {
@@ -527,7 +538,7 @@ function rowHtml({ c, ev, last, k, overdue }) {
         <span class="since">${since(last)}</span><button data-reset="${c.id}">↻ ${t('reset')}</button></summary>
       ${chart(ev)}
       ${editForm(c, ev.length >= 3 ? (ev[0].at - ev.at(-1).at) / (ev.length - 1) : 0, k)}
-      <ul>${ev.map(e => `<li>${new Date(e.at).toLocaleString()} <span class="muted">${t(e.source)}</span>${ev.length > 1 ? `<button data-del-event="${e.id}">✕</button>` : ''}${e.note ? `<span class="note">${esc(e.note)}</span>` : ''}</li>`).join('')}</ul>
+      <ul>${ev.map(e => `<li>${new Date(e.at).toLocaleString()} <span class="muted">${t(e.source)}${nameOfDevice(e.deviceId) ? ' · ' + esc(nameOfDevice(e.deviceId)) : ''}</span>${ev.length > 1 ? `<button data-del-event="${e.id}">✕</button>` : ''}${e.note ? `<span class="note">${esc(e.note)}</span>` : ''}</li>`).join('')}</ul>
       <button data-del="${c.id}">${t('delete_counter')}</button>
     </details>`;
 }
@@ -552,12 +563,13 @@ function render() {
     : sort === 'recent' ? (a, b) => b.last - a.last
     : (a, b) => b.overdue - a.overdue || a.last - b.last; // overdue first, then oldest reset
   // Sections (one per group, Ungrouped first) while looking at everything and at least one group exists; sorted within each.
+  $('#fab').hidden = view === 'all' && groups.length > 0; // with sections, each header has its own +
   $('#list').innerHTML = !(view === 'all' && groups.length) ? shown.sort(order).map(rowHtml).join('')
     : ['', ...[...groups].sort(byName).map(g => g.secret)].map(k => {
       const rows = shown.filter(r => r.k === k).sort(order), s = store(k);
       if (!rows.length && !s.failed) return ''; // empty sections stay hidden, unless there is an error to show
       const fold = folded.has(k) && !q; // a search opens every section
-      return `<div class="sec" data-fold="${esc(k)}"><b>${esc(groupName(k))} · ${rows.length}</b><span class="muted ${s.failed ? 'bad' : ''}">${esc(s.status)}</span>${k ? `<button data-share="${esc(k)}" title="${t('share')}">⤴</button>` : ''}<span>${fold ? '▸' : '▾'}</span></div>`
+      return `<div class="sec" data-fold="${esc(k)}"><b>${esc(groupName(k))} · ${rows.length}</b><span class="muted ${s.failed ? 'bad' : ''}">${esc(s.status)}</span><button data-add="${esc(k)}" title="${t('new_')}">+</button>${k ? `<button data-share="${esc(k)}" title="${t('share')}">⤴</button>` : ''}<span>${fold ? '▸' : '▾'}</span></div>`
         + (fold ? '' : rows.map(rowHtml).join(''));
     }).join('');
 }
@@ -571,16 +583,17 @@ $('#login').onsubmit = e => {
 };
 
 // The + button, like the phone's: a form for a new counter, into the group being looked at unless you pick another.
-$('#fab').onclick = () => {
+const openNew = grp => {
   const f = $('#newform'); f.reset();
   f.elements.group.innerHTML = [['', t('ungrouped')], ...[...groups].sort(byName).map(g => [g.secret, g.name || '…'])]
     .map(([v, n]) => `<option value="${esc(v)}">${esc(n)}</option>`).join('');
-  f.elements.group.value = view === 'all' ? '' : view;
+  f.elements.group.value = grp;
   $('#newgroupl').hidden = !groups.length;
   f.elements.unit.innerHTML = unitsFor(null, debug).map(([u]) => `<option value="${u}" ${u === 'days' ? 'selected' : ''}>${t(u)}</option>`).join('');
   $('#newdlg').showModal();
   f.elements.label.focus();
 };
+$('#fab').onclick = () => openNew(view === 'all' ? '' : view);
 $('#newcancel').onclick = () => $('#newdlg').close();
 $('#newform').onsubmit = e => {
   e.preventDefault();
@@ -618,6 +631,8 @@ $('#list').onsubmit = e => {
 };
 
 $('#list').onclick = e => {
+  const ad = e.target.closest('[data-add]');
+  if (ad) return openNew(ad.dataset.add);
   const sh = e.target.closest('[data-share]');
   if (sh) return share(sh.dataset.share);
   const sec = e.target.closest('[data-fold]');
@@ -675,6 +690,12 @@ dark.addEventListener('change', applyTheme);
 $('#dark').onchange = () => { localStorage.setItem('theme', $('#dark').checked ? 'dark' : 'light'); applyTheme(); };
 $('#debug').checked = debug;
 $('#debug').onchange = () => { debug = $('#debug').checked; localStorage.setItem('debug', debug ? '1' : '0'); render(); };
+$('#devname').value = deviceName;
+$('#devname').onchange = () => {
+  deviceName = $('#devname').value.trim() || 'Web'; deviceNameAt = Date.now(); $('#devname').value = deviceName;
+  localStorage.setItem('deviceName', deviceName); localStorage.setItem('deviceNameAt', deviceNameAt);
+  render(); syncAll();
+};
 applyTheme();
 $('#sort').onchange = () => { localStorage.setItem('sort', $('#sort').value); render(); };
 $('#views').onclick = e => { const b = e.target.closest('[data-view]'); if (b) { view = b.dataset.view; render(); } };

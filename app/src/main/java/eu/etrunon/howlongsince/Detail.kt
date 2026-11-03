@@ -30,6 +30,7 @@ import java.util.Date
 fun Detail(c: CounterWithLast, dao: CounterDao, now: Long, onBack: () -> Unit, onEdit: () -> Unit) {
     val id = c.counter.id
     val events by remember(id) { dao.events(id) }.collectAsState(initial = emptyList())
+    val devices by remember { dao.devices() }.collectAsState(initial = emptyList())
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val nfc = remember { NfcAdapter.getDefaultAdapter(ctx) }
@@ -113,7 +114,7 @@ fun Detail(c: CounterWithLast, dao: CounterDao, now: Long, onBack: () -> Unit, o
                         Column(Modifier.padding(start = 8.dp, bottom = 16.dp)) {
                             Text(fmt.format(Date(e.at)), style = MaterialTheme.typography.titleSmall)
                             val tag = when (e.source) { "nfc" -> ctx.getString(R.string.via_nfc); "create" -> ctx.getString(R.string.created); else -> null }
-                            Text(listOfNotNull(gap, tag).joinToString(" · "), style = MaterialTheme.typography.bodySmall,
+                            Text(listOfNotNull(gap, tag, devices.find { it.id == e.deviceId }?.name).joinToString(" · "), style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                             e.note?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                         }

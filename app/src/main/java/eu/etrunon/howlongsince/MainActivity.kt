@@ -251,7 +251,7 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, joinR
         }) },
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
+            if (!(view == ALL && groups.isNotEmpty())) ExtendedFloatingActionButton(
                 text = { Text(stringResource(R.string.new_)) }, icon = { Icon(Icons.Filled.Add, contentDescription = null) },
                 expanded = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0,
                 onClick = { editing = Counter(label = "", groupId = view.takeIf { it > 0 }) })
@@ -299,7 +299,8 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, joinR
                 else sections.forEach { (k, list) ->
                     val fold = k.toString() in folded && query.isBlank() // a search opens every section
                     stickyHeader(key = "h$k") {
-                        SectionHeader(if (k == UNCAT) ungrouped else groups.first { it.id == k }.name, list.size, fold) {
+                        SectionHeader(if (k == UNCAT) ungrouped else groups.first { it.id == k }.name, list.size, fold,
+                            onAdd = { editing = Counter(label = "", groupId = k.takeIf { it > 0 }) }) {
                             folded = if (fold) folded - k.toString() else folded + k.toString()
                             prefs0.edit().putStringSet("folded", folded).apply()
                         }
@@ -412,6 +413,29 @@ fun Settings(dark: Boolean, onDark: (Boolean) -> Unit, debug: Boolean, onDebug: 
             trailingContent = { Switch(checked = debug, onCheckedChange = onDebug) },
         )
         val ctx = LocalContext.current
+        val dao = remember { Db.get(ctx).dao() }
+        val me by remember { dao.device(Db.deviceId) }.collectAsState(initial = null)
+        val myName = me?.name ?: Build.MODEL
+        var renaming by remember { mutableStateOf(false) }
+        val renameScope = rememberCoroutineScope()
+        ListItem(
+            modifier = Modifier.clickable { renaming = true },
+            headlineContent = { Text(stringResource(R.string.device_name)) },
+            supportingContent = { Text(myName) },
+        )
+        if (renaming) {
+            var text by remember { mutableStateOf(myName) }
+            AlertDialog(
+                onDismissRequest = { renaming = false },
+                title = { Text(stringResource(R.string.device_name)) },
+                text = { OutlinedTextField(text, { text = it }, singleLine = true, supportingText = { Text(stringResource(R.string.device_name_hint)) }) },
+                confirmButton = { TextButton(enabled = text.isNotBlank(), onClick = {
+                    renaming = false
+                    renameScope.launch { dao.upsert(Device(Db.deviceId, text.trim())); syncSoon(ctx) }
+                }) { Text(stringResource(R.string.save)) } },
+                dismissButton = { TextButton(onClick = { renaming = false }) { Text(stringResource(R.string.cancel)) } },
+            )
+        }
         // Per-app language is built in from Android 13; older phones follow the system language.
         if (Build.VERSION.SDK_INT >= 33) {
             val lm = remember { ctx.getSystemService(android.app.LocaleManager::class.java) }
@@ -537,10 +561,11 @@ const val ALL = -1L // drawer/home view: every group
 const val UNCAT = 0L // counters without a (live) group
 
 @Composable
-fun SectionHeader(name: String, count: Int, folded: Boolean, onToggle: () -> Unit) {
+fun SectionHeader(name: String, count: Int, folded: Boolean, onAdd: () -> Unit, onToggle: () -> Unit) {
     Surface(Modifier.fillMaxWidth().clickable(onClick = onToggle), color = MaterialTheme.colorScheme.surface) {
         Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("$name · $count", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            IconButton(onAdd) { Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.new_)) }
             Icon(if (folded) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp, contentDescription = null)
         }
     }

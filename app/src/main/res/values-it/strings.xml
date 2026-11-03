@@ -36,6 +36,8 @@
     <string name="edit">Modifica</string>
     <string name="dark_theme">Tema scuro</string>
     <string name="debug_mode">Modalità debug</string>
+    <string name="device_name">Nome del dispositivo</string>
+    <string name="device_name_hint">Mostrato accanto agli azzeramenti che registri, su ogni dispositivo di un gruppo sincronizzato</string>
     <string name="debug_hint">Consenti \"avvisa dopo\" in minuti</string>
     <string name="token">Token</string>
     <string name="not_synced">Non ancora sincronizzato</string>

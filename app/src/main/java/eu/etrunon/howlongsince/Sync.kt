@@ -17,11 +17,13 @@ import java.util.Date
 import java.util.concurrent.TimeUnit
 
 /** One group's decrypted blob; events carry their counter's uid (local ids differ per device). The group name travels inside, newest rename wins. */
-data class Remote(val counters: List<Counter>, val events: List<Pair<String, Event>>, val name: String? = null, val nameUpdatedAt: Long = 0)
+data class Remote(val counters: List<Counter>, val events: List<Pair<String, Event>>, val name: String? = null, val nameUpdatedAt: Long = 0, val devices: List<Device> = emptyList())
 
 /** Sorted by uid, so the same data always gives the same text and an unchanged group isn't uploaded again. */
-fun stateJson(counters: List<Counter>, events: List<Event>, name: String? = null, nameUpdatedAt: Long = 0): String {
+fun stateJson(counters: List<Counter>, events: List<Event>, name: String? = null, nameUpdatedAt: Long = 0, devices: List<Device> = emptyList()): String {
     val uids = counters.associate { it.id to it.uid }
+    val sent = events.filter { it.counterId in uids }
+    val named = (sent.mapNotNull { it.deviceId } + Db.deviceId).toSet() // only the devices this group has seen, not every group's
     return JSONObject()
         .put("name", name ?: JSONObject.NULL).put("nameUpdatedAt", nameUpdatedAt)
         .put("counters", JSONArray(counters.sortedBy { it.uid }.map { c ->
@@ -31,8 +33,9 @@ fun stateJson(counters: List<Counter>, events: List<Event>, name: String? = null
         }))
         .put("events", JSONArray(events.sortedBy { it.uid }.mapNotNull { e ->
             JSONObject().put("id", e.uid).put("counterId", uids[e.counterId] ?: return@mapNotNull null)
-                .put("at", e.at).put("source", e.source).put("deleted", e.deleted).putOpt("note", e.note)
+                .put("at", e.at).put("source", e.source).put("deleted", e.deleted).putOpt("note", e.note).putOpt("deviceId", e.deviceId)
         }))
+        .put("devices", JSONArray(devices.filter { it.id in named }.sortedBy { it.id }.map { JSONObject().put("id", it.id).put("name", it.name).put("updatedAt", it.updatedAt) }))
         .toString()
 }
 
@@ -50,9 +53,11 @@ fun parseState(s: String): Remote {
         (0 until es.length()).map { i ->
             val e = es.getJSONObject(i)
             e.getString("counterId") to Event(counterId = 0, at = e.getLong("at"), source = e.optString("source", "manual"),
-                uid = e.getString("id"), deleted = e.optBoolean("deleted"), note = if (e.isNull("note")) null else e.getString("note"))
+                uid = e.getString("id"), deleted = e.optBoolean("deleted"), note = if (e.isNull("note")) null else e.getString("note"),
+                deviceId = if (e.isNull("deviceId")) null else e.optString("deviceId", "").ifEmpty { null })
         },
         if (o.isNull("name")) null else o.getString("name"), o.optLong("nameUpdatedAt"),
+        o.optJSONArray("devices").let { ds -> (0 until (ds?.length() ?: 0)).map { ds!!.getJSONObject(it) }.map { Device(it.getString("id"), it.getString("name"), it.getLong("updatedAt")) } },
     )
 }
 
@@ -76,6 +81,7 @@ suspend fun sync(ctx: Context): Unit = lock.withLock {
     val prefs = ctx.getSharedPreferences("settings", 0)
     val dao = Db.get(ctx).dao()
     migrateOldSync(ctx, dao, prefs)
+    dao.addDevice(Device(Db.deviceId, android.os.Build.MODEL, 0)) // default name; any rename is newer
     dao.pruneDeleted(System.currentTimeMillis() - TimeUnit.DAYS.toMillis(90)) // same TTL as the server
     for (g in dao.allGroups()) {
         if (g.syncUrl == null) continue
@@ -115,7 +121,7 @@ private suspend fun syncGroup(ctx: Context, dao: CounterDao, g: CounterGroup, se
         val mine = all.filter { it.groupId == g.id }
         val cutoff = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(90)
         val kept = parsed?.counters.orEmpty().filter { r -> r.deleted && r.updatedAt >= cutoff && mine.none { it.uid == r.uid } }.map { it.copy(id = -1) }
-        val out = stateJson(mine + moved + kept, dao.rawEvents(), me.name, me.nameUpdatedAt)
+        val out = stateJson(mine + moved + kept, dao.rawEvents(), me.name, me.nameUpdatedAt, dao.allDevices())
         if (out == remote) return // nothing new to say
         val body = JSONObject().put("ciphertext", Base64.getEncoder().encodeToString(seal(k, out.toByteArray()))).toString()
         when (val c = withContext(Dispatchers.IO) { http("PUT", url, token, etag, body).first }) {
