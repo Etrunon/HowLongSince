@@ -152,3 +152,32 @@ class WebCryptoTest {
         assertEquals("""{"hello":"wörld"}""", open(k, blob).decodeToString())
     }
 }
+
+class WebBackupTest {
+    // The same text as FIXTURE in server/web.test.mjs: a file in the phone's format, which the web app must read too.
+    private val phoneFile = """{"version":1,"exportedAt":"2026-11-03T10:00:00Z","counters":[
+{"id":1,"label":"Water plants","tags":["home","plants"],"notifyAfterMs":259200000,"nfcTagId":null,"uid":"11111111-1111-4111-8111-111111111111","updatedAt":1700000000000,"archived":false,"group":"Home","events":[{"at":1700000000000,"time":"2023-11-14T22:13:20Z","source":"create","uid":"e1"},{"at":1700003600000,"time":"2023-11-14T23:13:20Z","source":"manual","uid":"e2","note":"new filter"}]},
+{"id":2,"label":"Run","tags":[],"notifyAfterMs":null,"nfcTagId":"04ab","uid":"22222222-2222-4222-8222-222222222222","updatedAt":1700000000000,"archived":true,"group":null,"events":[{"at":1700000000000,"time":"2023-11-14T22:13:20Z","source":"create","uid":"e3"}]}]}"""
+
+    // Written by the web app's toBackup (exported with a local counter and a "Family" one).
+    private val webFile = """{"version":1,"exportedAt":"2026-11-03T10:00:00.000Z","counters":[{"id":1,"label":"Local one","tags":[],"notifyAfterMs":86400000,"nfcTagId":null,"uid":"u1","updatedAt":5,"archived":false,"group":null,"events":[{"at":1700000000000,"time":"2023-11-14T22:13:20.000Z","source":"create","uid":"ev1"}]},{"id":2,"label":"Web counter","tags":["home","plants"],"notifyAfterMs":86400000,"nfcTagId":null,"uid":"u2","updatedAt":5,"archived":true,"group":"Family","events":[{"at":1700000000000,"time":"2023-11-14T22:13:20.000Z","source":"create","uid":"ev2"},{"at":1700003600000,"time":"2023-11-14T23:13:20.000Z","source":"manual","uid":"ev3","note":"from web"}]}]}"""
+
+    @Test fun readsThePhoneFormat() {
+        val b = fromJson(phoneFile)
+        assertEquals(listOf("Water plants", "Run"), b.map { it.first.label })
+        assertEquals(listOf<String?>("Home", null), b.map { it.third })
+        assertEquals("home,plants", b[0].first.tags)
+        assertEquals("new filter", b[0].second[1].note)
+        assertEquals(true, b[1].first.archived)
+    }
+
+    @Test fun readsWhatTheWebAppExports() {
+        val b = fromJson(webFile)
+        assertEquals(listOf("Local one", "Web counter"), b.map { it.first.label })
+        assertEquals(listOf<String?>(null, "Family"), b.map { it.third })
+        assertEquals("u2", b[1].first.uid)
+        assertEquals("home,plants", b[1].first.tags)
+        assertEquals(listOf("create", "manual"), b[1].second.map { it.source })
+        assertEquals("from web", b[1].second[1].note)
+    }
+}

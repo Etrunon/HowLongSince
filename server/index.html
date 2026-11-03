@@ -84,7 +84,12 @@
   <p class="muted" data-i18n="share_warning"></p>
   <div class="row"><button id="copy" data-i18n="copy_link">Copy link</button><button id="nativeshare" data-i18n="share" hidden>Share</button><button id="closeshare" data-i18n="close">Close</button></div>
 </dialog>
-<footer><select id="lang" aria-label="Language"><option value="">Auto</option><option value="en">English</option><option value="it">Italiano</option></select></footer>
+<dialog id="importdlg">
+  <p id="importtext"></p>
+  <div class="row"><button id="doreplace" data-i18n="replace">Replace</button><button id="dokeep" data-i18n="keep_both">Keep both</button><button id="nogo" data-i18n="cancel">Cancel</button></div>
+</dialog>
+<footer><button id="export" data-i18n="export_data">Export data</button> <button id="import" data-i18n="import_data">Import data</button> <input type="file" id="file" accept=".json,application/json" hidden>
+  <br><br><select id="lang" aria-label="Language"><option value="">Auto</option><option value="en">English</option><option value="it">Italiano</option></select></footer>
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => s.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
@@ -102,7 +107,8 @@ const T = {
     reset_label: 'Reset %s', pick_past: 'Pick a time in the past', create: 'created', manual: 'manual', nfc: 'via NFC', d: 'd',
     open_app: 'Open in app', forget: 'Forget', paste_link: 'Paste a group link', bad_link: 'That isn\'t a group link',
         no_data: 'Nothing found for this link on this server', decrypt_failed: 'Can\'t decrypt: wrong key?', needs_https: 'This page needs https to decrypt (or localhost).', busy: 'Busy, try again', all_groups: 'All', ungrouped: 'Ungrouped', synced: 'Synced %s', group: 'Group', move_title: 'Move out of a synced group?', move_text: 'The counter will be removed for everyone else in the group it leaves.', new_group: 'New group', group_name: 'Group name', rename: 'Rename', join: 'Join', join_question: 'Join «%s»?',
-    already_joined: 'Already joined as «%s»', other_server: 'That link is for %s. Open it on that server\'s page.', token: 'Token', share: 'Share', copy_link: 'Copy link', link_copied: 'Copied', close: 'Close',
+    already_joined: 'Already joined as «%s»', other_server: 'That link is for %s. Open it on that server\'s page.', token: 'Token', share: 'Share', copy_link: 'Copy link', link_copied: 'Copied', close: 'Close', export_data: 'Export data', import_data: 'Import data', replace: 'Replace', keep_both: 'Keep both', cancel: 'Cancel', imported_name: 'Imported', cant_read: 'Can\'t read file: %s', done_imported: 'Imported %s counters',
+    import_q: 'The file has %s counters. Replace: groups with the same name are deleted and replaced by the file\'s. Keep both: they are imported as new groups, renamed if a name is taken. Replacing can\'t be undone.',
     share_warning: 'Anyone with this link can read and change this group, and access can\'t be taken back. To cut someone off, make a new group and move the counters.',
     forget_backup: 'Copy this link first: it is the only backup of the key. OK forgets the group in this browser (the data stays on the server), Cancel keeps it.' },
   it: { login: 'Accedi', new_counter: 'Nuovo contatore', add: 'Aggiungi', undo: 'Annulla', search: 'Cerca tra etichette e tag',
@@ -116,7 +122,8 @@ const T = {
     reset_label: 'Azzera %s', pick_past: 'Scegli un momento nel passato', create: 'creato', manual: 'manuale', nfc: 'via NFC', d: 'g',
     open_app: 'Apri nell\'app', forget: 'Dimentica', paste_link: 'Incolla un link di gruppo', bad_link: 'Questo non è un link di gruppo',
         no_data: 'Niente trovato per questo link su questo server', decrypt_failed: 'Impossibile decifrare: chiave sbagliata?', needs_https: 'Questa pagina richiede https per decifrare (o localhost).', busy: 'Occupato, riprova', all_groups: 'Tutti', ungrouped: 'Senza gruppo', synced: 'Sincronizzato alle %s', group: 'Gruppo', move_title: 'Spostare da un gruppo sincronizzato?', move_text: 'Il contatore verrà rimosso per tutti gli altri nel gruppo che lascia.', new_group: 'Nuovo gruppo', group_name: 'Nome del gruppo', rename: 'Rinomina', join: 'Unisciti', join_question: 'Unirti a «%s»?',
-    already_joined: 'Già unito come «%s»', other_server: 'Quel link è per %s. Aprilo sulla pagina di quel server.', token: 'Token', share: 'Condividi', copy_link: 'Copia link', link_copied: 'Copiato', close: 'Chiudi',
+    already_joined: 'Già unito come «%s»', other_server: 'Quel link è per %s. Aprilo sulla pagina di quel server.', token: 'Token', share: 'Condividi', copy_link: 'Copia link', link_copied: 'Copiato', close: 'Chiudi', export_data: 'Esporta dati', import_data: 'Importa dati', replace: 'Sostituisci', keep_both: 'Tieni entrambi', cancel: 'Annulla', imported_name: 'Importati', cant_read: 'Impossibile leggere il file: %s', done_imported: 'Importati %s contatori',
+    import_q: 'Il file contiene %s contatori. Sostituisci: i gruppi con lo stesso nome vengono eliminati e sostituiti da quelli del file. Tieni entrambi: vengono importati come nuovi gruppi, rinominati se un nome è già usato. Sostituire non si può annullare.',
     share_warning: 'Chiunque abbia questo link può leggere e modificare questo gruppo, e l\'accesso non si può revocare. Per escludere qualcuno, crea un nuovo gruppo e sposta i contatori.',
     forget_backup: 'Copia prima questo link: è l\'unico backup della chiave. OK dimentica il gruppo in questo browser (i dati restano sul server), Annulla lo tiene.' },
 };
@@ -137,6 +144,88 @@ const b64 = u => { let s = ''; for (const b of u) s += String.fromCharCode(b); r
 const hex = u => [...u].map(b => b.toString(16).padStart(2, '0')).join('');
 const validSecret = s => { try { return b64u(s).length === 32; } catch { return false; } };
 
+// <core> Pure logic (no page, no network): tests load this part, see web.test.mjs.
+const tagList = s => [...new Set(s.split(',').map(t => t.trim().toLowerCase()).filter(Boolean))]; // same as the app
+const uniqueName = (name, taken) => { let n = name, i = 1; while (taken.some(x => x.toLowerCase() === n.toLowerCase())) n = `${name} (${++i})`; return n; };
+
+// The server can't merge encrypted data, so the browser does: counters by newest updatedAt, events by union (deletion is sticky), old tombstones dropped.
+// `inn.drop` lists counters whose existing events go (they moved to another group, or an import replaces them).
+function merge(s, inn) {
+  const cs = new Map();
+  for (const c of [...s.counters, ...inn.counters]) { const o = cs.get(c.id); if (!o || c.updatedAt > o.updatedAt) cs.set(c.id, c); }
+  const dropped = new Set(inn.drop ?? []), es = new Map();
+  for (let e of [...s.events.filter(e => !dropped.has(e.counterId)), ...inn.events]) {
+    const o = es.get(e.id);
+    if (o) { e = { ...e, deleted: e.deleted || o.deleted }; if (!e.note && o.note) e.note = o.note; }
+    es.set(e.id, e);
+  }
+  const cutoff = Date.now() - 90 * 864e5, byId = (a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  const counters = [...cs.values()].filter(c => !c.deleted || c.updatedAt >= cutoff).sort(byId);
+  const live = new Set(counters.map(c => c.id));
+  const rename = inn.name != null && inn.nameUpdatedAt > (s.nameUpdatedAt ?? 0); // newest rename wins, like the phone
+  return { name: rename ? inn.name : s.name, nameUpdatedAt: rename ? inn.nameUpdatedAt : s.nameUpdatedAt, counters, events: [...es.values()].filter(e => live.has(e.counterId)).sort(byId) };
+}
+
+/** The phone's export file (version 1) for parts = [{ group: name or null, counters, events }]. */
+function toBackup(parts, now = new Date()) {
+  let n = 0;
+  const counters = parts.flatMap(({ group, counters, events }) => counters.filter(c => !c.deleted).flatMap(c => {
+    const ev = events.filter(e => e.counterId === c.id && !e.deleted).sort((a, b) => a.at - b.at);
+    if (!ev.length) return []; // the phone refuses a counter without events
+    return [{ id: ++n, label: c.label, tags: tagList(c.tags), notifyAfterMs: c.notifyAfterMs ?? null, nfcTagId: c.nfcTagId ?? null, uid: c.id,
+      updatedAt: c.updatedAt, archived: !!c.archived, group: group ?? null,
+      events: ev.map(e => ({ at: e.at, time: new Date(e.at).toISOString(), source: e.source, uid: e.id, ...(e.note && { note: e.note }) })) }];
+  }));
+  return { version: 1, exportedAt: now.toISOString(), counters };
+}
+
+/** Reads and checks an export file; throws a readable message on anything wrong. Items are { group, counter, events } with web-shaped rows. */
+function parseBackup(text) {
+  const root = JSON.parse(text);
+  if (root.version !== 1) throw new Error('Unsupported file version');
+  if (!Array.isArray(root.counters)) throw new Error('No counters in the file');
+  const ids = new Set();
+  return root.counters.map((o, i) => {
+    const label = String(o.label ?? '').trim();
+    if (!label) throw new Error(`Counter #${i + 1} has no label`);
+    if (ids.has(o.id)) throw new Error('Duplicate counter ids');
+    ids.add(o.id);
+    if (!Array.isArray(o.events) || !o.events.length) throw new Error(`"${label}" has no events`);
+    const uid = o.uid || crypto.randomUUID(); // older exports have none
+    const counter = { id: uid, label, tags: tagList(Array.isArray(o.tags) ? o.tags.join(',') : String(o.tags ?? '')).join(','), notifyAfterMs: o.notifyAfterMs ?? null,
+      nfcTagId: o.nfcTagId ?? null, updatedAt: o.updatedAt ?? Date.now(), deleted: false, archived: !!o.archived };
+    const events = o.events.map(e => {
+      if (typeof e.at !== 'number') throw new Error(`"${label}" has an event without a time`);
+      return { id: e.uid || crypto.randomUUID(), counterId: uid, at: e.at, source: e.source || 'manual', deleted: false, ...(e.note && { note: e.note }) };
+    });
+    return { group: typeof o.group === 'string' && o.group.trim() ? o.group.trim() : null, counter, events };
+  });
+}
+
+/**
+ * Where an import goes. replace: each file group replaces the local group of the same name (made if missing; no group = Ungrouped).
+ * Otherwise every file group becomes a new group, renamed if the name is taken, with fresh ids so it never merges with the originals.
+ * Returns [{ name (null = Ungrouped), isNew, items }].
+ */
+function planImport(items, replace, groupNames, fallbackName = 'Imported') {
+  const byGroup = new Map();
+  for (const it of items) byGroup.set(it.group, [...(byGroup.get(it.group) ?? []), it]);
+  const taken = [...groupNames], out = [];
+  const fresh = ({ counter, events, group }) => { const id = crypto.randomUUID();
+    return { group, counter: { ...counter, id, nfcTagId: null }, events: events.map(e => ({ ...e, id: crypto.randomUUID(), counterId: id })) }; };
+  for (const [name, list] of byGroup) {
+    if (replace && name === null) { out.push({ name: null, isNew: false, items: list }); continue; }
+    const old = replace ? groupNames.find(n => n.toLowerCase() === name.toLowerCase()) : undefined;
+    if (old !== undefined) { out.push({ name: old, isNew: false, items: list }); continue; }
+    const made = uniqueName(name ?? fallbackName, taken);
+    taken.push(made);
+    out.push({ name: made, isNew: true, items: replace ? list : list.map(fresh) });
+  }
+  return out;
+}
+// </core>
+
+
 // Same scheme as the app (Crypto.kt): HKDF-SHA256 with a zero salt makes the server-side id and the AES-256-GCM key; the id is also the authenticated data.
 async function deriveKeys(secret) {
   const ikm = await crypto.subtle.importKey('raw', b64u(secret), 'HKDF', false, ['deriveBits']);
@@ -149,24 +238,6 @@ async function seal(k, obj) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: aad(k) }, k.key, new TextEncoder().encode(JSON.stringify(obj))));
   return Uint8Array.from([...iv, ...ct]);
-}
-
-// The server can't merge encrypted data, so the browser does: counters by newest updatedAt, events by union (deletion is sticky), old tombstones dropped.
-function merge(s, inn) {
-  const cs = new Map();
-  for (const c of [...s.counters, ...inn.counters]) { const o = cs.get(c.id); if (!o || c.updatedAt > o.updatedAt) cs.set(c.id, c); }
-  const es = new Map();
-  for (let e of [...s.events, ...inn.events]) {
-    const o = es.get(e.id);
-    if (o) { e = { ...e, deleted: e.deleted || o.deleted }; if (!e.note && o.note) e.note = o.note; }
-    es.set(e.id, e);
-  }
-  const cutoff = Date.now() - 90 * 864e5, byId = (a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-  const counters = [...cs.values()].filter(c => !c.deleted || c.updatedAt >= cutoff).sort(byId);
-  const live = new Set(counters.map(c => c.id));
-  const rename = inn.name != null && inn.nameUpdatedAt > (s.nameUpdatedAt ?? 0); // newest rename wins, like the phone
-  const dropped = new Set(inn.drop ?? []); // counters that moved to another group: their events go with them
-  return { name: rename ? inn.name : s.name, nameUpdatedAt: rename ? inn.nameUpdatedAt : s.nameUpdatedAt, counters, events: [...es.values()].filter(e => live.has(e.counterId) && !dropped.has(e.counterId)).sort(byId) };
 }
 
 const emptyState = () => ({ name: null, nameUpdatedAt: 0, counters: [], events: [] });
@@ -230,8 +301,8 @@ async function run(k, change) {
 const syncAll = () => Promise.all(['', ...groups.map(g => g.secret)].map(k => commit(k)));
 
 const shareLink = g => `${base}/#k=${g.secret}${g.token ? '&t=' + encodeURIComponent(g.token) : ''}`;
+const newSecret = () => b64(crypto.getRandomValues(new Uint8Array(32))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const defaultToken = () => localStorage.getItem('token') || groups.find(g => g.token)?.token || '';
-const uniqueName = (name, taken) => { let n = name, i = 1; while (taken.some(x => x.toLowerCase() === n.toLowerCase())) n = `${name} (${++i})`; return n; };
 const byName = (a, b) => (a.name || '￿').localeCompare(b.name || '￿');
 function fillGroups() {
   const opts = [['all', t('all_groups')]];
@@ -291,7 +362,7 @@ function newGroup() {
   const name = prompt(t('group_name'))?.trim();
   if (!name) return;
   if (!crypto.subtle) return alert(t('needs_https'));
-  const secret = b64(crypto.getRandomValues(new Uint8Array(32))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const secret = newSecret();
   groups.push({ secret, token: defaultToken(), name: uniqueName(name, groups.map(g => g.name)), nameUpdatedAt: Date.now(), fresh: true });
   view = secret; saveGroups(); render(); commit(secret);
 }
@@ -333,7 +404,6 @@ function since(ms) {
 const event = (counterId, source, at = Date.now()) => ({ id: crypto.randomUUID(), counterId, at, source, deleted: false });
 
 const UNITS = [['minutes', 6e4], ['hours', 36e5], ['days', 864e5], ['weeks', 6048e5]];
-const tagList = s => [...new Set(s.split(',').map(t => t.trim().toLowerCase()).filter(Boolean))]; // same as the app
 
 function editForm(c, avg, k) {
   const ms = c.notifyAfterMs;
@@ -511,6 +581,46 @@ $('#lang').value = saved || '';
 $('#lang').onchange = () => { try { $('#lang').value ? localStorage.setItem('lang', $('#lang').value) : localStorage.removeItem('lang'); } catch {} location.reload(); };
 $('#sort').onchange = () => { localStorage.setItem('sort', $('#sort').value); render(); };
 $('#group').onchange = () => { view = $('#group').value; render(); };
+/** Applies one entry of an import plan: the group's counters are replaced by the file's (moved here from other places if they lived there). */
+async function applyImport({ name, isNew, items }) {
+  let k = '';
+  if (name !== null) {
+    let g = groups.find(g => !isNew && g.name.toLowerCase() === name.toLowerCase());
+    if (!g) { g = { secret: newSecret(), token: defaultToken(), name, nameUpdatedAt: Date.now(), fresh: true }; groups.push(g); saveGroups(); }
+    k = g.secret;
+  }
+  const now = Date.now(), ids = new Set(items.map(it => it.counter.id));
+  const gone = c => ({ ...c, deleted: true, updatedAt: now });
+  const mine = store(k).state.counters.filter(c => !c.deleted && !ids.has(c.id)); // the rest of the group goes, as on the phone
+  await commit(k, { counters: [...items.map(it => ({ ...it.counter, updatedAt: now })), ...mine.map(gone)], events: items.flatMap(it => it.events), drop: [...ids, ...mine.map(c => c.id)] });
+  for (const [o, s] of stores) { // an imported counter that lived in another group moves, it doesn't copy
+    const there = s.state.counters.filter(c => o !== k && !c.deleted && ids.has(c.id));
+    if (there.length) await commit(o, { counters: there.map(gone), events: [], drop: there.map(c => c.id) });
+  }
+}
+
+$('#export').onclick = () => {
+  const parts = [{ group: null, ...store('').state }, ...[...groups].sort(byName).map(g => ({ group: g.name, ...store(g.secret).state }))];
+  const a = Object.assign(document.createElement('a'), { download: `howlongsince-${new Date().toISOString().slice(0, 10)}.json`,
+    href: URL.createObjectURL(new Blob([JSON.stringify(toBackup(parts), null, 2)], { type: 'application/json' })) });
+  a.click(); URL.revokeObjectURL(a.href);
+};
+$('#import').onclick = () => $('#file').click();
+$('#file').onchange = async () => {
+  const f = $('#file').files[0]; $('#file').value = '';
+  if (!f) return;
+  let items;
+  try { items = parseBackup(await f.text()); } catch (e) { return alert(t('cant_read', e.message)); }
+  $('#importtext').textContent = t('import_q', items.length);
+  const go = async replace => {
+    $('#importdlg').close();
+    for (const entry of planImport(items, replace, groups.map(g => g.name), t('imported_name'))) await applyImport(entry);
+    alert(t('done_imported', items.length));
+  };
+  $('#doreplace').onclick = () => go(true); $('#dokeep').onclick = () => go(false); $('#nogo').onclick = () => $('#importdlg').close();
+  $('#importdlg').showModal();
+};
+
 $('#newgroup').onclick = newGroup;
 $('#addgroup').onclick = () => { const link = prompt(t('paste_link')); if (link) join(link); };
 $('#rename').onclick = renameGroup;
