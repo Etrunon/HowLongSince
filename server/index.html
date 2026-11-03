@@ -14,7 +14,7 @@
   :root[data-theme=light] { color-scheme: light; }
   body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--fg); margin: 0; }
   #shell { display: grid; grid-template-columns: 280px 1fr; align-items: start; }
-  main { max-width: 640px; width: 100%; box-sizing: border-box; margin: 0 auto; padding: 16px; }
+  main { max-width: 640px; width: 100%; box-sizing: border-box; margin: 0 auto; padding: 16px 16px 96px; }
   header { display: flex; align-items: center; gap: 8px; }
   #menu, #scrim { display: none; }
   #drawer { position: sticky; top: 0; height: 100vh; overflow-y: auto; box-sizing: border-box; padding: 16px; background: var(--card); display: flex; flex-direction: column; gap: 16px; }
@@ -67,11 +67,16 @@
   .sec button { padding: 2px 8px; font-size: .8rem; }
   h1 { margin: 12px 0; font-size: 1.8rem; }
   #err { color: #d33; }
-  [data-edit] { display: grid; gap: 8px; margin: 12px 0; }
-  [data-edit] label { display: grid; gap: 4px; font-size: .9rem; }
-  [data-edit] label > input, [data-edit] label > select { width: 100%; box-sizing: border-box; }
-  [data-edit] .row > * { min-width: 0; }
-  [data-edit] .row { flex-wrap: wrap; }
+  [data-edit], #newform { display: grid; gap: 8px; margin: 12px 0; }
+  [data-edit] label, #newform label { display: grid; gap: 4px; font-size: .9rem; }
+  [data-edit] label > input, [data-edit] label > select, #newform label > input, #newform label > select { width: 100%; box-sizing: border-box; }
+  [data-edit] .row > *, #newform .row > * { min-width: 0; }
+  [data-edit] .row, #newform .row { flex-wrap: wrap; }
+  #newform h2 { margin: 0; }
+  #fab { position: fixed; right: 16px; bottom: 16px; z-index: 1; display: flex; align-items: center; gap: 8px; border: none; border-radius: 16px; padding: 14px 20px;
+    background: var(--accent); color: var(--bg); font-size: 1.1rem; font-weight: 600; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+  #fab span:first-child { font-size: 1.6rem; line-height: 1; }
+  body.scrolled #fab .lbl { display: none; } /* like the phone's button: a label at the top of the list, just the + once you scroll */
   .row { display: flex; gap: 8px; }
   select { padding: 8px; font-size: 1rem; }
   .overdue .since { color: #d33; }
@@ -111,7 +116,6 @@
   <button data-i18n="login">Log in</button>
 </form>
 <div id="main">
-<form id="add"><input id="label" data-i18n-ph="new_counter" placeholder="New counter" required><button data-i18n="add">Add</button></form>
 <p id="undo" hidden><span></span> <button data-i18n="undo">Undo</button></p>
 <div class="row" id="tools"><input id="q" type="search" data-i18n-ph="search" placeholder="Search labels and tags">
   <select id="sort"><option value="due" data-i18n="sort_due">Most overdue</option><option value="recent" data-i18n="sort_recent">Recently reset</option><option value="name" data-i18n="sort_name">Name</option></select></div>
@@ -121,6 +125,17 @@
 <p id="err"></p>
 </main>
 </div>
+<button id="fab"><span aria-hidden="true">+</span><span class="lbl" data-i18n="new_">New</span></button>
+<dialog id="newdlg">
+  <form id="newform">
+    <h2 data-i18n="new_counter">New counter</h2>
+    <label><span data-i18n="label">Label</span> <input name="label" required></label>
+    <label><span data-i18n="tags">Tags</span> <input name="tags" data-i18n-ph="comma" placeholder="comma separated"></label>
+    <label id="newgroupl"><span data-i18n="group">Group</span> <select name="group"></select></label>
+    <label><span data-i18n="notify_after">Notify after</span> <span class="row"><input name="amount" type="number" min="1" data-i18n-ph="never" placeholder="never"><select name="unit"></select></span></label>
+    <div class="row"><button data-i18n="save">Save</button><button type="button" id="newcancel" data-i18n="cancel">Cancel</button></div>
+  </form>
+</dialog>
 <dialog id="share">
   <h2 id="sharename"></h2>
   <div id="qr"></div>
@@ -138,7 +153,7 @@ const esc = s => s.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
 
 // English and Italian, picked from the browser; same wording as the app's strings.xml.
 const T = {
-  en: { login: 'Log in', new_counter: 'New counter', add: 'Add', undo: 'Undo', search: 'Search labels and tags',
+  en: { login: 'Log in', new_counter: 'New counter', undo: 'Undo', search: 'Search labels and tags',
     sort_due: 'Most overdue', sort_recent: 'Recently reset', sort_name: 'Name',
     unreachable: 'Server unreachable, last change not saved. Retrying every minute.', sync_failed: 'Sync failed: %s',
     label: 'Label', tags: 'Tags', comma: 'comma separated', notify_after: 'Notify after', never: 'never',
@@ -149,11 +164,11 @@ const T = {
     reset_label: 'Reset %s', pick_past: 'Pick a time in the past', create: 'created', manual: 'manual', nfc: 'via NFC', d: 'd',
     open_app: 'Open in app', forget: 'Forget', paste_link: 'Paste a group link', bad_link: 'That isn\'t a group link',
         no_data: 'Nothing found for this link on this server', decrypt_failed: 'Can\'t decrypt: wrong key?', needs_https: 'This page needs https to decrypt (or localhost).', busy: 'Busy, try again', all_groups: 'All', ungrouped: 'Ungrouped', synced: 'Synced %s', group: 'Group', move_title: 'Move out of a synced group?', move_text: 'The counter will be removed for everyone else in the group it leaves.', new_group: 'New group', group_name: 'Group name', rename: 'Rename', join: 'Join', join_question: 'Join «%s»?',
-    already_joined: 'Already joined as «%s»', other_server: 'That link is for %s. Open it on that server\'s page.', token: 'Token', share: 'Share', copy_link: 'Copy link', link_copied: 'Copied', close: 'Close', settings: 'Settings', language: 'Language', menu: 'Menu', dark_theme: 'Dark theme', debug_mode: 'Debug mode', debug_hint: 'Allow "notify after" in minutes', export_data: 'Export data', import_data: 'Import data', replace: 'Replace', keep_both: 'Keep both', cancel: 'Cancel', imported_name: 'Imported', cant_read: 'Can\'t read file: %s', done_imported: 'Imported %s counters',
+    already_joined: 'Already joined as «%s»', other_server: 'That link is for %s. Open it on that server\'s page.', token: 'Token', share: 'Share', copy_link: 'Copy link', link_copied: 'Copied', close: 'Close', new_: 'New', settings: 'Settings', language: 'Language', menu: 'Menu', dark_theme: 'Dark theme', debug_mode: 'Debug mode', debug_hint: 'Allow "notify after" in minutes', export_data: 'Export data', import_data: 'Import data', replace: 'Replace', keep_both: 'Keep both', cancel: 'Cancel', imported_name: 'Imported', cant_read: 'Can\'t read file: %s', done_imported: 'Imported %s counters',
     import_q: 'The file has %s counters. Replace: groups with the same name are deleted and replaced by the file\'s. Keep both: they are imported as new groups, renamed if a name is taken. Replacing can\'t be undone.',
     share_warning: 'Anyone with this link can read and change this group, and access can\'t be taken back. To cut someone off, make a new group and move the counters.',
     forget_backup: 'Copy this link first: it is the only backup of the key. OK forgets the group in this browser (the data stays on the server), Cancel keeps it.' },
-  it: { login: 'Accedi', new_counter: 'Nuovo contatore', add: 'Aggiungi', undo: 'Annulla', search: 'Cerca tra etichette e tag',
+  it: { login: 'Accedi', new_counter: 'Nuovo contatore', undo: 'Annulla', search: 'Cerca tra etichette e tag',
     sort_due: 'Più in ritardo', sort_recent: 'Azzerati di recente', sort_name: 'Nome',
     unreachable: 'Server irraggiungibile, ultima modifica non salvata. Nuovo tentativo ogni minuto.', sync_failed: 'Sincronizzazione non riuscita: %s',
     label: 'Etichetta', tags: 'Tag', comma: 'separati da virgole', notify_after: 'Avvisa dopo', never: 'mai',
@@ -164,7 +179,7 @@ const T = {
     reset_label: 'Azzera %s', pick_past: 'Scegli un momento nel passato', create: 'creato', manual: 'manuale', nfc: 'via NFC', d: 'g',
     open_app: 'Apri nell\'app', forget: 'Dimentica', paste_link: 'Incolla un link di gruppo', bad_link: 'Questo non è un link di gruppo',
         no_data: 'Niente trovato per questo link su questo server', decrypt_failed: 'Impossibile decifrare: chiave sbagliata?', needs_https: 'Questa pagina richiede https per decifrare (o localhost).', busy: 'Occupato, riprova', all_groups: 'Tutti', ungrouped: 'Senza gruppo', synced: 'Sincronizzato alle %s', group: 'Gruppo', move_title: 'Spostare da un gruppo sincronizzato?', move_text: 'Il contatore verrà rimosso per tutti gli altri nel gruppo che lascia.', new_group: 'Nuovo gruppo', group_name: 'Nome del gruppo', rename: 'Rinomina', join: 'Unisciti', join_question: 'Unirti a «%s»?',
-    already_joined: 'Già unito come «%s»', other_server: 'Quel link è per %s. Aprilo sulla pagina di quel server.', token: 'Token', share: 'Condividi', copy_link: 'Copia link', link_copied: 'Copiato', close: 'Chiudi', settings: 'Impostazioni', language: 'Lingua', menu: 'Menu', dark_theme: 'Tema scuro', debug_mode: 'Modalità debug', debug_hint: 'Consenti "avvisa dopo" in minuti', export_data: 'Esporta dati', import_data: 'Importa dati', replace: 'Sostituisci', keep_both: 'Tieni entrambi', cancel: 'Annulla', imported_name: 'Importati', cant_read: 'Impossibile leggere il file: %s', done_imported: 'Importati %s contatori',
+    already_joined: 'Già unito come «%s»', other_server: 'Quel link è per %s. Aprilo sulla pagina di quel server.', token: 'Token', share: 'Condividi', copy_link: 'Copia link', link_copied: 'Copiato', close: 'Chiudi', new_: 'Nuovo', settings: 'Impostazioni', language: 'Lingua', menu: 'Menu', dark_theme: 'Tema scuro', debug_mode: 'Modalità debug', debug_hint: 'Consenti "avvisa dopo" in minuti', export_data: 'Esporta dati', import_data: 'Importa dati', replace: 'Sostituisci', keep_both: 'Tieni entrambi', cancel: 'Annulla', imported_name: 'Importati', cant_read: 'Impossibile leggere il file: %s', done_imported: 'Importati %s contatori',
     import_q: 'Il file contiene %s contatori. Sostituisci: i gruppi con lo stesso nome vengono eliminati e sostituiti da quelli del file. Tieni entrambi: vengono importati come nuovi gruppi, rinominati se un nome è già usato. Sostituire non si può annullare.',
     share_warning: 'Chiunque abbia questo link può leggere e modificare questo gruppo, e l\'accesso non si può revocare. Per escludere qualcuno, crea un nuovo gruppo e sposta i contatori.',
     forget_backup: 'Copia prima questo link: è l\'unico backup della chiave. OK dimentica il gruppo in questo browser (i dati restano sul server), Annulla lo tiene.' },
@@ -547,12 +562,27 @@ $('#login').onsubmit = e => {
   syncAll();
 };
 
-$('#add').onsubmit = e => {
-  e.preventDefault();
-  const c = { id: crypto.randomUUID(), label: $('#label').value.trim(), tags: '', notifyAfterMs: null, nfcTagId: null, updatedAt: Date.now(), deleted: false, archived: false };
-  $('#label').value = '';
-  commit(view === 'all' ? '' : view, { counters: [c], events: [event(c.id, 'create')] }); // into the group being looked at, else Ungrouped
+// The + button, like the phone's: a form for a new counter, into the group being looked at unless you pick another.
+$('#fab').onclick = () => {
+  const f = $('#newform'); f.reset();
+  f.elements.group.innerHTML = [['', t('ungrouped')], ...[...groups].sort(byName).map(g => [g.secret, g.name || '…'])]
+    .map(([v, n]) => `<option value="${esc(v)}">${esc(n)}</option>`).join('');
+  f.elements.group.value = view === 'all' ? '' : view;
+  $('#newgroupl').hidden = !groups.length;
+  f.elements.unit.innerHTML = unitsFor(null, debug).map(([u]) => `<option value="${u}" ${u === 'days' ? 'selected' : ''}>${t(u)}</option>`).join('');
+  $('#newdlg').showModal();
+  f.elements.label.focus();
 };
+$('#newcancel').onclick = () => $('#newdlg').close();
+$('#newform').onsubmit = e => {
+  e.preventDefault();
+  const f = new FormData(e.target), amount = Number(f.get('amount'));
+  const c = { id: crypto.randomUUID(), label: f.get('label').trim(), tags: tagList(f.get('tags')).join(','), nfcTagId: null, updatedAt: Date.now(), deleted: false, archived: false,
+    notifyAfterMs: amount > 0 ? amount * UNITS.find(([u]) => u === f.get('unit'))[1] : null };
+  $('#newdlg').close();
+  commit(f.get('group'), { counters: [c], events: [event(c.id, 'create')] });
+};
+addEventListener('scroll', () => document.body.classList.toggle('scrolled', scrollY > 0), { passive: true });
 
 $('#tags').onclick = e => {
   if (e.target.closest('[data-archived]')) { showArchived = !showArchived; render(); }
