@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Long Since?</title>
+<link rel="icon" href="icon.svg">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#3366cc">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="shell">
+<aside id="drawer">
+  <h2 class="brand"><img src="icon.svg" alt=""><span>How Long Since?</span></h2>
+  <nav id="views"></nav>
+  <div class="grp">
+    <button id="newgroup" data-i18n="new_group">New group</button><button id="addgroup" data-i18n="join">Join</button>
+  </div>
+  <div class="grp" id="groupopts" hidden>
+    <h3 id="groupname"></h3>
+    <button id="shareview" data-i18n="share">Share</button><button id="rename" data-i18n="rename">Rename</button><button id="forget" data-i18n="forget">Forget</button>
+    <button id="devices" data-i18n="devices">Devices</button><button id="setpw" data-i18n="change_password">Change recovery password</button><button id="promote" data-i18n="become_admin">Become admin</button>
+    <a id="app" href="#" data-i18n="open_app">Open in app</a>
+  </div>
+  <div class="grp">
+    <h3 data-i18n="settings">Settings</h3>
+    <label><input type="checkbox" id="dark"> <span data-i18n="dark_theme">Dark theme</span></label>
+    <label><input type="checkbox" id="debug"> <span data-i18n="debug_mode">Debug mode</span></label>
+    <span class="muted" data-i18n="debug_hint">Allow "notify after" in minutes</span>
+    <label><span data-i18n="device_name">Device name</span> <input id="devname" maxlength="40"></label>
+    <span class="muted" data-i18n="device_name_hint">Shown next to the resets you log, on every device in a synced group</span>
+    <label><span data-i18n="language">Language</span> <select id="lang" aria-label="Language"><option value="">Auto</option><option value="en">English</option><option value="it">Italiano</option></select></label>
+    <button id="export" data-i18n="export_data">Export data</button><button id="import" data-i18n="import_data">Import data</button>
+    <input type="file" id="file" accept=".json,application/json" hidden>
+  </div>
+</aside>
+<div id="scrim"></div>
+<main>
+<header><button id="menu" aria-label="Menu" data-i18n-label="menu">☰</button><img src="icon.svg" alt="" class="logo"><h1 id="title">How Long Since?</h1></header>
+<div id="main">
+<p id="undo" hidden><span></span> <button data-i18n="undo">Undo</button></p>
+<div class="row" id="tools"><input id="q" type="search" data-i18n-ph="search" placeholder="Search labels and tags">
+  <select id="sort"><option value="due" data-i18n="sort_due">Most overdue</option><option value="recent" data-i18n="sort_recent">Recently reset</option><option value="name" data-i18n="sort_name">Name</option></select></div>
+<div id="tags"></div>
+<div id="list"></div>
+</div>
+<p id="err"></p>
+</main>
+</div>
+<button id="fab"><span aria-hidden="true">+</span><span class="lbl" data-i18n="new_">New</span></button>
+<dialog id="newdlg">
+  <form id="newform">
+    <h2 data-i18n="new_counter">New counter</h2>
+    <label><span data-i18n="label">Label</span> <input name="label" required></label>
+    <label><span data-i18n="tags">Tags</span> <input name="tags" data-i18n-ph="comma" placeholder="comma separated"></label>
+    <label id="newgroupl"><span data-i18n="group">Group</span> <select name="group"></select></label>
+    <label><span data-i18n="notify_after">Notify after</span> <span class="row"><input name="amount" type="number" min="1" data-i18n-ph="never" placeholder="never"><select name="unit"></select></span></label>
+    <div class="row"><button data-i18n="save">Save</button><button type="button" id="newcancel" data-i18n="cancel">Cancel</button></div>
+  </form>
+</dialog>
+<dialog id="share">
+  <h2 id="sharename"></h2>
+  <div id="qr"></div>
+  <input id="sharelink" readonly aria-label="Link">
+  <p class="muted" data-i18n="share_warning"></p>
+  <div class="row"><button id="copy" data-i18n="copy_link">Copy link</button><button id="nativeshare" data-i18n="share" hidden>Share</button><button id="closeshare" data-i18n="close">Close</button></div>
+</dialog>
+<dialog id="devdlg">
+  <h2 data-i18n="devices">Devices</h2>
+  <div id="devlist"></div>
+  <div class="row"><button id="closedev" data-i18n="close">Close</button></div>
+</dialog>
+<dialog id="importdlg">
+  <p id="importtext"></p>
+  <div class="row"><button id="doreplace" data-i18n="replace">Replace</button><button id="dokeep" data-i18n="keep_both">Keep both</button><button id="nogo" data-i18n="cancel">Cancel</button></div>
+</dialog>
+<script src="qrcode.js"></script>
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -84,7 +84,7 @@ server/
   main.go          Sync server: encrypted blob store and HTTP handlers
   main_test.go     Blob store test (runs during docker build)
   web.test.mjs     Web app logic tests: node --test server/web.test.mjs
-  index.html       Web app, built into the server binary
+  web/             Web app (index.html, style.css, core.js, app.js), built into the server binary
   Dockerfile, compose.yml
 logo.svg           Logo (the app icon and the web favicon are drawn from it)
 ```

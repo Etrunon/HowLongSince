@@ -84,7 +84,7 @@ server/
   main.go          Server di sincronizzazione: archivio di blob cifrati e handler HTTP
   main_test.go     Test dell'archivio dei blob (eseguito durante il docker build)
   web.test.mjs     Test della logica della web app: node --test server/web.test.mjs
-  index.html       Web app, inclusa nel binario del server
+  web/             Web app (index.html, style.css, core.js, app.js), inclusa nel binario del server
   Dockerfile, compose.yml
 logo.svg           Logo (l'icona dell'app e la favicon web derivano da qui)
 ```

@@ -9,10 +9,11 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
-	_ "embed"
+	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -26,11 +27,8 @@ import (
 	"time"
 )
 
-//go:embed index.html
-var index []byte
-
-//go:embed icon.svg
-var icon []byte
+//go:embed web
+var web embed.FS
 
 const manifest = `{"name":"How Long Since?","short_name":"How Long Since","start_url":".","display":"standalone",
 "background_color":"#3366cc","theme_color":"#3366cc","icons":[{"src":"icon.svg","sizes":"any","type":"image/svg+xml"}]}`
@@ -89,7 +87,7 @@ type invite struct {
 	Expires   int64  `json:"expires"`
 }
 
-// blob is the file on disk: the ciphertext (a v2 envelope, see index.html) plus what only the server sees.
+// blob is the file on disk: the ciphertext (a v2 envelope, see web/core.js) plus what only the server sees.
 // A group without a recovery hash is legacy (made before devices existed): TOKEN still opens it, and claim enrolls into it.
 type blob struct {
 	LastSynced int64    `json:"lastSynced"` // unix seconds, at most an hour stale
@@ -408,8 +406,8 @@ func (s *server) routes() *http.ServeMux {
 			w.Write(body)
 		})
 	}
-	static("/{$}", "text/html; charset=utf-8", index)
-	static("/icon.svg", "image/svg+xml", icon)
+	site, _ := fs.Sub(web, "web")
+	mux.Handle("GET /", http.FileServerFS(site))
 	static("/manifest.webmanifest", "application/manifest+json", []byte(manifest))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	mux.HandleFunc("GET /stats", func(w http.ResponseWriter, r *http.Request) {

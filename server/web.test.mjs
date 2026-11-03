@@ -1,10 +1,9 @@
-// Runs the page's pure logic (the part of index.html between "// <core>" and "// </core>"): node --test server/
+// Runs the page's pure logic (web/core.js): node --test server/
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const html = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
-const core = html.slice(html.indexOf('// <core>'), html.indexOf('// </core>'));
+const core = readFileSync(new URL('./web/core.js', import.meta.url), 'utf8');
 const { UNITS, unitsFor, tagList, uniqueName, merge, toBackup, parseBackup, planImport, deriveKeys, seal, unseal, sealBytes, b64, b64u, stretch, parseLink } =
   new Function(core + '; return { UNITS, unitsFor, tagList, uniqueName, merge, toBackup, parseBackup, planImport, deriveKeys, seal, unseal, sealBytes, b64, b64u, stretch, parseLink };')();
 
