@@ -36,6 +36,7 @@ android {
             signingConfig = signingConfigs.getByName("release")
         }
     }
+    androidResources { localeFilters += listOf("en", "it") } // drop library translations we do not ship
     buildFeatures { compose = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
