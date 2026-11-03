@@ -104,7 +104,9 @@
     <string name="group_settings">Impostazioni del gruppo</string>
     <string name="delete_group">Elimina gruppo</string>
     <string name="delete_group_title">Eliminare il gruppo?</string>
-    <string name="delete_group_text">«%s» viene rimosso. I suoi contatori passano a Senza gruppo.</string>
+    <string name="delete_group_text">«%s» viene rimosso. Cosa succede ai suoi contatori su questo telefono?</string>
+    <string name="delete_group_keep">Sposta in Senza gruppo</string>
+    <string name="delete_group_purge">Eliminali</string>
     <string name="imported">Importati</string>
     <string name="keep_both">Tieni entrambi</string>
     <string name="synced_group">Sincronizzati</string>
@@ -117,6 +119,8 @@
     <string name="turn_off">Disattiva la sincronizzazione</string>
     <string name="turn_off_title">Disattivare la sincronizzazione?</string>
     <string name="turn_off_text">La chiave viene cancellata da questo telefono e i contatori restano qui, non più sincronizzati. Senza un altro telefono con la chiave non potrai sincronizzare di nuovo questo gruppo.</string>
+    <string name="move_to">Sposta in</string>
+    <string name="n_selected">%d selezionati</string>
     <string name="move_title">Spostare da un gruppo sincronizzato?</string>
     <string name="move_text">Il contatore verrà rimosso per tutti gli altri nel gruppo che lascia.</string>
     <string name="move">Sposta</string>

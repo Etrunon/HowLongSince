@@ -20,6 +20,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.horizontalScroll
@@ -197,6 +200,12 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, joinR
     var sort by remember { mutableStateOf(prefs0.getString("sort", "due")!!) }
     var folded by remember { mutableStateOf(prefs0.getStringSet("folded", emptySet())!!.toSet()) } // group ids, "0" = Ungrouped
     val ungrouped = stringResource(R.string.ungrouped)
+    var selected by remember { mutableStateOf(setOf<Long>()) } // long-press picks cards to move together
+    var moving by remember { mutableStateOf(false) }
+    var moveTo by remember { mutableStateOf<List<Long?>?>(null) } // [destination] once chosen, while the synced-group warning is up
+    val picked = counters.filter { it.counter.id in selected }.map { it.counter }
+    if (picked.size != selected.size) selected = picked.map { it.id }.toSet()
+    fun move(to: Long?) = scope.launch { picked.forEach { dao.update(it.copy(groupId = to)); reschedule(ctx, it.id) }; selected = emptySet() }
     val shown = pool.filter { filter == null || filter in tagList(it.counter.tags) }
         .filter { query.isBlank() || it.counter.label.contains(query.trim(), true) || it.counter.tags.contains(query.trim(), true) }
         .let { l -> when (sort) {
@@ -268,9 +277,13 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, joinR
       } else {
       val topBar = TopAppBarDefaults.pinnedScrollBehavior()
       val listState = rememberLazyListState()
+      BackHandler(selected.isNotEmpty()) { selected = emptySet() }
       Scaffold(
         modifier = Modifier.nestedScroll(topBar.nestedScrollConnection),
-        topBar = { TopAppBar(title = { Row(verticalAlignment = Alignment.CenterVertically) {
+        topBar = { if (selected.isNotEmpty()) TopAppBar(title = { Text(stringResource(R.string.n_selected, selected.size)) },
+            navigationIcon = { IconButton(onClick = { selected = emptySet() }) { Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.cancel)) } },
+            actions = { IconButton(onClick = { moving = true }) { Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = stringResource(R.string.move_to)) } })
+          else TopAppBar(title = { Row(verticalAlignment = Alignment.CenterVertically) {
             Logo(); Spacer(Modifier.width(12.dp))
             val title = when (view) { ALL -> stringResource(R.string.app_name); UNCAT -> ungrouped; else -> viewed?.name ?: "" }
             Text(if (title.length > 20) title.take(20).trimEnd() + "…" else title, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -311,7 +324,8 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, joinR
             val byGroup = shown.groupBy(::groupOf)
             // Headers only while looking at everything and at least one group exists.
             val sections = if (view == ALL && groups.isNotEmpty()) (listOf(UNCAT) + groups.map { it.id }).mapNotNull { k -> byGroup[k]?.let { k to it } } else null
-            @Composable fun card(c: CounterWithLast) = CounterCard(c, now, groups.find { it.id == c.counter.groupId }?.name.takeIf { groups.size >= 2 }, onOpen = { open = c.counter.id }) {
+            @Composable fun card(c: CounterWithLast) = CounterCard(c, now, groups.find { it.id == c.counter.groupId }?.name.takeIf { groups.size >= 2 }, selected = c.counter.id in selected,
+                onLongClick = { selected = selected + c.counter.id }, onOpen = { if (selected.isEmpty()) open = c.counter.id else selected = selected.let { s -> if (c.counter.id in s) s - c.counter.id else s + c.counter.id } }) {
                 scope.launch {
                     val id = c.counter.id
                     val event = dao.reset(id); reschedule(ctx, id)
@@ -352,6 +366,27 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, joinR
 
     if (sharing) groups.find { it.id == view }?.let { g -> GroupShare(g) { sharing = false } }
     if (creating) CreateGroupDialog(groups, dao, onDismiss = { creating = false }) { creating = false; newGroup = it }
+    if (moving) AlertDialog(
+        onDismissRequest = { moving = false },
+        title = { Text(stringResource(R.string.move_to)) },
+        text = { Column(Modifier.verticalScroll(rememberScrollState())) {
+            for ((id, name) in listOf<Pair<Long?, String>>(null to ungrouped) + groups.map { it.id to it.name }) TextButton(onClick = {
+                moving = false
+                if (picked.any { p -> p.groupId != id && groups.any { it.id == p.groupId && it.syncUrl != null } }) moveTo = listOf(id) else move(id)
+            }, enabled = picked.any { it.groupId != id }) { Text(name) }
+        } },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = { moving = false }) { Text(stringResource(R.string.cancel)) } },
+    )
+    moveTo?.let { to ->
+        AlertDialog(
+            onDismissRequest = { moveTo = null },
+            title = { Text(stringResource(R.string.move_title)) },
+            text = { Text(stringResource(R.string.move_text)) },
+            confirmButton = { TextButton(onClick = { moveTo = null; move(to[0]) }) { Text(stringResource(R.string.move), color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { moveTo = null }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
     joining?.let { JoinDialog(it, groups) { joining = null } }
     editing?.let { c ->
         EditDialog(c, groups, debug, dao, onDismiss = { editing = null }, onDelete = { scope.launch { dao.delete(c.id); reschedule(ctx, c.id) }; editing = null }) { saved ->
@@ -543,16 +578,18 @@ fun Settings(dark: Boolean, onDark: (Boolean) -> Unit, debug: Boolean, onDebug: 
 }
 
 @Composable
-fun CounterCard(c: CounterWithLast, now: Long, group: String?, onOpen: () -> Unit, onReset: () -> Unit) {
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+fun CounterCard(c: CounterWithLast, now: Long, group: String?, selected: Boolean, onLongClick: () -> Unit, onOpen: () -> Unit, onReset: () -> Unit) {
     val (n, unit) = sinceTwo(now - c.lastAt)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val tags = tagList(c.counter.tags)
     val haptic = LocalHapticFeedback.current
-    Card(Modifier.fillMaxWidth().clickable(onClick = onOpen),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+    val bg = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh
+    Card(Modifier.fillMaxWidth().combinedClickable(onClick = onOpen, onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onLongClick() }),
+        colors = CardDefaults.cardColors(containerColor = bg)) {
       Row(Modifier.height(IntrinsicSize.Min)) {
         // Bar in the first tag's color.
-        Box(Modifier.width(8.dp).fillMaxHeight().background(tags.firstOrNull()?.let { tagColor(it) } ?: MaterialTheme.colorScheme.surfaceContainerHigh))
+        Box(Modifier.width(8.dp).fillMaxHeight().background(tags.firstOrNull()?.let { tagColor(it) } ?: bg))
         Row(Modifier.padding(start = 16.dp, end = 20.dp, top = 16.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.width(88.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 AnimatedContent(n, transitionSpec = {

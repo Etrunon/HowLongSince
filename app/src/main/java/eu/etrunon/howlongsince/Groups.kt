@@ -7,6 +7,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -76,14 +77,16 @@ fun GroupSettings(g: CounterGroup, groups: List<CounterGroup>, dao: CounterDao, 
         title = { Text(stringResource(R.string.delete_group_title)) },
         text = { Text(stringResource(R.string.delete_group_text, g.name)) },
         confirmButton = {
-            TextButton(onClick = {
-                scope.launch {
-                    leaveGroup(ctx, g)
-                    dao.deleteGroup(g.id)
-                    dropKeys(ctx, g.id) // its counters stay here, local only
-                }
-                deleting = false; onBack()
-            }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
+            Column(horizontalAlignment = Alignment.End) {
+                for (keep in listOf(true, false)) TextButton(onClick = {
+                    scope.launch {
+                        leaveGroup(ctx, g)
+                        dao.deleteGroup(g.id, keep)
+                        dropKeys(ctx, g.id) // kept counters stay here, local only
+                    }
+                    deleting = false; onBack()
+                }) { Text(stringResource(if (keep) R.string.delete_group_keep else R.string.delete_group_purge), color = MaterialTheme.colorScheme.error.takeIf { !keep } ?: Color.Unspecified) }
+            }
         },
         dismissButton = { TextButton(onClick = { deleting = false }) { Text(stringResource(R.string.cancel)) } },
     )

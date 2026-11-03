@@ -93,9 +93,10 @@ interface CounterDao {
     @Query("UPDATE CounterGroup SET name = :name, nameUpdatedAt = :now WHERE id = :id") suspend fun rename(id: Long, name: String, now: Long = System.currentTimeMillis())
     @Query("UPDATE Counter SET groupId = NULL WHERE groupId = :id") suspend fun ungroup(id: Long)
     @Query("UPDATE CounterGroup SET deleted = 1, nameUpdatedAt = :now WHERE id = :id") suspend fun tombstone(id: Long, now: Long)
-    /** Its counters fall back to Ungrouped. */
+    @Query("DELETE FROM Counter WHERE groupId = :id") suspend fun purgeGroup(id: Long) // events go too (cascade)
+    /** Its counters fall back to Ungrouped, or go with it when [keep] is false. */
     @Transaction
-    suspend fun deleteGroup(id: Long) { ungroup(id); tombstone(id, System.currentTimeMillis()) }
+    suspend fun deleteGroup(id: Long, keep: Boolean) { if (keep) ungroup(id) else purgeGroup(id); tombstone(id, System.currentTimeMillis()) }
     @Query("SELECT * FROM CounterGroup WHERE id = :id") suspend fun group(id: Long): CounterGroup?
     @Query("UPDATE CounterGroup SET syncUrl = :url WHERE id = :id") suspend fun setSyncUrl(id: Long, url: String?)
     /** Every loose counter joins group [id] (the old global sync becoming a group). */

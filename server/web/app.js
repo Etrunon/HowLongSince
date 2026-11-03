@@ -12,7 +12,7 @@ const T = {
     nfc_paired: 'NFC tag paired', unpair: 'Unpair', save: 'Save', archive: 'Archive', unarchive: 'Unarchive',
     intervals: 'Intervals (avg %s)', archived: 'Archived', archived_hint: 'This counter is archived', delete: 'Delete', confirm_delete: 'Delete this counter?',
     reset_label: 'Reset %s', pick_past: 'Pick a time in the past', create: 'created', manual: 'manual', nfc: 'via NFC', d: 'd', y: 'y',
-    open_app: 'Open in app', forget: 'Forget', paste_link: 'Paste a group link', bad_link: 'That isn\'t a group link', next: 'Next', ok: 'OK',
+    open_app: 'Open in app', forget: 'Forget', move_to: 'Move to', n_selected: '%s selected', forget_keep: 'Move to Ungrouped', forget_purge: 'Remove counters', paste_link: 'Paste a group link', bad_link: 'That isn\'t a group link', next: 'Next', ok: 'OK',
     no_data: 'Nothing found for this link on this server', decrypt_failed: 'Can\'t decrypt: wrong key?', needs_https: 'This page needs https to decrypt (or localhost).', busy: 'Busy, try again',
     all_groups: 'All', ungrouped: 'Ungrouped', synced: 'Synced %s', group: 'Group', move_title: 'Move out of a synced group?', move_text: 'The counter will be removed for everyone else in the group it leaves.',
     new_group: 'New group', group_name: 'Group name', name: 'Name', join: 'Join', join_group: 'Join a group', join_on: 'Join a group on %s?', password: 'Recovery password',
@@ -24,7 +24,7 @@ const T = {
     export_data: 'Export', import_data: 'Import', replace: 'Replace', keep_both: 'Keep both', cancel: 'Cancel', imported_name: 'Imported', cant_read: 'Can\'t read file: %s', done_imported: 'Imported %s counters',
     import_q: 'The file has %s counters. Replace: groups with the same name are deleted and replaced by the file\'s. Keep both: they are imported as new groups, renamed if a name is taken. Replacing can\'t be undone.',
     share_warning: 'A **single-use** invite, valid for **24 hours**.\n\nWhoever joins with it can read and change this group until an admin revokes them; they keep what they already saw.',
-    forget_backup: 'Copy this link first: with the recovery password it is the backup of the key. Forget removes the group from this browser (the data stays on the server).',
+    forget_backup: 'Copy this link first: with the recovery password it is the backup of the key. Forget removes the group from this browser (the data stays on the server). Its counters here can move to Ungrouped or be removed.',
     sync: 'Sync', server: 'Server: %s', sync_now: 'Sync now', devices: 'Devices', change_password: 'Change password', become_admin: 'Become admin',
     pw_join: 'Recovery password, to join as an admin', revoke: 'Revoke', admin: 'Admin', member: 'Member', this_device: 'This device',
     last_seen: 'last seen %s', confirm_revoke: 'Revoke «%s»? It stops syncing this group, but keeps what it already has.',
@@ -42,7 +42,7 @@ const T = {
     nfc_paired: 'Tag NFC abbinato', unpair: 'Disabbina', save: 'Salva', archive: 'Archivia', unarchive: 'Ripristina',
     intervals: 'Intervalli (media %s)', archived: 'Archiviati', archived_hint: 'Questo contatore è archiviato', delete: 'Elimina', confirm_delete: 'Eliminare questo contatore?',
     reset_label: 'Azzerato %s', pick_past: 'Scegli un momento nel passato', create: 'creato', manual: 'manuale', nfc: 'via NFC', d: 'g', y: 'a',
-    open_app: 'Apri nell\'app', forget: 'Dimentica', paste_link: 'Incolla un link di gruppo', bad_link: 'Questo non è un link di gruppo', next: 'Avanti', ok: 'OK',
+    open_app: 'Apri nell\'app', forget: 'Dimentica', move_to: 'Sposta in', n_selected: '%s selezionati', forget_keep: 'Sposta in Senza gruppo', forget_purge: 'Elimina contatori', paste_link: 'Incolla un link di gruppo', bad_link: 'Questo non è un link di gruppo', next: 'Avanti', ok: 'OK',
     no_data: 'Niente trovato per questo link su questo server', decrypt_failed: 'Impossibile decifrare: chiave sbagliata?', needs_https: 'Questa pagina richiede https per decifrare (o localhost).', busy: 'Occupato, riprova',
     all_groups: 'Tutti', ungrouped: 'Senza gruppo', synced: 'Sincronizzato alle %s', group: 'Gruppo', move_title: 'Spostare da un gruppo sincronizzato?', move_text: 'Il contatore verrà rimosso per tutti gli altri nel gruppo che lascia.',
     new_group: 'Nuovo gruppo', group_name: 'Nome del gruppo', name: 'Nome', join: 'Unisciti', join_group: 'Unisciti a un gruppo', join_on: 'Unirti a un gruppo su %s?', password: 'Password di recupero',
@@ -54,7 +54,7 @@ const T = {
     export_data: 'Esporta', import_data: 'Importa', replace: 'Sostituisci', keep_both: 'Tieni entrambi', cancel: 'Annulla', imported_name: 'Importati', cant_read: 'Impossibile leggere il file: %s', done_imported: 'Importati %s contatori',
     import_q: 'Il file contiene %s contatori. Sostituisci: i gruppi con lo stesso nome vengono eliminati e sostituiti da quelli del file. Tieni entrambi: vengono importati come nuovi gruppi, rinominati se un nome è già usato. Sostituire non si può annullare.',
     share_warning: 'Un invito **monouso**, valido **24 ore**.\n\nChi entra con esso può leggere e modificare questo gruppo finché un amministratore non lo revoca; tiene ciò che ha già visto.',
-    forget_backup: 'Copia prima questo link: con la password di recupero è il backup della chiave. Dimentica toglie il gruppo da questo browser (i dati restano sul server).',
+    forget_backup: 'Copia prima questo link: con la password di recupero è il backup della chiave. Dimentica toglie il gruppo da questo browser (i dati restano sul server). I suoi contatori qui possono passare a Senza gruppo o essere eliminati.',
     sync: 'Sincronizzazione', server: 'Server: %s', sync_now: 'Sincronizza ora', devices: 'Dispositivi', change_password: 'Cambia password', become_admin: 'Diventa amministratore',
     pw_join: 'Password di recupero, per entrare come amministratore', revoke: 'Revoca', admin: 'Amministratore', member: 'Membro', this_device: 'Questo dispositivo',
     last_seen: 'visto %s', confirm_revoke: 'Revocare «%s»? Smette di sincronizzare questo gruppo, ma tiene ciò che ha già.',
@@ -74,6 +74,7 @@ document.querySelectorAll('[data-i18n-label]').forEach(el => el.ariaLabel = t(el
 
 // Material icons (24px paths).
 const ICONS = {
+  arrow: 'M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z',
   menu: 'M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z',
   back: 'M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z',
   edit: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z',
@@ -104,13 +105,15 @@ function toast(text, action, fn) {
   el.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => el.hidden = true, action ? 8000 : 5000);
 }
 /** Resolves to the typed text (input), true (no input) or null (cancelled). */
-function ask(text, { input, value = '', ok = t('ok'), danger, info } = {}) {
+const ALT = Symbol('alt'); // what ask() resolves to when the extra button is pressed
+function ask(text, { input, value = '', ok = t('ok'), alt, danger, info } = {}) {
   const d = $('#ask'), i = $('#askinput');
   $('#asktext').textContent = text; $('#askcancel').hidden = !!info; // info: just a message to close
   i.hidden = !input; i.type = input || 'text'; i.value = value;
+  $('#askalt').hidden = !alt; $('#askalt').textContent = alt || ''; $('#askalt').classList.toggle('danger', !!danger);
   $('#askok').textContent = ok; $('#askok').classList.toggle('danger', !!danger);
   d.returnValue = ''; d.showModal(); if (input) { i.focus(); i.select(); }
-  return new Promise(res => d.onclose = () => res(d.returnValue === 'ok' ? (input ? i.value : true) : null));
+  return new Promise(res => d.onclose = () => res(d.returnValue === 'alt' ? ALT : d.returnValue === 'ok' ? (input ? i.value : true) : null));
 }
 
 // Groups this browser knows: { secret, token, name }. The secret never leaves the browser; the server only sees an id derived from it.
@@ -147,6 +150,7 @@ const ownerOf = id => [...stores].find(([, s]) => s.state.counters.some(c => c.i
 const ownerOfEvent = id => [...stores].find(([, s]) => s.state.events.some(e => e.id === id && s.state.counters.some(c => c.id === e.counterId && !c.deleted)))?.[0];
 const counterOf = id => stores.get(ownerOf(id))?.state.counters.find(c => c.id === id);
 const groupOf = k => groups.find(g => g.secret === k);
+const selected = new Set(); // ids of the cards picked for a move (long-press, or Ctrl/Cmd-click)
 let view = 'all'; // what the list shows: 'all', '' (Ungrouped) or a group's secret
 // Each group has this browser's own device token (g.device); g.admin says whether it may invite and revoke.
 const headers = g => g.device ? { Authorization: 'Bearer ' + g.device } : {};
@@ -265,6 +269,8 @@ function fillGroups() {
   $('#title').textContent = view === 'all' ? 'How Long Since?' : cut(view === '' ? t('ungrouped') : g?.name || '…');
   $('#gearhead').hidden = !g;
   $('#sharehead').hidden = !g?.device;
+  $('#selclear').hidden = $('#movehead').hidden = !selected.size;
+  if (selected.size) { $('#title').textContent = t('n_selected', selected.size); $('#gearhead').hidden = $('#sharehead').hidden = true; }
   const ss = servers();
   $('#adminof').innerHTML = ss.length === 1 ? `${esc(t('admin_of'))}<br>${esc(adminLine(ss[0]))}` : `<button class="text" id="limitsbtn">${esc(t('check_limits'))}</button>`;
 }
@@ -414,12 +420,13 @@ const avgOf = ev => ev.length >= 3 ? (ev[0].at - ev.at(-1).at) / (ev.length - 1)
 
 function cardHtml(r) {
   const { c, k, last } = r, tags = tagList(c.tags);
-  return `<div class="card" role="button" tabindex="0" data-open="${c.id}" style="--bar:${tags.length ? tagColor(tags[0]) : 'transparent'}">${timeBlock(r)}
+  return `<div class="card${selected.has(c.id) ? ' sel' : ''}" role="button" tabindex="0" data-open="${c.id}" style="--bar:${tags.length ? tagColor(tags[0]) : 'transparent'}">${timeBlock(r)}
     <div class="mid"><b>${esc(c.label)}</b><span class="muted">${fmtDate(last)}</span>${k && groups.length >= 2 ? `<span class="muted">${esc(groupName(k))}</span>` : ''}${tags.length ? `<span class="muted">${tags.map(x => '#' + esc(x)).join(' · ')}</span>` : ''}</div>
     ${ringOf(r)}</div>`;
 }
 
 function render() {
+  selected.forEach(id => ownerOf(id) || selected.delete(id));
   fillGroups();
   const pool = (view === 'all' ? ['', ...groups.map(g => g.secret)] : [view]).flatMap(rowsOf);
   const hasArchived = pool.some(r => r.c.archived);
@@ -465,18 +472,48 @@ function resetNow(id) {
   toast(t('reset_label', counterOf(id).label), t('undo'), () => commit(k, { counters: [], events: [{ ...ev, deleted: true }] }));
 }
 
+const toggleSel = id => { selected.has(id) ? selected.delete(id) : selected.add(id); render(); };
+let press, longPressed = false;
+$('#list').onpointerdown = e => {
+  const el = e.target.closest('[data-open]'); longPressed = false; clearTimeout(press);
+  if (el && !e.target.closest('[data-reset]')) press = setTimeout(() => { longPressed = true; navigator.vibrate?.(15); toggleSel(el.dataset.open); }, 500);
+};
+for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) $('#list').addEventListener(ev, () => clearTimeout(press));
+$('#list').oncontextmenu = e => e.target.closest('[data-open]') && e.preventDefault(); // no browser menu on a long-press
 $('#list').onclick = e => {
+  if (longPressed) return longPressed = false; // the press that selected must not also open
   const el = e.target.closest('[data-add], [data-fold], [data-reset], [data-open]');
   if (!el) return;
   const d = el.dataset;
   if (d.add != null) return openCounter(null, d.add);
   if (d.reset) return resetNow(d.reset);
-  if (d.open) return openDetail(d.open);
+  if (d.open) return selected.size || e.ctrlKey || e.metaKey ? toggleSel(d.open) : openDetail(d.open);
   folded.has(d.fold) ? folded.delete(d.fold) : folded.add(d.fold);
   localStorage.setItem('folded', JSON.stringify([...folded]));
   render();
 };
-$('#list').onkeydown = e => { if (e.key === 'Enter' && e.target.dataset.open) openDetail(e.target.dataset.open); };
+$('#list').onkeydown = e => { if (e.key === 'Enter' && e.target.dataset.open) selected.size ? toggleSel(e.target.dataset.open) : openDetail(e.target.dataset.open); };
+$('#selclear').onclick = () => { selected.clear(); render(); };
+
+/** Asks for a destination: a group's secret, '' for Ungrouped, null if cancelled. */
+function pickGroup() {
+  const d = $('#movedlg');
+  $('#movelist').innerHTML = [['', t('ungrouped')], ...[...groups].sort(byName).map(g => [g.secret, g.name || '…'])]
+    .map(([k, n]) => `<button type="button" class="text" data-to="${esc(k)}">${esc(n)}</button>`).join('');
+  d.showModal();
+  return new Promise(res => {
+    d.onclick = e => { const b = e.target.closest('[data-to]'); if (b || e.target.id === 'movecancel') { res(b ? b.dataset.to : null); d.close(); } };
+    d.onclose = () => res(null);
+  });
+}
+$('#movehead').onclick = async () => {
+  const to = await pickGroup(); if (to === null) return;
+  const rows = [...selected].map(rowOf).filter(r => r && r.k !== to);
+  if (rows.some(r => r.k !== '') && !await ask(t('move_title') + '\n\n' + t('move_text'))) return; // leaving a synced group removes it for everyone in it
+  selected.clear();
+  for (const r of rows) await moveCounter(r.k, to, { ...r.c, updatedAt: Date.now() });
+  render();
+};
 $('#chips').onclick = e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.sort != null) { sort = { due: 'recent', recent: 'name', name: 'due' }[sort]; localStorage.setItem('sort', sort); }
@@ -679,7 +716,12 @@ $('#gbody').onclick = async e => {
   if (b.id === 'gsync') { await commit(g.secret); renderGset(); }
   if (b.id === 'gapp') location.href = appLink(g, g.admin ? await invite(g) : null); // admins hand the app a fresh invite; members open it with the key only
   if (b.id === 'gforget') {
-    if (await ask(t('forget_backup'), { input: 'text', value: shareLink(g), ok: t('forget'), danger: true }) === null) return; // a text box, so the link can be copied
+    const r = await ask(t('forget_backup'), { input: 'text', value: shareLink(g), ok: t('forget_keep'), alt: t('forget_purge'), danger: true }); // a text box, so the link can be copied
+    if (r === null) return;
+    if (r !== ALT) { // keep the counters here, in Ungrouped (which never syncs)
+      const { counters, events } = store(g.secret).state, live = counters.filter(c => !c.deleted);
+      if (live.length) await commit('', { counters: live, events: events.filter(e => live.some(c => c.id === e.counterId)) });
+    }
     if (g.device) api(g, 'leave', {}).catch(() => {}); // the server deletes the group once no device is left
     groups = groups.filter(x => x !== g); stores.delete(g.secret); view = 'all'; saveGroups();
     history.back(); render();

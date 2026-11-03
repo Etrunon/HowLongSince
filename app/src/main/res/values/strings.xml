@@ -105,7 +105,9 @@
     <string name="group_settings">Group settings</string>
     <string name="delete_group">Delete group</string>
     <string name="delete_group_title">Delete group?</string>
-    <string name="delete_group_text">«%s» is removed. Its counters move to Ungrouped.</string>
+    <string name="delete_group_text">«%s» is removed. What happens to its counters on this phone?</string>
+    <string name="delete_group_keep">Move them to Ungrouped</string>
+    <string name="delete_group_purge">Delete them</string>
     <string name="imported">Imported</string>
     <string name="keep_both">Keep both</string>
     <string name="synced_group">Synced</string>
@@ -118,6 +120,8 @@
     <string name="turn_off">Turn off sync</string>
     <string name="turn_off_title">Turn off sync?</string>
     <string name="turn_off_text">The key is deleted from this phone and the counters stay here, no longer synced. Without another phone holding the key you can\'t sync this group again.</string>
+    <string name="move_to">Move to</string>
+    <string name="n_selected">%d selected</string>
     <string name="move_title">Move out of a synced group?</string>
     <string name="move_text">The counter will be removed for everyone else in the group it leaves.</string>
     <string name="move">Move</string>

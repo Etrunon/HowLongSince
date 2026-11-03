@@ -26,6 +26,8 @@
     <button class="ib" id="menu" data-icon="menu" data-i18n-label="menu"></button>
     <img src="icon.svg" alt="" class="logo">
     <h1 id="title">How Long Since?</h1>
+    <button class="ib" id="selclear" data-icon="close" data-i18n-label="cancel" hidden></button>
+    <button class="ib" id="movehead" data-icon="arrow" data-i18n-label="move_to" hidden></button>
     <button class="ib" id="sharehead" data-icon="share" data-i18n-label="share" hidden></button>
     <button class="ib" id="gearhead" data-icon="gear" data-i18n-label="group_settings" hidden></button>
   </header>
@@ -123,6 +125,12 @@
   </form>
 </dialog>
 
+<dialog id="movedlg">
+  <h2 data-i18n="move_to">Move to</h2>
+  <div id="movelist"></div>
+  <div class="actions"><button class="text" id="movecancel" data-i18n="cancel">Cancel</button></div>
+</dialog>
+
 <dialog id="share">
   <h2 id="sharename"></h2>
   <div id="qr"></div>
@@ -143,7 +151,7 @@
   <form method="dialog">
     <p id="asktext"></p>
     <input id="askinput">
-    <div class="actions"><button class="text" value="cancel" id="askcancel" formnovalidate data-i18n="cancel">Cancel</button><button class="text" value="ok" id="askok"></button></div>
+    <div class="actions"><button class="text" value="cancel" id="askcancel" formnovalidate data-i18n="cancel">Cancel</button><button class="text" value="alt" id="askalt" hidden></button><button class="text" value="ok" id="askok"></button></div>
   </form>
 </dialog>
 
