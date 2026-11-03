@@ -12,7 +12,32 @@
   @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --bg:#121212; --fg:#eee; --card:#1e1e1e; --muted:#999; --accent:#8ab4f8; --tag-l:70%; } }
   :root[data-theme=dark] { color-scheme: dark; --bg:#121212; --fg:#eee; --card:#1e1e1e; --muted:#999; --accent:#8ab4f8; --tag-l:70%; }
   :root[data-theme=light] { color-scheme: light; }
-  body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--fg); max-width: 640px; margin: 0 auto; padding: 16px; }
+  body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--fg); margin: 0; }
+  #shell { display: grid; grid-template-columns: 280px 1fr; align-items: start; }
+  main { max-width: 640px; width: 100%; box-sizing: border-box; margin: 0 auto; padding: 16px; }
+  header { display: flex; align-items: center; gap: 8px; }
+  #menu, #scrim { display: none; }
+  #drawer { position: sticky; top: 0; height: 100vh; overflow-y: auto; box-sizing: border-box; padding: 16px; background: var(--card); display: flex; flex-direction: column; gap: 16px; }
+  #drawer .brand { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 1.1rem; }
+  #drawer .brand img { width: 36px; height: 36px; }
+  #drawer h3 { margin: 0; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  #drawer .grp { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 12px; border-top: 1px solid var(--muted); }
+  #drawer .grp > h3, #drawer .grp > .muted, #drawer .grp > label { flex-basis: 100%; }
+  #drawer label { display: flex; align-items: center; gap: 8px; }
+  #drawer select { flex: 1; }
+  #drawer input[type=checkbox] { flex: none; width: 1.1rem; height: 1.1rem; margin: 0; }
+  #drawer a { padding: 8px 12px; color: var(--accent); }
+  #views { display: flex; flex-direction: column; gap: 4px; }
+  #views button { text-align: left; border: none; border-radius: 999px; background: none; color: var(--fg); padding: 10px 16px; }
+  #views button:hover { background: rgba(128,128,128,.15); }
+  #views button.on { background: var(--accent); color: var(--bg); font-weight: 600; }
+  @media (max-width: 899px) {
+    #shell { display: block; }
+    #drawer { position: fixed; z-index: 3; top: 0; bottom: 0; left: 0; width: 280px; height: auto; transform: translateX(-100%); transition: transform .2s; }
+    body.drawer #drawer { transform: none; box-shadow: 0 0 24px rgba(0,0,0,.4); }
+    body.drawer #scrim { display: block; position: fixed; z-index: 2; inset: 0; background: rgba(0,0,0,.4); }
+    #menu { display: block; }
+  }
   form { display: flex; gap: 8px; margin-bottom: 16px; }
   input { flex: 1; padding: 8px; font-size: 1rem; }
   button { padding: 8px 12px; font-size: 1rem; cursor: pointer; }
@@ -40,10 +65,7 @@
   #qr { max-width: 260px; margin: 0 auto 12px; } #qr svg { display: block; width: 100%; height: auto; }
   #sharelink { width: 100%; box-sizing: border-box; font-size: .8rem; }
   .sec button { padding: 2px 8px; font-size: .8rem; }
-  #groups { align-items: center; margin-bottom: 12px; }
-  #groups select { flex: 1; }
-  h1 { display: flex; align-items: center; gap: 12px; }
-  h1 img { width: 48px; height: 48px; }
+  h1 { margin: 12px 0; font-size: 1.8rem; }
   #err { color: #d33; }
   [data-edit] { display: grid; gap: 8px; margin: 12px 0; }
   [data-edit] label { display: grid; gap: 4px; font-size: .9rem; }
@@ -55,24 +77,39 @@
   .overdue .since { color: #d33; }
   #tools { margin-bottom: 12px; }
   .note { display: block; margin-left: 8px; }
-  footer { margin-top: 24px; text-align: center; }
 </style>
 </head>
 <body>
-<h1><img src="icon.svg" alt="">How Long Since?</h1>
+<div id="shell">
+<aside id="drawer">
+  <h2 class="brand"><img src="icon.svg" alt=""><span>How Long Since?</span></h2>
+  <nav id="views"></nav>
+  <div class="grp">
+    <button id="newgroup" data-i18n="new_group">New group</button><button id="addgroup" data-i18n="join">Join</button>
+  </div>
+  <div class="grp" id="groupopts" hidden>
+    <h3 id="groupname"></h3>
+    <button id="shareview" data-i18n="share">Share</button><button id="rename" data-i18n="rename">Rename</button><button id="forget" data-i18n="forget">Forget</button>
+    <a id="app" href="#" data-i18n="open_app">Open in app</a>
+  </div>
+  <div class="grp">
+    <h3 data-i18n="settings">Settings</h3>
+    <label><input type="checkbox" id="dark"> <span data-i18n="dark_theme">Dark theme</span></label>
+    <label><input type="checkbox" id="debug"> <span data-i18n="debug_mode">Debug mode</span></label>
+    <span class="muted" data-i18n="debug_hint">Allow "notify after" in minutes</span>
+    <label><span data-i18n="language">Language</span> <select id="lang" aria-label="Language"><option value="">Auto</option><option value="en">English</option><option value="it">Italiano</option></select></label>
+    <button id="export" data-i18n="export_data">Export data</button><button id="import" data-i18n="import_data">Import data</button>
+    <input type="file" id="file" accept=".json,application/json" hidden>
+  </div>
+</aside>
+<div id="scrim"></div>
+<main>
+<header><button id="menu" aria-label="Menu" data-i18n-label="menu">☰</button><h1 id="title">How Long Since?</h1></header>
 <form id="login" hidden>
   <input name="username" autocomplete="username" value="howlongsince" readonly>
   <input id="token" name="password" type="password" autocomplete="current-password" placeholder="Token" required>
   <button data-i18n="login">Log in</button>
 </form>
-<div class="row" id="groups" hidden>
-  <select id="group" aria-label="Group"></select>
-  <a id="app" href="#" data-i18n="open_app">Open in app</a>
-  <button id="shareview" data-i18n="share">Share</button>
-  <button id="rename" data-i18n="rename">Rename</button>
-  <button id="forget" data-i18n="forget">Forget</button>
-</div>
-<div class="row" style="margin-bottom:12px"><button id="newgroup" data-i18n="new_group">New group</button><button id="addgroup" data-i18n="join">Join</button></div>
 <div id="main">
 <form id="add"><input id="label" data-i18n-ph="new_counter" placeholder="New counter" required><button data-i18n="add">Add</button></form>
 <p id="undo" hidden><span></span> <button data-i18n="undo">Undo</button></p>
@@ -82,6 +119,8 @@
 <div id="list"></div>
 </div>
 <p id="err"></p>
+</main>
+</div>
 <dialog id="share">
   <h2 id="sharename"></h2>
   <div id="qr"></div>
@@ -93,10 +132,6 @@
   <p id="importtext"></p>
   <div class="row"><button id="doreplace" data-i18n="replace">Replace</button><button id="dokeep" data-i18n="keep_both">Keep both</button><button id="nogo" data-i18n="cancel">Cancel</button></div>
 </dialog>
-<footer><button id="export" data-i18n="export_data">Export data</button> <button id="import" data-i18n="import_data">Import data</button> <input type="file" id="file" accept=".json,application/json" hidden>
-  <p><label><input type="checkbox" id="dark"> <span data-i18n="dark_theme">Dark theme</span></label>
-    <label><input type="checkbox" id="debug"> <span data-i18n="debug_mode">Debug mode</span></label><br>
-    <span class="muted" data-i18n="debug_hint">Allow "notify after" in minutes</span></p><select id="lang" aria-label="Language"><option value="">Auto</option><option value="en">English</option><option value="it">Italiano</option></select></footer>
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => s.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
@@ -114,7 +149,7 @@ const T = {
     reset_label: 'Reset %s', pick_past: 'Pick a time in the past', create: 'created', manual: 'manual', nfc: 'via NFC', d: 'd',
     open_app: 'Open in app', forget: 'Forget', paste_link: 'Paste a group link', bad_link: 'That isn\'t a group link',
         no_data: 'Nothing found for this link on this server', decrypt_failed: 'Can\'t decrypt: wrong key?', needs_https: 'This page needs https to decrypt (or localhost).', busy: 'Busy, try again', all_groups: 'All', ungrouped: 'Ungrouped', synced: 'Synced %s', group: 'Group', move_title: 'Move out of a synced group?', move_text: 'The counter will be removed for everyone else in the group it leaves.', new_group: 'New group', group_name: 'Group name', rename: 'Rename', join: 'Join', join_question: 'Join «%s»?',
-    already_joined: 'Already joined as «%s»', other_server: 'That link is for %s. Open it on that server\'s page.', token: 'Token', share: 'Share', copy_link: 'Copy link', link_copied: 'Copied', close: 'Close', dark_theme: 'Dark theme', debug_mode: 'Debug mode', debug_hint: 'Allow "notify after" in minutes', export_data: 'Export data', import_data: 'Import data', replace: 'Replace', keep_both: 'Keep both', cancel: 'Cancel', imported_name: 'Imported', cant_read: 'Can\'t read file: %s', done_imported: 'Imported %s counters',
+    already_joined: 'Already joined as «%s»', other_server: 'That link is for %s. Open it on that server\'s page.', token: 'Token', share: 'Share', copy_link: 'Copy link', link_copied: 'Copied', close: 'Close', settings: 'Settings', language: 'Language', menu: 'Menu', dark_theme: 'Dark theme', debug_mode: 'Debug mode', debug_hint: 'Allow "notify after" in minutes', export_data: 'Export data', import_data: 'Import data', replace: 'Replace', keep_both: 'Keep both', cancel: 'Cancel', imported_name: 'Imported', cant_read: 'Can\'t read file: %s', done_imported: 'Imported %s counters',
     import_q: 'The file has %s counters. Replace: groups with the same name are deleted and replaced by the file\'s. Keep both: they are imported as new groups, renamed if a name is taken. Replacing can\'t be undone.',
     share_warning: 'Anyone with this link can read and change this group, and access can\'t be taken back. To cut someone off, make a new group and move the counters.',
     forget_backup: 'Copy this link first: it is the only backup of the key. OK forgets the group in this browser (the data stays on the server), Cancel keeps it.' },
@@ -129,7 +164,7 @@ const T = {
     reset_label: 'Azzera %s', pick_past: 'Scegli un momento nel passato', create: 'creato', manual: 'manuale', nfc: 'via NFC', d: 'g',
     open_app: 'Apri nell\'app', forget: 'Dimentica', paste_link: 'Incolla un link di gruppo', bad_link: 'Questo non è un link di gruppo',
         no_data: 'Niente trovato per questo link su questo server', decrypt_failed: 'Impossibile decifrare: chiave sbagliata?', needs_https: 'Questa pagina richiede https per decifrare (o localhost).', busy: 'Occupato, riprova', all_groups: 'Tutti', ungrouped: 'Senza gruppo', synced: 'Sincronizzato alle %s', group: 'Gruppo', move_title: 'Spostare da un gruppo sincronizzato?', move_text: 'Il contatore verrà rimosso per tutti gli altri nel gruppo che lascia.', new_group: 'Nuovo gruppo', group_name: 'Nome del gruppo', rename: 'Rinomina', join: 'Unisciti', join_question: 'Unirti a «%s»?',
-    already_joined: 'Già unito come «%s»', other_server: 'Quel link è per %s. Aprilo sulla pagina di quel server.', token: 'Token', share: 'Condividi', copy_link: 'Copia link', link_copied: 'Copiato', close: 'Chiudi', dark_theme: 'Tema scuro', debug_mode: 'Modalità debug', debug_hint: 'Consenti "avvisa dopo" in minuti', export_data: 'Esporta dati', import_data: 'Importa dati', replace: 'Sostituisci', keep_both: 'Tieni entrambi', cancel: 'Annulla', imported_name: 'Importati', cant_read: 'Impossibile leggere il file: %s', done_imported: 'Importati %s contatori',
+    already_joined: 'Già unito come «%s»', other_server: 'Quel link è per %s. Aprilo sulla pagina di quel server.', token: 'Token', share: 'Condividi', copy_link: 'Copia link', link_copied: 'Copiato', close: 'Chiudi', settings: 'Impostazioni', language: 'Lingua', menu: 'Menu', dark_theme: 'Tema scuro', debug_mode: 'Modalità debug', debug_hint: 'Consenti "avvisa dopo" in minuti', export_data: 'Esporta dati', import_data: 'Importa dati', replace: 'Sostituisci', keep_both: 'Tieni entrambi', cancel: 'Annulla', imported_name: 'Importati', cant_read: 'Impossibile leggere il file: %s', done_imported: 'Importati %s contatori',
     import_q: 'Il file contiene %s contatori. Sostituisci: i gruppi con lo stesso nome vengono eliminati e sostituiti da quelli del file. Tieni entrambi: vengono importati come nuovi gruppi, rinominati se un nome è già usato. Sostituire non si può annullare.',
     share_warning: 'Chiunque abbia questo link può leggere e modificare questo gruppo, e l\'accesso non si può revocare. Per escludere qualcuno, crea un nuovo gruppo e sposta i contatori.',
     forget_backup: 'Copia prima questo link: è l\'unico backup della chiave. OK dimentica il gruppo in questo browser (i dati restano sul server), Annulla lo tiene.' },
@@ -140,6 +175,7 @@ document.documentElement.lang = lang;
 const t = (k, ...a) => (T[lang][k] ?? T.en[k]).replace(/%s/g, () => a.shift());
 document.querySelectorAll('[data-i18n]').forEach(el => el.textContent = t(el.dataset.i18n));
 document.querySelectorAll('[data-i18n-ph]').forEach(el => el.placeholder = t(el.dataset.i18nPh));
+document.querySelectorAll('[data-i18n-label]').forEach(el => el.ariaLabel = t(el.dataset.i18nLabel));
 
 // Groups this browser knows: { secret, token, name }. The secret never leaves the browser; the server only sees an id derived from it.
 let groups = []; try { groups = JSON.parse(localStorage.getItem('groups') || '[]'); } catch {}
@@ -315,19 +351,21 @@ const newSecret = () => b64(crypto.getRandomValues(new Uint8Array(32))).replace(
 const defaultToken = () => localStorage.getItem('token') || groups.find(g => g.token)?.token || '';
 const byName = (a, b) => (a.name || '￿').localeCompare(b.name || '￿');
 function fillGroups() {
-  const opts = [['all', t('all_groups')]];
-  if (groups.length) {
+  const opts = [];
+  if (groups.length) { // like the phone's drawer: the views only matter once there is a group
+    opts.push(['all', t('all_groups')]);
     if (store('').state.counters.some(c => !c.deleted)) opts.push(['', t('ungrouped')]);
     [...groups].sort(byName).forEach(g => opts.push([g.secret, g.name || '…']));
   }
-  const html = opts.map(([v, n]) => `<option value="${esc(v)}">${esc(n)}</option>`).join('');
-  if ($('#group').dataset.h !== html) { $('#group').innerHTML = html; $('#group').dataset.h = html; } // leave an open dropdown alone
   if (!opts.some(o => o[0] === view)) view = 'all';
-  $('#group').value = view;
-  $('#groups').hidden = !groups.length;
+  $('#views').innerHTML = opts.map(([v, n]) => `<button data-view="${esc(v)}" class="${v === view ? 'on' : ''}">${esc(n)}</button>`).join('');
   const g = groups.find(g => g.secret === view);
-  $('#app').hidden = $('#shareview').hidden = $('#rename').hidden = $('#forget').hidden = !g;
-  if (g) $('#app').href = `howlongsince://join?h=${encodeURIComponent(base)}#k=${g.secret}${g.token ? '&t=' + encodeURIComponent(g.token) : ''}`;
+  $('#groupopts').hidden = !g;
+  if (g) {
+    $('#groupname').textContent = g.name || '…';
+    $('#app').href = `howlongsince://join?h=${encodeURIComponent(base)}#k=${g.secret}${g.token ? '&t=' + encodeURIComponent(g.token) : ''}`;
+  }
+  $('#title').textContent = view === 'all' ? 'How Long Since?' : view === '' ? t('ungrouped') : g?.name || '…';
 }
 
 /** The server a pasted link points at, or null for just a `#k=...` part (which means this one). */
@@ -601,7 +639,12 @@ $('#debug').checked = debug;
 $('#debug').onchange = () => { debug = $('#debug').checked; localStorage.setItem('debug', debug ? '1' : '0'); render(); };
 applyTheme();
 $('#sort').onchange = () => { localStorage.setItem('sort', $('#sort').value); render(); };
-$('#group').onchange = () => { view = $('#group').value; render(); };
+$('#views').onclick = e => { const b = e.target.closest('[data-view]'); if (b) { view = b.dataset.view; render(); } };
+// The sidebar is always there on wide screens; on narrow ones it slides in over the page, like the phone's drawer.
+$('#menu').onclick = () => document.body.classList.add('drawer');
+$('#scrim').onclick = () => document.body.classList.remove('drawer');
+document.addEventListener('keydown', e => e.key === 'Escape' && document.body.classList.remove('drawer'));
+$('#drawer').addEventListener('click', e => { if (e.target.closest('[data-view], #newgroup, #addgroup, #shareview, #rename, #forget, #app, #export, #import')) document.body.classList.remove('drawer'); });
 /** Applies one entry of an import plan: the group's counters are replaced by the file's (moved here from other places if they lived there). */
 async function applyImport({ name, isNew, items }) {
   let k = '';
