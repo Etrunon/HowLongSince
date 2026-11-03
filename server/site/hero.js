@@ -2,6 +2,7 @@
 (function () {
   var em = document.querySelector('.hero h1 em');
   var phrases = em.dataset.phrases.split('|'), i = 0;
+  phrases = [phrases.shift()].concat(phrases.sort(function () { return Math.random() - .5; })); // first stays, rest shuffled
   setInterval(function () {
     em.classList.add('out');
     setTimeout(function () { em.textContent = phrases[++i % phrases.length]; em.classList.remove('out'); }, 300);
