@@ -78,6 +78,29 @@ Decisions: a vendored QR generator (about 20 KB, MIT, pinned version, pasted inl
 
 Can't be done on the web: NFC pairing (unpair stays), reminders and notifications (they fire on the phone), the widget, and groups that live on a different server than the page.
 
+## Plan: format v2 and group access control
+
+Agreed 2026-11-03, not started. Replaces the instance-wide `TOKEN`, which rides in share links, is one per server and can't be revoked. Each phase ships on its own.
+
+**Phase 0: blob format v2.** One key per group for everything. Only sensitive text is encrypted, per field (AES-GCM, associated data = group id + record uid + field name): group name, counter `label`, `tags` and `nfcTagId`, event `note`, device name. Readable by the server: counter `uid`, `updatedAt`, `deleted`, `archived`, `notifyAfterMs`; event `uid`, counter, `at`, `source`, `deviceId`, `deleted`; device `id`. The document carries an integrity field: SHA-256 of a canonical byte form of the whole document (records sorted by uid, fixed field order, length-prefixed values, ciphertexts as stored), encrypted with the group key. Clients verify it on every read, so a server without the key can't edit anything unnoticed. It doesn't stop a rollback to an older valid document. Each field has a random nonce, so the "nothing new to say" check compares decrypted content, not bytes. Clients read v1 and v2 and write v2 (a `v` field), so this goes first and migration happens once. What the server can now see: counters, every reset time, which device did it, reminder intervals.
+
+**Phase 1: server access control** (Go, standard library only).
+- Per group, next to the document: `adminHash` (SHA-256 of an admin key), `devices[{id, tokenHash, created, lastSeen}]`, `invites[{nonceHash, expires}]`. The creator picks a password; the client derives `adminKey = PBKDF2(password, salt = group id)` and sends that, so the server never sees the password. The password can be shared, which is also how a lost admin device is recovered.
+- Create: `PUT /s/{id}` without `If-Match` takes `{ciphertext, adminKeyHash, deviceId}` and returns `{etag, token}`. Sync: `GET`/`PUT /s/{id}` with the device's random token as Bearer; only its hash is stored. Credentials are keyed by `deviceId`, never by the editable name.
+- `POST /s/{id}/invite` (admin key): a single-use nonce, 24 h. The link is `#k=…&n=…`. `POST /s/{id}/enroll` takes a nonce or the admin key plus `{deviceId}` and returns a token. `POST /s/{id}/revoke` (admin key) removes a `deviceId`. `GET /s/{id}/devices` lists ids with created and last seen. `POST /s/{id}/leave` removes the caller. The group is deleted when no device is left; `join` goes away.
+- Legacy groups without these fields keep working with `TOKEN` until a device claims them (`POST /s/{id}/claim`). `TOKEN` becomes optional.
+- Group creation stays open, limited by caps: blob size, groups per IP per day (`CREATES_PER_IP_DAY`), total groups (`MAX_GROUPS`), a per-IP backoff on 401s and on failed enroll or admin attempts.
+- A daily cleanup deletes groups idle for more than 365 days, or more than 180 days with fewer than 3 live counters (the server counts them from the readable `deleted` flags).
+- Go tests: create, enroll, revoke, claim, caps, expiry.
+
+**Phase 2: web.** New group asks for a password and keeps the device token and admin key per group. A link with `n` enrolls and the nonce is spent. Group options get a device list (names from the document), Invite, and "Enter password" for recovery. The token login form and `&t=` go. Old groups get a one-time "set a password" prompt. `web.test.mjs` covers the key derivation, the canonical hash and link parsing.
+
+**Phase 3: Android.** Same flows. Token and admin key live in `sync_keys`, which backups skip. Share mints a fresh invite for the link and QR code; a member device must enter the password once before it can invite. Groups screen: device list and revoke; the per-group token field goes.
+
+**Phase 4: docs.** READMEs (English and Italian) and this file.
+
+Limits that stay: a revoked device keeps the group secret and what it already fetched, so cutting out someone who shouldn't see the group at all means moving to a new group. An older client can't read v2.
+
 ## Known limits
 
 - **Lost key:** if every phone holding a group's key is lost, its data is gone. "Copy link" is the backup.
