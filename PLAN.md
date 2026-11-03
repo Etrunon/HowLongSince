@@ -13,11 +13,11 @@ Agreed 2026-11-03. Each phase ships on its own.
 
 Today the server merges data and the web app reads plaintext. With end-to-end encryption the server can do neither, so:
 
-- **Server:** a dumb blob store (`/sync`, `merge` and `prune` were deleted in Phase 4). `GET /s/{id}` returns `{etag, ciphertext}`. `PUT /s/{id}` takes `If-Match: <etag>` and returns 409 on a conflict. The ETag is a content hash, and each blob is one file. `merge`/`prune` in `main.go` are deleted.
+- **Server:** a dumb blob store (`/sync`, `merge` and `prune` were deleted in Phase 4). `GET /s/{id}` returns `{etag, ciphertext}`. `PUT /s/{id}` takes `If-Match: <etag>` and returns 409 on a conflict. The ETag is a content hash, and each blob is one file.
 - **Client sync:** GET, decrypt, merge (the existing `Dao.merge`, limited to one group), encrypt, PUT. On a 409, start again from the GET. Tombstone pruning (90 days) is done on the client.
 - **Crypto:** each synced group has a random 32-byte secret. HKDF derives two values from it: the space id the server sees, and an AES-256-GCM key. The space id is passed as associated data, so the server can't swap blobs between spaces. Only `javax.crypto` and WebCrypto are used, no new dependencies.
 - **What the server still sees:** an anonymous space id, blob size, timing and IP address.
-- **`TOKEN`:** optional and instance-wide, to stop strangers from storing blobs on the server. When set, the share link carries it.
+- **`TOKEN`:** instance-wide, to stop strangers from storing blobs on the server. When set, the share link carries it. Superseded by per-device tokens (see "Plan: group access control").
 
 ## Phase 1: groups (local only)
 
@@ -82,29 +82,30 @@ Can't be done on the web: NFC pairing (unpair stays), reminders and notification
 
 Agreed 2026-11-03, not started. Replaces the instance-wide `TOKEN`, which rides in share links, is one per server and can't be revoked. Each phase ships on its own.
 
-**Phase 0: blob format v2.** One key per group for everything. Only sensitive text is encrypted, per field (AES-GCM, associated data = group id + record uid + field name): group name, counter `label`, `tags` and `nfcTagId`, event `note`, device name. Readable by the server: counter `uid`, `updatedAt`, `deleted`, `archived`, `notifyAfterMs`; event `uid`, counter, `at`, `source`, `deviceId`, `deleted`; device `id`. The document carries an integrity field: SHA-256 of a canonical byte form of the whole document (records sorted by uid, fixed field order, length-prefixed values, ciphertexts as stored), encrypted with the group key. Clients verify it on every read, so a server without the key can't edit anything unnoticed. It doesn't stop a rollback to an older valid document. Each field has a random nonce, so the "nothing new to say" check compares decrypted content, not bytes. Clients read v1 and v2 and write v2 (a `v` field), so this goes first and migration happens once. What the server can now see: counters, every reset time, which device did it, reminder intervals.
+**Phase 0: blob format v2.** One key per group for everything. Only sensitive text is encrypted, per field (AES-GCM, associated data = group id + record uid + field name): group name, counter `label`, `tags` and `nfcTagId`, event `note` and `deviceId`, device name. Readable by the server: counter `uid`, `updatedAt`, `deleted`, `archived`, `notifyAfterMs`; event `uid`, counter, `at`, `source`, `deleted`; device `id`. The document carries an integrity field: SHA-256 of a canonical byte form of the whole document (records sorted by uid, fixed field order, length-prefixed values, ciphertexts as stored), encrypted with the group key. Clients verify it on every read, so a server without the key can't edit anything unnoticed. It doesn't stop a rollback to an older valid document. Each field has a random nonce, so the "nothing new to say" check compares decrypted content, not bytes. Clients read v1 and v2 and write v2 (a `v` field), so this goes first and migration happens once. What the server can now see: counters, every reset time, reminder intervals, but not which device did a reset. Shared test vectors (`SinceTest.kt` and `web.test.mjs`) cover the canonical form, since both clients must produce identical bytes.
 
-**Phase 1: server access control** (Go, standard library only).
-- Per group, next to the document: `adminHash` (SHA-256 of an admin key), `devices[{id, tokenHash, created, lastSeen}]`, `invites[{nonceHash, expires}]`. The creator picks a password; the client derives `adminKey = PBKDF2(password, salt = group id)` and sends that, so the server never sees the password. The password can be shared, which is also how a lost admin device is recovered.
-- Create: `PUT /s/{id}` without `If-Match` takes `{ciphertext, adminKeyHash, deviceId}` and returns `{etag, token}`. Sync: `GET`/`PUT /s/{id}` with the device's random token as Bearer; only its hash is stored. Credentials are keyed by `deviceId`, never by the editable name.
-- `POST /s/{id}/invite` (admin key): a single-use nonce, 24 h. The link is `#k=…&n=…`. `POST /s/{id}/enroll` takes a nonce or the admin key plus `{deviceId}` and returns a token. `POST /s/{id}/revoke` (admin key) removes a `deviceId`. `GET /s/{id}/devices` lists ids with created and last seen. `POST /s/{id}/leave` removes the caller. The group is deleted when no device is left; `join` goes away.
-- Legacy groups without these fields keep working with `TOKEN` until a device claims them (`POST /s/{id}/claim`). `TOKEN` becomes optional.
-- Group creation stays open, limited by caps: blob size, groups per IP per day (`CREATES_PER_IP_DAY`), total groups (`MAX_GROUPS`), a per-IP backoff on 401s and on failed enroll or admin attempts.
-- A daily cleanup deletes groups idle for more than 365 days, or more than 180 days with fewer than 3 live counters (the server counts them from the readable `deleted` flags).
-- Go tests: create, enroll, revoke, claim, caps, expiry.
+**Phase 1: server access control and stats** (Go, standard library only).
+- Per group, in the existing metadata next to the blob: `devices[{id, tokenHash, created, lastSeen}]`, `invites[{nonceHash, expires}]`. Credentials are keyed by `deviceId`, never by the editable name. There is no admin role or password: every enrolled device can invite, revoke and list.
+- Create: `PUT /s/{id}` without `If-Match` takes `{ciphertext, deviceId}` and returns `{etag, token}`. Sync: `GET`/`PUT /s/{id}` with the device's random token as Bearer. Only its hash is stored. `lastSeen` is written only if the stored value is more than 1 h old, so reads don't write to disk.
+- `POST /s/{id}/invite` returns a single-use nonce valid for 24 h, and the link is `#k=…&n=…`. `POST /s/{id}/enroll` takes `{nonce, deviceId}` without a Bearer and returns a token. `POST /s/{id}/revoke {deviceId}` and `GET /s/{id}/devices` (ids, created, last seen) need a device token. `POST /s/{id}/leave` removes the caller. When no device is left, the group is deleted. `join` goes away.
+- Legacy groups (no `devices`) keep working with `TOKEN`. The first client to sync one calls `POST /s/{id}/claim {deviceId}` with `TOKEN` and gets a device token. Other devices then need an invite. `TOKEN` becomes optional; without it, legacy groups can't be claimed.
+- Group creation stays open, limited by caps: blob size, groups per IP per day (`CREATES_PER_IP_DAY`), total groups (`MAX_GROUPS`), and a per-IP backoff on 401s and failed enrolls. These counters live in memory (a map reset hourly) and aren't persisted.
+- A daily cleanup deletes groups not synced for 365 days, or for 180 days with fewer than 3 live counters (counted from the readable `deleted` flags).
+- `GET /stats` with `TOKEN` returns totals computed from the readable v2 fields: groups, devices, live counters, and resets in the last 7 and 30 days.
+- Go tests: create, enroll (nonce spent, expired), revoke, claim, caps, cleanup.
 
-**Phase 2: web.** New group asks for a password and keeps the device token and admin key per group. A link with `n` enrolls and the nonce is spent. Group options get a device list (names from the document), Invite, and "Enter password" for recovery. The token login form and `&t=` go. Old groups get a one-time "set a password" prompt. `web.test.mjs` covers the key derivation, the canonical hash and link parsing.
+**Phase 2: web.** Each group keeps its device token. A link with `n` enrolls the browser and spends the nonce. Group options get a device list (names come from the document), Invite (a fresh link and QR code) and revoke. The token login form and `&t=` go. Old groups claim themselves on the first sync. `web.test.mjs` covers link parsing.
 
-**Phase 3: Android.** Same flows. Token and admin key live in `sync_keys`, which backups skip. Share mints a fresh invite for the link and QR code; a member device must enter the password once before it can invite. Groups screen: device list and revoke; the per-group token field goes.
+**Phase 3: Android.** Same flows. The token lives in `sync_keys`, which backups skip. Share mints a fresh invite for the link and the QR code. The Groups screen gets a device list and revoke. The per-group token field goes.
 
 **Phase 4: docs.** READMEs (English and Italian) and this file.
 
-Limits that stay: a revoked device keeps the group secret and what it already fetched, so cutting out someone who shouldn't see the group at all means moving to a new group. An older client can't read v2.
+Limits that stay: a revoked device keeps the group secret and what it already fetched, so to cut out someone who shouldn't see the group at all, move to a new group. Any member can revoke any other member. An older client can't read v2.
 
 ## Known limits
 
-- **Lost key:** if every phone holding a group's key is lost, its data is gone. "Copy link" is the backup.
-- **No revoking access:** anyone with the link has the key. To cut someone off, create a new group and move the counters into it.
+- **Lost key:** if every phone holding a group's key is lost, its data is gone. "Copy link" is the backup of the key. Once access control ships, a backup link can't enroll on its own: rejoining needs an invite from a device that is still enrolled.
+- **Revoking is partial:** a revoked device can't sync any more, but it keeps the key and what it already fetched. To cut someone off completely, create a new group and move the counters into it.
 - **Rollback:** a server that serves an older blob can bring back a deleted counter. Events merge by union, so nothing else is lost.
 - **Blob size** is visible to the server. There is no padding for now.
 - **Web keys** live in the browser's `localStorage`: clearing site data loses them, and so does an Ungrouped counter that exists only there. "Copy link" is the backup for groups; Export is the backup for Ungrouped.
