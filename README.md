@@ -81,6 +81,7 @@ app/src/test/.../SinceTest.kt  Unit tests (formatting, tags, reminder delay, NFC
 server/
   main.go          Sync server: encrypted blob store and HTTP handlers
   main_test.go     Blob store test (runs during docker build)
+  web.test.mjs     Web app logic tests: node --test server/web.test.mjs
   index.html       Web app, built into the server binary
   Dockerfile, compose.yml
 logo.svg           Logo (the app icon and the web favicon are drawn from it)
@@ -104,7 +105,12 @@ NFC needs a real phone and writable NDEF tags (for example NTAG213/215/216).
 
 ![Web app](docs/web.png)
 
-**Web app**: open a group's share link (the key is in the part after `#`, which the browser never sends) and the page decrypts it in the browser; it remembers the groups you opened in this browser's local storage, with a switcher, "Add group" and "Forget", and an "Open in app" link for the phone. It needs https (or localhost) for the browser's crypto. Counters: list of counters with the time since the last reset, sorted by the oldest reset. You can add, reset and delete counters. Opening a counter shows the reset log, the interval chart, and a form for its label, tags and "notify after" reminder (the reminder itself fires on the phone). A paired NFC tag can be unpaired, but pairing needs the phone. The times on the page update every minute.
+**Web app**: everything the phone does except what needs the phone itself.
+- **Groups**: the page shows every group it knows as a foldable section (plus "Ungrouped", which lives only in this browser's local storage), each with its own sync status. A filter shows All, Ungrouped or one group. You can create, rename, forget and join groups, share one (QR code, link, copy, the browser's share sheet), and move a counter between groups from its edit form (leaving a synced group asks first). The key is in the part of the link after `#`, which the browser never sends; the groups you opened are remembered in this browser's local storage, and an "Open in app" link hands one to the phone. It needs https (or localhost) for the browser's crypto.
+- **Counters**: add, reset (now, with a note, or at a past time), undo, archive and delete. Opening one shows the reset log, the interval chart and a form for its label, tags, group and "notify after" reminder (the reminder itself fires on the phone). A paired NFC tag can be unpaired, but pairing needs the phone. Search, tag filter and sort work inside each section. The times update every minute.
+- **Export and import** use the phone's JSON file, so a file moves between the phone and the web: Replace swaps the groups of the same name for the file's, Keep both imports them as new groups.
+- **Settings** in the footer: a dark theme switch (follows the system until you use it), a debug switch that allows minutes in "notify after", and the language (English or Italian, following the browser).
+- **Not on the web**: NFC pairing, reminders and notifications, the widget, and groups that live on a different server than the page.
 
 **Run it**
 ```bash

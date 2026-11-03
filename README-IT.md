@@ -81,6 +81,7 @@ app/src/test/.../SinceTest.kt  Test unitari (formattazione, tag, ritardo dei pro
 server/
   main.go          Server di sincronizzazione: archivio di blob cifrati e handler HTTP
   main_test.go     Test dell'archivio dei blob (eseguito durante il docker build)
+  web.test.mjs     Test della logica della web app: node --test server/web.test.mjs
   index.html       Web app, inclusa nel binario del server
   Dockerfile, compose.yml
 logo.svg           Logo (l'icona dell'app e la favicon web derivano da qui)
@@ -104,7 +105,12 @@ L'NFC richiede un telefono vero e tag NDEF scrivibili (per esempio NTAG213/215/2
 
 ![Web app](docs/web.png)
 
-**Web app**: apri il link di condivisione di un gruppo (la chiave è nella parte dopo `#`, che il browser non invia mai) e la pagina lo decifra nel browser; ricorda nel local storage i gruppi aperti in questo browser, con un selettore, "Aggiungi gruppo" e "Dimentica", e un link "Apri nell'app" per il telefono. Richiede https (o localhost) per la crittografia del browser. Contatori: elenco dei contatori con il tempo dall'ultimo azzeramento, ordinati dal più vecchio. Puoi aggiungere, azzerare ed eliminare contatori. Aprendo un contatore vedi il registro degli azzeramenti, il grafico degli intervalli e un modulo per etichetta, tag e promemoria "notify after" (il promemoria scatta sul telefono). Un tag NFC abbinato può essere disabbinato, ma l'abbinamento richiede il telefono. I tempi sulla pagina si aggiornano ogni minuto.
+**Web app**: tutto quello che fa il telefono, tranne ciò che richiede il telefono stesso.
+- **Gruppi**: la pagina mostra ogni gruppo che conosce come sezione comprimibile (più "Senza gruppo", che vive solo nel local storage di questo browser), ognuna con il proprio stato di sincronizzazione. Un filtro mostra Tutti, Senza gruppo o un singolo gruppo. Puoi creare, rinominare, dimenticare e unirti a gruppi, condividerne uno (codice QR, link, copia, il menu di condivisione del browser) e spostare un contatore tra gruppi dal suo modulo di modifica (lasciare un gruppo sincronizzato chiede conferma). La chiave è nella parte del link dopo `#`, che il browser non invia mai; i gruppi aperti vengono ricordati nel local storage di questo browser, e un link "Apri nell'app" ne passa uno al telefono. Richiede https (o localhost) per la crittografia del browser.
+- **Contatori**: aggiungi, azzera (adesso, con una nota o in un momento passato), annulla, archivia ed elimina. Aprendone uno vedi il registro degli azzeramenti, il grafico degli intervalli e un modulo per etichetta, tag, gruppo e promemoria "avvisa dopo" (il promemoria scatta sul telefono). Un tag NFC abbinato può essere disabbinato, ma l'abbinamento richiede il telefono. Ricerca, filtro per tag e ordinamento funzionano dentro ogni sezione. I tempi si aggiornano ogni minuto.
+- **Esporta e importa** usano il file JSON del telefono, quindi un file passa dal telefono al web e viceversa: Sostituisci scambia i gruppi con lo stesso nome con quelli del file, Tieni entrambi li importa come nuovi gruppi.
+- **Impostazioni** nel piè di pagina: un interruttore del tema scuro (segue il sistema finché non lo usi), un interruttore debug che consente i minuti in "avvisa dopo" e la lingua (inglese o italiano, secondo il browser).
+- **Non sul web**: abbinamento NFC, promemoria e notifiche, il widget e i gruppi che stanno su un server diverso da quello della pagina.
 
 **Avvio**
 ```bash

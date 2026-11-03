@@ -9,7 +9,9 @@
 <meta name="theme-color" content="#3366cc">
 <style>
   :root { color-scheme: light dark; --bg:#fafafa; --fg:#222; --card:#fff; --muted:#777; --accent:#3366cc; --tag-l:45%; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#121212; --fg:#eee; --card:#1e1e1e; --muted:#999; --accent:#8ab4f8; --tag-l:70%; } }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme=light]) { --bg:#121212; --fg:#eee; --card:#1e1e1e; --muted:#999; --accent:#8ab4f8; --tag-l:70%; } }
+  :root[data-theme=dark] { color-scheme: dark; --bg:#121212; --fg:#eee; --card:#1e1e1e; --muted:#999; --accent:#8ab4f8; --tag-l:70%; }
+  :root[data-theme=light] { color-scheme: light; }
   body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--fg); max-width: 640px; margin: 0 auto; padding: 16px; }
   form { display: flex; gap: 8px; margin-bottom: 16px; }
   input { flex: 1; padding: 8px; font-size: 1rem; }
@@ -45,6 +47,9 @@
   #err { color: #d33; }
   [data-edit] { display: grid; gap: 8px; margin: 12px 0; }
   [data-edit] label { display: grid; gap: 4px; font-size: .9rem; }
+  [data-edit] label > input, [data-edit] label > select { width: 100%; box-sizing: border-box; }
+  [data-edit] .row > * { min-width: 0; }
+  [data-edit] .row { flex-wrap: wrap; }
   .row { display: flex; gap: 8px; }
   select { padding: 8px; font-size: 1rem; }
   .overdue .since { color: #d33; }
@@ -89,7 +94,9 @@
   <div class="row"><button id="doreplace" data-i18n="replace">Replace</button><button id="dokeep" data-i18n="keep_both">Keep both</button><button id="nogo" data-i18n="cancel">Cancel</button></div>
 </dialog>
 <footer><button id="export" data-i18n="export_data">Export data</button> <button id="import" data-i18n="import_data">Import data</button> <input type="file" id="file" accept=".json,application/json" hidden>
-  <br><br><select id="lang" aria-label="Language"><option value="">Auto</option><option value="en">English</option><option value="it">Italiano</option></select></footer>
+  <p><label><input type="checkbox" id="dark"> <span data-i18n="dark_theme">Dark theme</span></label>
+    <label><input type="checkbox" id="debug"> <span data-i18n="debug_mode">Debug mode</span></label><br>
+    <span class="muted" data-i18n="debug_hint">Allow "notify after" in minutes</span></p><select id="lang" aria-label="Language"><option value="">Auto</option><option value="en">English</option><option value="it">Italiano</option></select></footer>
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => s.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
@@ -107,7 +114,7 @@ const T = {
     reset_label: 'Reset %s', pick_past: 'Pick a time in the past', create: 'created', manual: 'manual', nfc: 'via NFC', d: 'd',
     open_app: 'Open in app', forget: 'Forget', paste_link: 'Paste a group link', bad_link: 'That isn\'t a group link',
         no_data: 'Nothing found for this link on this server', decrypt_failed: 'Can\'t decrypt: wrong key?', needs_https: 'This page needs https to decrypt (or localhost).', busy: 'Busy, try again', all_groups: 'All', ungrouped: 'Ungrouped', synced: 'Synced %s', group: 'Group', move_title: 'Move out of a synced group?', move_text: 'The counter will be removed for everyone else in the group it leaves.', new_group: 'New group', group_name: 'Group name', rename: 'Rename', join: 'Join', join_question: 'Join «%s»?',
-    already_joined: 'Already joined as «%s»', other_server: 'That link is for %s. Open it on that server\'s page.', token: 'Token', share: 'Share', copy_link: 'Copy link', link_copied: 'Copied', close: 'Close', export_data: 'Export data', import_data: 'Import data', replace: 'Replace', keep_both: 'Keep both', cancel: 'Cancel', imported_name: 'Imported', cant_read: 'Can\'t read file: %s', done_imported: 'Imported %s counters',
+    already_joined: 'Already joined as «%s»', other_server: 'That link is for %s. Open it on that server\'s page.', token: 'Token', share: 'Share', copy_link: 'Copy link', link_copied: 'Copied', close: 'Close', dark_theme: 'Dark theme', debug_mode: 'Debug mode', debug_hint: 'Allow "notify after" in minutes', export_data: 'Export data', import_data: 'Import data', replace: 'Replace', keep_both: 'Keep both', cancel: 'Cancel', imported_name: 'Imported', cant_read: 'Can\'t read file: %s', done_imported: 'Imported %s counters',
     import_q: 'The file has %s counters. Replace: groups with the same name are deleted and replaced by the file\'s. Keep both: they are imported as new groups, renamed if a name is taken. Replacing can\'t be undone.',
     share_warning: 'Anyone with this link can read and change this group, and access can\'t be taken back. To cut someone off, make a new group and move the counters.',
     forget_backup: 'Copy this link first: it is the only backup of the key. OK forgets the group in this browser (the data stays on the server), Cancel keeps it.' },
@@ -122,7 +129,7 @@ const T = {
     reset_label: 'Azzera %s', pick_past: 'Scegli un momento nel passato', create: 'creato', manual: 'manuale', nfc: 'via NFC', d: 'g',
     open_app: 'Apri nell\'app', forget: 'Dimentica', paste_link: 'Incolla un link di gruppo', bad_link: 'Questo non è un link di gruppo',
         no_data: 'Niente trovato per questo link su questo server', decrypt_failed: 'Impossibile decifrare: chiave sbagliata?', needs_https: 'Questa pagina richiede https per decifrare (o localhost).', busy: 'Occupato, riprova', all_groups: 'Tutti', ungrouped: 'Senza gruppo', synced: 'Sincronizzato alle %s', group: 'Gruppo', move_title: 'Spostare da un gruppo sincronizzato?', move_text: 'Il contatore verrà rimosso per tutti gli altri nel gruppo che lascia.', new_group: 'Nuovo gruppo', group_name: 'Nome del gruppo', rename: 'Rinomina', join: 'Unisciti', join_question: 'Unirti a «%s»?',
-    already_joined: 'Già unito come «%s»', other_server: 'Quel link è per %s. Aprilo sulla pagina di quel server.', token: 'Token', share: 'Condividi', copy_link: 'Copia link', link_copied: 'Copiato', close: 'Chiudi', export_data: 'Esporta dati', import_data: 'Importa dati', replace: 'Sostituisci', keep_both: 'Tieni entrambi', cancel: 'Annulla', imported_name: 'Importati', cant_read: 'Impossibile leggere il file: %s', done_imported: 'Importati %s contatori',
+    already_joined: 'Già unito come «%s»', other_server: 'Quel link è per %s. Aprilo sulla pagina di quel server.', token: 'Token', share: 'Condividi', copy_link: 'Copia link', link_copied: 'Copiato', close: 'Chiudi', dark_theme: 'Tema scuro', debug_mode: 'Modalità debug', debug_hint: 'Consenti "avvisa dopo" in minuti', export_data: 'Esporta dati', import_data: 'Importa dati', replace: 'Sostituisci', keep_both: 'Tieni entrambi', cancel: 'Annulla', imported_name: 'Importati', cant_read: 'Impossibile leggere il file: %s', done_imported: 'Importati %s contatori',
     import_q: 'Il file contiene %s contatori. Sostituisci: i gruppi con lo stesso nome vengono eliminati e sostituiti da quelli del file. Tieni entrambi: vengono importati come nuovi gruppi, rinominati se un nome è già usato. Sostituire non si può annullare.',
     share_warning: 'Chiunque abbia questo link può leggere e modificare questo gruppo, e l\'accesso non si può revocare. Per escludere qualcuno, crea un nuovo gruppo e sposta i contatori.',
     forget_backup: 'Copia prima questo link: è l\'unico backup della chiave. OK dimentica il gruppo in questo browser (i dati restano sul server), Annulla lo tiene.' },
@@ -145,6 +152,9 @@ const hex = u => [...u].map(b => b.toString(16).padStart(2, '0')).join('');
 const validSecret = s => { try { return b64u(s).length === 32; } catch { return false; } };
 
 // <core> Pure logic (no page, no network): tests load this part, see web.test.mjs.
+const UNITS = [['minutes', 6e4], ['hours', 36e5], ['days', 864e5], ['weeks', 6048e5]];
+/** Like the phone: minutes only in debug mode, or if this counter already uses them (else it couldn't be shown). */
+const unitsFor = (ms, debug) => debug || (ms ?? 0) % 36e5 !== 0 ? UNITS : UNITS.slice(1);
 const tagList = s => [...new Set(s.split(',').map(t => t.trim().toLowerCase()).filter(Boolean))]; // same as the app
 const uniqueName = (name, taken) => { let n = name, i = 1; while (taken.some(x => x.toLowerCase() === n.toLowerCase())) n = `${name} (${++i})`; return n; };
 
@@ -403,19 +413,18 @@ function since(ms) {
 
 const event = (counterId, source, at = Date.now()) => ({ id: crypto.randomUUID(), counterId, at, source, deleted: false });
 
-const UNITS = [['minutes', 6e4], ['hours', 36e5], ['days', 864e5], ['weeks', 6048e5]];
 
 function editForm(c, avg, k) {
-  const ms = c.notifyAfterMs;
+  const ms = c.notifyAfterMs, units = unitsFor(ms, debug);
   // Largest unit that divides the stored value evenly, like the app.
-  const [unit, size] = ms ? UNITS.filter(([, n]) => ms % n === 0).pop() ?? UNITS[0] : UNITS[2];
+  const [unit, size] = ms ? units.filter(([, n]) => ms % n === 0).pop() ?? units[0] : UNITS[2];
   return `<form data-edit="${c.id}">
     <label>${t('label')} <input name="label" value="${esc(c.label)}" required></label>
     <label>${t('tags')} <input name="tags" value="${esc(tagList(c.tags).join(', '))}" placeholder="${t('comma')}"></label>
     ${groups.length ? `<label>${t('group')} <select name="group">${[['', t('ungrouped')], ...[...groups].sort(byName).map(g => [g.secret, g.name || '…'])]
       .map(([v, n]) => `<option value="${esc(v)}" ${v === k ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>` : ''}
     <label>${t('notify_after')} <span class="row"><input name="amount" type="number" min="1" value="${ms ? ms / size : ''}" placeholder="${t('never')}">
-      <select name="unit">${UNITS.map(([u]) => `<option value="${u}" ${u === unit ? 'selected' : ''}>${t(u)}</option>`).join('')}</select>
+      <select name="unit">${units.map(([u]) => `<option value="${u}" ${u === unit ? 'selected' : ''}>${t(u)}</option>`).join('')}</select>
       ${avg ? `<button type="button" data-avg="${avg}">${t('use_average', since(Date.now() - avg))}</button>` : ''}</span></label>
     <label>${t('reset_note')} <span class="row"><input name="note" placeholder="${t('note')}"><input type="datetime-local" name="at"><button type="button" data-reset-at="${c.id}">${t('reset')}</button></span></label>
     ${c.nfcTagId ? `<p class="muted">${t('nfc_paired')} <button type="button" data-unpair="${c.id}">${t('unpair')}</button></p>` : ''}
@@ -439,6 +448,7 @@ function chart(ev) {
 // Same hue as the app's tagColor: Java String.hashCode() mod 360.
 const tagHue = t => { let h = 0; for (const ch of t) h = Math.imul(h, 31) + ch.charCodeAt(0) | 0; return (h % 360 + 360) % 360; };
 const dot = t => `<i class="dot" style="background:hsl(${tagHue(t)} 55% var(--tag-l))"></i>`;
+let debug = localStorage.getItem('debug') === '1';
 let filter = null, showArchived = false;
 let folded = new Set(); try { folded = new Set(JSON.parse(localStorage.getItem('folded') || '[]')); } catch {}
 $('#sort').value = localStorage.getItem('sort') || 'due';
@@ -556,7 +566,7 @@ $('#list').onclick = e => {
   }
   if (d.avg) {
     const f = e.target.closest('form').elements, a = Number(d.avg);
-    const [u, n] = a < 1728e5 ? UNITS[1] : UNITS[2]; // hours under 2 days, else days
+    const [u, n] = a < 36e5 && f.unit.querySelector('[value=minutes]') ? UNITS[0] : a < 1728e5 ? UNITS[1] : UNITS[2]; // minutes (debug only) under an hour, hours under 2 days, else days
     f.unit.value = u; f.amount.value = Math.max(1, Math.round(a / n));
   }
   if (d.archive) {
@@ -579,6 +589,17 @@ function showUndo(text, ev, k) {
 $('#q').oninput = render;
 $('#lang').value = saved || '';
 $('#lang').onchange = () => { try { $('#lang').value ? localStorage.setItem('lang', $('#lang').value) : localStorage.removeItem('lang'); } catch {} location.reload(); };
+const dark = matchMedia('(prefers-color-scheme: dark)');
+function applyTheme() { // follows the system until the switch is used
+  const v = localStorage.getItem('theme');
+  v ? document.documentElement.dataset.theme = v : delete document.documentElement.dataset.theme;
+  $('#dark').checked = v ? v === 'dark' : dark.matches;
+}
+dark.addEventListener('change', applyTheme);
+$('#dark').onchange = () => { localStorage.setItem('theme', $('#dark').checked ? 'dark' : 'light'); applyTheme(); };
+$('#debug').checked = debug;
+$('#debug').onchange = () => { debug = $('#debug').checked; localStorage.setItem('debug', debug ? '1' : '0'); render(); };
+applyTheme();
 $('#sort').onchange = () => { localStorage.setItem('sort', $('#sort').value); render(); };
 $('#group').onchange = () => { view = $('#group').value; render(); };
 /** Applies one entry of an import plan: the group's counters are replaced by the file's (moved here from other places if they lived there). */

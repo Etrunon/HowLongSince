@@ -5,8 +5,8 @@ import { readFileSync } from 'node:fs';
 
 const html = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
 const core = html.slice(html.indexOf('// <core>'), html.indexOf('// </core>'));
-const { tagList, uniqueName, merge, toBackup, parseBackup, planImport } =
-  new Function(core + '; return { tagList, uniqueName, merge, toBackup, parseBackup, planImport };')();
+const { UNITS, unitsFor, tagList, uniqueName, merge, toBackup, parseBackup, planImport } =
+  new Function(core + '; return { UNITS, unitsFor, tagList, uniqueName, merge, toBackup, parseBackup, planImport };')();
 
 const c = (id, label, updatedAt = 1, extra = {}) => ({ id, label, tags: '', notifyAfterMs: null, nfcTagId: null, updatedAt, deleted: false, archived: false, ...extra });
 const e = (id, counterId, at = 1, extra = {}) => ({ id, counterId, at, source: 'manual', deleted: false, ...extra });
@@ -85,4 +85,12 @@ test('import plans', () => {
   assert.notEqual(keep[0].items[0].counter.id, items[0].counter.id); // fresh ids: never merges with the originals
   assert.equal(keep[1].items[0].counter.nfcTagId, null);
   assert.equal(keep[0].items[0].events[1].counterId, keep[0].items[0].counter.id);
+});
+
+test('minutes only in debug mode, or when the counter already uses them', () => {
+  const names = u => u.map(([n]) => n).join();
+  assert.equal(names(unitsFor(null, false)), 'hours,days,weeks');
+  assert.equal(names(unitsFor(3 * 36e5, false)), 'hours,days,weeks');
+  assert.equal(names(unitsFor(null, true)), 'minutes,hours,days,weeks');
+  assert.equal(names(unitsFor(90 * 6e4, false)), 'minutes,hours,days,weeks'); // 90 minutes can't be shown in hours
 });

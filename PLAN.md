@@ -56,7 +56,7 @@ Today the server merges data and the web app reads plaintext. With end-to-end en
 
 ## Phase 5: web app parity
 
-Agreed 2026-11-03. The web app can open and edit a group someone shared, but can't create, share or manage them. Goal: everything the phone does, except what needs the phone. No server change: groups are blobs, so every step is client code in `server/index.html`. Each step ships on its own.
+Agreed 2026-11-03. Done 2026-11-03 (steps 5a to 5f). The web app can open and edit a group someone shared, but can't create, share or manage them. Goal: everything the phone does, except what needs the phone. No server change: groups are blobs, so every step is client code in `server/index.html`. Each step ships on its own.
 
 Decisions: a vendored QR generator (about 20 KB, MIT, pinned version, pasted inline), counters kept only in the browser ("Ungrouped" in `localStorage`, like the phone), and foldable sections for all groups like the phone.
 
