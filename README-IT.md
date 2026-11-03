@@ -42,12 +42,14 @@ Un server opzionale, ospitato da te, sincronizza i contatori tra il telefono e u
 
   <img src="docs/nfc-pairing.png" width="240" alt="Finestra di abbinamento: copia l'URL o abbina ora">
 
+- **Gruppi** (menu ☰ → Gruppi): un gruppo è una raccolta di contatori che si sincronizza, o no, per conto suo. La schermata Home mostra una sezione comprimibile per gruppo, il menu apre un singolo gruppo, e la finestra di modifica di un contatore lo sposta tra i gruppi. I contatori senza gruppo restano sul telefono. Eliminare un gruppo riporta i suoi contatori in "Senza gruppo".
+  - **La sincronizzazione è per gruppo**: tocca un gruppo, inserisci l'URL del tuo server (e il token) e attiva la sincronizzazione. Il telefono crea una chiave casuale e cifra il gruppo prima di inviarlo; il server conserva solo dati che non può leggere.
+  - **Condividi** (l'icona condividi su un gruppo sincronizzato): un link e un codice QR che contengono server e chiave. Su un altro telefono apri Gruppi → Unisciti e incolla il link (oppure apri un link `howlongsince://join…`); mostra il nome del gruppo e chiede conferma. Il link è anche il tuo backup della chiave, quindi conservalo. Chi lo ha può leggere e modificare il gruppo, e l'accesso non si può revocare: per escludere qualcuno, crea un nuovo gruppo e sposta i contatori.
 - **Tag**: una riga di filtri in cima all'elenco, con un colore fisso per ogni tag.
 - **Impostazioni** (menu ☰)
   - Interruttore del tema scuro. Segue il sistema finché non lo cambi.
   - Modalità Debug, che consente promemoria in minuti.
-  - Esportazione JSON e un'importazione che sostituisce tutti i dati. Il file viene controllato e confermi prima che venga sovrascritto qualcosa. Con la sincronizzazione attiva, l'importazione sostituisce anche i dati sul server.
-  - URL e token del server di sincronizzazione, con lo stato dell'ultima sincronizzazione e un pulsante "Sync now". Lascia l'URL vuoto per disattivare la sincronizzazione.
+  - Esportazione JSON e un'importazione. Il file viene controllato e confermi prima che venga sovrascritto qualcosa. "Sostituisci" scambia i gruppi con lo stesso nome con quelli del file, "Tieni entrambi" li importa come nuovi gruppi. In un gruppo sincronizzato, la sostituzione arriva a tutti i suoi membri.
 - **Lingue**: inglese e italiano, secondo la lingua del telefono o del browser. Da Android 13 la lingua dell'app si può anche impostare a parte nelle impostazioni di sistema (Impostazioni → App → How Long Since? → Lingua).
 - **Aspetto**: Material 3 con i colori del tuo sfondo (Android 12+) e una barra del titolo grande che si riduce scorrendo.
 
@@ -69,13 +71,16 @@ app/src/main/java/eu/etrunon/howlongsince/
   Notify.kt        Pianificazione dei promemoria e worker delle notifiche
   Nfc.kt           Scrittura dei tag e lettura dell'URI di azzeramento
   Export.kt        Esportazione, importazione e ripristino JSON
-  Sync.kt          Sincronizzazione col server: formato JSON e chiamata HTTP
+  Sync.kt          Sincronizzazione col server: formato JSON, unione e chiamate HTTP
+  Crypto.kt        Derivazione delle chiavi e cifratura di un gruppo
+  Groups.kt        Schermata Gruppi: crea, rinomina, elimina, sincronizza e condividi
+  Join.kt          Link di condivisione, codice QR e unione a un gruppo
   Widget.kt        Widget per la schermata Home
   Theme.kt         Tema a colori dinamici e colori dei tag
 app/src/test/.../SinceTest.kt  Test unitari (formattazione, tag, ritardo dei promemoria, URI NFC, andata e ritorno JSON di backup e sync)
 server/
-  main.go          Server di sincronizzazione: logica di merge, salvataggio su file JSON, handler HTTP
-  main_test.go     Test unitario del merge (eseguito durante il docker build)
+  main.go          Server di sincronizzazione: archivio di blob cifrati e handler HTTP
+  main_test.go     Test dell'archivio dei blob (eseguito durante il docker build)
   index.html       Web app, inclusa nel binario del server
   Dockerfile, compose.yml
 logo.svg           Logo (l'icona dell'app e la favicon web derivano da qui)
@@ -95,11 +100,11 @@ L'NFC richiede un telefono vero e tag NDEF scrivibili (per esempio NTAG213/215/2
 
 ## Server di sincronizzazione e web app (opzionali)
 
-`server/` è un piccolo server Go che salva tutto in un unico file JSON e serve la web app. L'immagine Docker è un singolo binario di circa 8 MB. Ognuno esegue la propria copia; l'app non ha un indirizzo di server predefinito.
+`server/` è un piccolo server Go che salva ogni gruppo sincronizzato come un file cifrato e serve la web app. L'immagine Docker è un singolo binario di circa 8 MB. Ognuno esegue la propria copia; l'app non ha un indirizzo di server predefinito. Il server non può leggere i tuoi contatori: cifratura e decifratura avvengono sul telefono e nel browser.
 
 ![Web app](docs/web.png)
 
-**Web app**: elenco dei contatori con il tempo dall'ultimo azzeramento, ordinati dal più vecchio. Puoi aggiungere, azzerare ed eliminare contatori. Aprendo un contatore vedi il registro degli azzeramenti, il grafico degli intervalli e un modulo per etichetta, tag e promemoria "notify after" (il promemoria scatta sul telefono). Un tag NFC abbinato può essere disabbinato, ma l'abbinamento richiede il telefono. I tempi sulla pagina si aggiornano ogni minuto.
+**Web app**: apri il link di condivisione di un gruppo (la chiave è nella parte dopo `#`, che il browser non invia mai) e la pagina lo decifra nel browser; ricorda nel local storage i gruppi aperti in questo browser, con un selettore, "Aggiungi gruppo" e "Dimentica", e un link "Apri nell'app" per il telefono. Richiede https (o localhost) per la crittografia del browser. Contatori: elenco dei contatori con il tempo dall'ultimo azzeramento, ordinati dal più vecchio. Puoi aggiungere, azzerare ed eliminare contatori. Aprendo un contatore vedi il registro degli azzeramenti, il grafico degli intervalli e un modulo per etichetta, tag e promemoria "notify after" (il promemoria scatta sul telefono). Un tag NFC abbinato può essere disabbinato, ma l'abbinamento richiede il telefono. I tempi sulla pagina si aggiornano ogni minuto.
 
 **Avvio**
 ```bash
@@ -124,7 +129,7 @@ server {
     add_header Referrer-Policy no-referrer always;
     add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'" always;
 
-    location /sync {
+    location /s/ {
         limit_req zone=hls burst=20 nodelay;   # ~30 sync/min per IP, picchi consentiti
         proxy_pass http://127.0.0.1:13387;
     }
@@ -138,35 +143,36 @@ Con Caddy, gli stessi header vanno in un blocco `header`; il rate limiting richi
 L'app Android richiede un URL `https://` con un certificato di cui Android si fida di default (Let's Encrypt, Tailscale, una CA commerciale). I certificati autofirmati o di una CA privata installati sul telefono non sono accettati dall'app.
 
 Poi:
-- **Web**: apri l'URL e accedi con il token. Il modulo di accesso funziona con i password manager, e il token resta poi salvato nel browser.
+- **Web**: apri il link di condivisione di un gruppo. Se il server richiede un token e il link non lo contiene, la pagina lo chiede (funziona con i password manager) e lo tiene nel browser.
 - **Installa la web app** (finestra e icona proprie):
   - Chrome / Chromium / Edge (qualsiasi OS): l'icona di installazione a destra della barra degli indirizzi.
   - Firefox su Windows (143+): l'icona "aggiungi alla barra delle applicazioni" nella barra degli indirizzi la fissa sulla barra di Windows. Se manca, imposta `browser.taskbarTabs.enabled` a `true` in `about:config`.
   - Firefox su Android: menu → "Aggiungi a schermata Home".
   - Firefox su Linux: nessuna opzione di installazione; usa una scheda fissata o Chromium.
-- **Telefono**: Impostazioni → Sync server, inserisci URL e token.
+- **Telefono**: Gruppi → tocca un gruppo → inserisci URL e token → Attiva la sincronizzazione. Un server globale di una versione precedente diventa un gruppo chiamato "Sincronizzati" alla prima sincronizzazione della nuova app.
 
-**Configurazione** (variabili d'ambiente): `TOKEN` (token bearer, obbligatorio: senza il server non parte), `INSECURE=1` (avvio senza token, solo su una rete fidata), `DATA_FILE` (default `/data/data.json`), `ADDR` (default `:8080`). `compose.yml` mappa `HLS_TOKEN` da `.env` su `TOKEN`.
+**Configurazione** (variabili d'ambiente): `TOKEN` (token bearer, obbligatorio: senza il server non parte), `INSECURE=1` (avvio senza token, solo su una rete fidata), `DATA_DIR` (default `/data`, i blob vanno in `s/` al suo interno), `ADDR` (default `:8080`). `compose.yml` mappa `HLS_TOKEN` da `.env` su `TOKEN`.
 
-**API**: `GET /` web app, `GET /health` risponde `ok`, `POST /sync` riceve `{counters, events}` (tutti o solo quelli modificati) e restituisce lo stato completo unito.
+**API**: `GET /` web app, `GET /health` risponde `ok`, `GET /s/{id}` restituisce `{etag, ciphertext}` (404 se non c'è nulla), `PUT /s/{id}` riceve `{ciphertext}` e `If-Match: <etag>` e risponde 409 se qualcun altro ha scritto prima (senza `If-Match` crea soltanto). `{id}` è di 32 caratteri esadecimali derivati dal segreto del gruppo. Tutto richiede il token bearer.
 
 **Come funziona la sincronizzazione**
-- Contatori e azzeramenti hanno un UUID per la sincronizzazione. Il telefono mantiene i suoi id locali per i promemoria; i tag NFC contengono l'UUID.
-- Modifiche ai contatori: vince l'`updatedAt` più recente. Gli azzeramenti vengono uniti per id.
+- La chiave: ogni gruppo sincronizzato ha un segreto casuale di 32 byte creato sul telefono. HKDF-SHA256 lo trasforma nell'id che vede il server e in una chiave AES-256-GCM; l'id è anche dato autenticato, così il server non può consegnare il blob di un gruppo come se fosse di un altro. Il segreto sta in un file di preferenze a parte che i backup saltano. Il server vede un id anonimo, la dimensione del blob, gli orari e il tuo indirizzo IP.
+- Una sincronizzazione è: scarica il blob, decifra, unisci con il gruppo locale, cifra, rimettilo con `If-Match`; con un 409 ricomincia. L'unione la fanno il telefono e la web app, mai il server.
+- Contatori e azzeramenti hanno un UUID. Il telefono mantiene i suoi id locali per i promemoria; i tag NFC contengono l'UUID.
+- Modifiche ai contatori: vince l'`updatedAt` più recente. Gli azzeramenti vengono uniti per id. Spostare un contatore in un altro gruppo mantiene il suo UUID e scrive un tombstone nel vecchio gruppo, così lì sparisce per tutti.
 - Le eliminazioni sono tombstone (`deleted: true`), così raggiungono ogni dispositivo.
-- L'app invia tutto all'apertura, poco dopo ogni modifica e ogni 15 minuti in background (il minimo di Android), poi applica il risultato unito. La web app si sincronizza ogni 15 minuti e quando la sua scheda torna visibile.
-- I contatori eliminati vengono rimossi definitivamente dopo 90 giorni, sul server e sul telefono. Un dispositivo offline più a lungo potrebbe riportarne indietro uno.
-- Le risposte sono compresse con gzip. La web app si può installare come app (manifest + icona).
-- Il server chiude le connessioni lente o bloccate (10 s per inviare gli header, 30 s per richiesta).
-- Il server scrive il file in modo atomico e si rifiuta di partire se è corrotto, invece di sovrascriverlo.
+- L'app si sincronizza all'apertura, poco dopo ogni modifica e ogni 15 minuti in background (il minimo di Android). La web app si sincronizza ogni 15 minuti e quando la sua scheda torna visibile.
+- I contatori eliminati vengono rimossi definitivamente dopo 90 giorni. Un dispositivo offline più a lungo potrebbe riportarne indietro uno. Può farlo anche un server che serve un blob vecchio.
+- Se vanno persi tutti i telefoni che hanno la chiave di un gruppo, i suoi dati sono persi. Conserva il link di condivisione.
+- Il server chiude le connessioni lente o bloccate (10 s per inviare gli header, 30 s per richiesta) e scrive i blob in modo atomico.
 
 **Più telefoni sullo stesso server**
-- Ogni telefono (e browser) con il token condivide gli stessi dati, ideale per una famiglia che si divide le faccende. Per persone separate, esegui un container per persona, ognuno sulla sua porta.
+- Un gruppo è condiviso con chiunque abbia il suo link, ideale per una famiglia che si divide le faccende; gli altri gruppi restano privati di un telefono o vanno ad altre persone. Un server può contenere molti gruppi.
 - Gli azzeramenti non vanno mai persi: ognuno ha un UUID e il server li tiene tutti, anche quando due telefoni azzerano nello stesso istante.
 - Le modifiche valgono per l'intero contatore: l'`updatedAt` più recente sostituisce insieme etichetta, tag e promemoria, quindi due persone che cambiano campi diversi quasi nello stesso momento perdono una delle due modifiche.
 - L'ordine delle modifiche usa l'orologio di ogni telefono; un telefono con l'orologio sballato di qualche minuto può vincere o perdere una modifica a torto.
 - I promemoria scattano su ogni telefono che ha il contatore. Un tag abbinato su un telefono funziona su tutti: il tag contiene l'id di sincronizzazione del contatore, e l'abbinamento si sincronizza.
-- Il server gestisce una sincronizzazione alla volta, e ogni sincronizzazione trasporta lo stato completo, il che va bene per pochi telefoni e centinaia di contatori (le richieste sono limitate a 10 MB).
+- Ogni sincronizzazione trasporta lo stato completo del gruppo, il che va bene per pochi telefoni e centinaia di contatori (le richieste sono limitate a 10 MB).
 
 ## Licenza
 

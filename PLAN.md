@@ -13,7 +13,7 @@ Agreed 2026-11-03. Each phase ships on its own.
 
 Today the server merges data and the web app reads plaintext. With end-to-end encryption the server can do neither, so:
 
-- **Server:** a dumb blob store (the old `/sync` and its plaintext web app stay until Phase 4, which deletes them and `merge`/`prune`). `GET /s/{id}` returns `{etag, ciphertext}`. `PUT /s/{id}` takes `If-Match: <etag>` and returns 409 on a conflict. The ETag is a content hash, and each blob is one file. `merge`/`prune` in `main.go` are deleted.
+- **Server:** a dumb blob store (`/sync`, `merge` and `prune` were deleted in Phase 4). `GET /s/{id}` returns `{etag, ciphertext}`. `PUT /s/{id}` takes `If-Match: <etag>` and returns 409 on a conflict. The ETag is a content hash, and each blob is one file. `merge`/`prune` in `main.go` are deleted.
 - **Client sync:** GET, decrypt, merge (the existing `Dao.merge`, limited to one group), encrypt, PUT. On a 409, start again from the GET. Tombstone pruning (90 days) is done on the client.
 - **Crypto:** each synced group has a random 32-byte secret. HKDF derives two values from it: the space id the server sees, and an AES-256-GCM key. The space id is passed as associated data, so the server can't swap blobs between spaces. Only `javax.crypto` and WebCrypto are used, no new dependencies.
 - **What the server still sees:** an anonymous space id, blob size, timing and IP address.
@@ -51,7 +51,8 @@ Today the server merges data and the web app reads plaintext. With end-to-end en
 
 - The web app decrypts in the browser with WebCrypto. The key comes from the URL fragment, which is never sent to the server.
 - A JS port of the group-limited merge.
-- Known groups (host, key, token) are kept in `localStorage`.
+- Known groups (key, token, name) are kept in `localStorage`. The host is the server that serves the page, so it isn't stored.
+- The browser does the merge, pushing with `If-Match` and starting over on a 409. Needs https or localhost for WebCrypto.
 
 ## Known limits
 

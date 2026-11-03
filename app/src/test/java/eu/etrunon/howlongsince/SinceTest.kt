@@ -143,3 +143,12 @@ class JoinTest {
             assertEquals(s, null, parseJoin(s))
     }
 }
+
+class WebCryptoTest {
+    @Test fun opensWhatTheWebAppSealed() { // made by the browser's WebCrypto (server/index.html) with the same secret
+        val k = keysOf("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8")
+        assertEquals("972a5ac5604d28f549b06e0ee52d7e3a", k.id)
+        val blob = java.util.Base64.getDecoder().decode("GoJMF2CGeZ3soko5Z05lyNidsw+Mht7X9Cfs6+3noBSR7OD5nkrzWlQDSzTn0g==")
+        assertEquals("""{"hello":"wörld"}""", open(k, blob).decodeToString())
+    }
+}

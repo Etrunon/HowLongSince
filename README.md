@@ -42,12 +42,14 @@ An optional self-hosted server keeps the counters in sync between the phone and 
 
   <img src="docs/nfc-pairing.png" width="240" alt="Pair dialog: copy the URL or pair now">
 
+- **Groups** (☰ menu → Groups): a group is a collection of counters that is synced, or not, on its own. The home screen shows one foldable section per group, the menu opens a single group, and a counter's edit dialog moves it between groups. Counters without a group stay on the phone. Deleting a group moves its counters back to "Ungrouped".
+  - **Sync is per group**: tap a group, enter your server URL (and token), and turn sync on. The phone makes a random key and encrypts the group before sending it; the server only stores data it can't read.
+  - **Share** (the share icon on a synced group): a link and a QR code that hold the server and the key. On another phone, open Groups → Join and paste the link (or open a `howlongsince://join…` link); it shows the group's name and asks before joining. The link is also your backup of the key, so keep it. Anyone who has it can read and change the group, and access can't be taken back: to cut someone off, make a new group and move the counters into it.
 - **Tags**: a filter row at the top of the list, with a stable color for each tag.
 - **Settings** (☰ menu)
   - Dark theme switch. It follows the system until you change it.
   - Debug mode, which allows minute-based reminders.
-  - JSON export, and an import that replaces all data. The file is checked and you confirm before anything is overwritten. With sync on, the import replaces the data on the server too.
-  - Sync server URL and token, with the last sync status and a "Sync now" button. Leave the URL empty to turn sync off.
+  - JSON export, and an import. The file is checked and you confirm before anything is overwritten. "Replace" swaps the groups of the same name for the file's, "Keep both" imports them as new groups. In a synced group, a replace reaches everyone in it.
 - **Languages**: English and Italian, following the phone or browser language. On Android 13+ the app's language can also be set on its own in the system settings (Settings → Apps → How Long Since? → Language).
 - **Look**: Material 3 with colors from your wallpaper (Android 12+) and a large title bar that collapses as you scroll.
 
@@ -69,13 +71,16 @@ app/src/main/java/eu/etrunon/howlongsince/
   Notify.kt        Reminder scheduling and the notification worker
   Nfc.kt           Tag writing and reading of the reset URI
   Export.kt        JSON export, import and restore
-  Sync.kt          Sync with the server: JSON format and the HTTP call
+  Sync.kt          Sync with the server: JSON format, merge and the HTTP calls
+  Crypto.kt        Key derivation and encryption of a group
+  Groups.kt        Groups screen: create, rename, delete, sync and share
+  Join.kt          Share link, QR code and joining a group
   Widget.kt        Home-screen widget
   Theme.kt         Dynamic color theme and tag colors
 app/src/test/.../SinceTest.kt  Unit tests (formatting, tags, reminder delay, NFC URI, backup and sync JSON round trips)
 server/
-  main.go          Sync server: merge logic, JSON file storage, HTTP handlers
-  main_test.go     Merge unit test (runs during docker build)
+  main.go          Sync server: encrypted blob store and HTTP handlers
+  main_test.go     Blob store test (runs during docker build)
   index.html       Web app, built into the server binary
   Dockerfile, compose.yml
 logo.svg           Logo (the app icon and the web favicon are drawn from it)
@@ -95,11 +100,11 @@ NFC needs a real phone and writable NDEF tags (for example NTAG213/215/216).
 
 ## Sync server and web app (optional)
 
-`server/` is a small Go server that stores everything in one JSON file and serves the web app. The Docker image is a single binary of about 8 MB. Each person runs their own copy; the app has no built-in server address.
+`server/` is a small Go server that stores each synced group as one encrypted file and serves the web app. The Docker image is a single binary of about 8 MB. Each person runs their own copy; the app has no built-in server address. The server can't read your counters: encryption and decryption happen on the phone and in the browser.
 
 ![Web app](docs/web.png)
 
-**Web app**: list of counters with the time since the last reset, sorted by the oldest reset. You can add, reset and delete counters. Opening a counter shows the reset log, the interval chart, and a form for its label, tags and "notify after" reminder (the reminder itself fires on the phone). A paired NFC tag can be unpaired, but pairing needs the phone. The times on the page update every minute.
+**Web app**: open a group's share link (the key is in the part after `#`, which the browser never sends) and the page decrypts it in the browser; it remembers the groups you opened in this browser's local storage, with a switcher, "Add group" and "Forget", and an "Open in app" link for the phone. It needs https (or localhost) for the browser's crypto. Counters: list of counters with the time since the last reset, sorted by the oldest reset. You can add, reset and delete counters. Opening a counter shows the reset log, the interval chart, and a form for its label, tags and "notify after" reminder (the reminder itself fires on the phone). A paired NFC tag can be unpaired, but pairing needs the phone. The times on the page update every minute.
 
 **Run it**
 ```bash
@@ -124,7 +129,7 @@ server {
     add_header Referrer-Policy no-referrer always;
     add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'" always;
 
-    location /sync {
+    location /s/ {
         limit_req zone=hls burst=20 nodelay;   # ~30 syncs/min per IP, bursts allowed
         proxy_pass http://127.0.0.1:13387;
     }
@@ -138,35 +143,36 @@ With Caddy, the same headers go in a `header` block; rate limiting needs the `ca
 The Android app needs an `https://` URL with a certificate that Android trusts by default (Let's Encrypt, Tailscale, a commercial CA). Self-signed or private-CA certificates installed on the phone are not trusted by the app.
 
 Then:
-- **Web**: open the URL and log in with the token. The login form works with password managers, and the token is then kept in the browser.
+- **Web**: open a group's share link. If the server needs a token and the link doesn't carry it, the page asks for it (it works with password managers) and keeps it in the browser.
 - **Install the web app** (own window, own icon):
   - Chrome / Chromium / Edge (any OS): the install icon on the right of the address bar.
   - Firefox on Windows (143+): the "add to taskbar" icon in the address bar pins it to the Windows taskbar. If missing, set `browser.taskbarTabs.enabled` to `true` in `about:config`.
   - Firefox on Android: menu → "Add to Home screen".
   - Firefox on Linux: no install option; use a pinned tab or Chromium.
-- **Phone**: Settings → Sync server, enter the URL and the token.
+- **Phone**: Groups → tap a group → enter the URL and the token → Turn on sync. An existing global server from an older version becomes a group called "Synced" the first time the new app syncs.
 
-**Configuration** (environment variables): `TOKEN` (bearer token, required: the server won't start without it), `INSECURE=1` (run without a token, only on a trusted network), `DATA_FILE` (default `/data/data.json`), `ADDR` (default `:8080`). `compose.yml` maps `HLS_TOKEN` from `.env` to `TOKEN`.
+**Configuration** (environment variables): `TOKEN` (bearer token, required: the server won't start without it), `INSECURE=1` (run without a token, only on a trusted network), `DATA_DIR` (default `/data`, blobs go in `s/` inside it), `ADDR` (default `:8080`). `compose.yml` maps `HLS_TOKEN` from `.env` to `TOKEN`.
 
-**API**: `GET /` web app, `GET /health` returns `ok`, `POST /sync` takes `{counters, events}` (all or only the changed ones) and returns the merged full state.
+**API**: `GET /` web app, `GET /health` returns `ok`, `GET /s/{id}` returns `{etag, ciphertext}` (404 if there is none), `PUT /s/{id}` takes `{ciphertext}` and `If-Match: <etag>` and answers 409 if someone else wrote first (no `If-Match` means create only). `{id}` is 32 hex characters derived from the group's secret. All of it takes the bearer token.
 
 **How sync works**
-- Counters and resets have a UUID for sync. The phone keeps its local ids for reminders; NFC tags hold the UUID.
-- Counter edits: the newer `updatedAt` wins. Resets are merged by id.
+- The key: each synced group has a random 32-byte secret made on the phone. HKDF-SHA256 turns it into the id the server sees and an AES-256-GCM key; the id is also authenticated data, so the server can't hand one group's blob out as another's. The secret is kept in a separate preferences file that backups skip. The server sees an anonymous id, the blob size, timing and your IP address.
+- A sync is: get the blob, decrypt, merge with the local group, encrypt, put it back with `If-Match`; on a 409 it starts again. The merge is done by the phone and the web app, never the server.
+- Counters and resets have a UUID. The phone keeps its local ids for reminders; NFC tags hold the UUID.
+- Counter edits: the newer `updatedAt` wins. Resets are merged by id. Moving a counter to another group keeps its UUID and writes a tombstone in the old group, so it disappears there for everyone.
 - Deletes are tombstones (`deleted: true`), so they reach every device.
-- The app sends everything when it opens, shortly after every change, and every 15 minutes in the background (the Android minimum), then applies the merged result. The web app syncs every 15 minutes and when its tab comes back into view.
-- Deleted counters are dropped for good after 90 days, on the server and the phone. A device that has been offline for longer could bring one back.
-- Responses are gzipped. The web app can be installed as an app (manifest + icon).
-- The server drops slow or stuck connections (10 s to send headers, 30 s per request).
-- The server writes the file atomically and refuses to start if it is corrupt, rather than overwriting it.
+- The app syncs when it opens, shortly after every change, and every 15 minutes in the background (the Android minimum). The web app syncs every 15 minutes and when its tab comes back into view.
+- Deleted counters are dropped for good after 90 days. A device that has been offline for longer could bring one back. A server that serves an old blob could do the same.
+- If every phone holding a group's key is lost, its data is gone. Keep the share link.
+- The server drops slow or stuck connections (10 s to send headers, 30 s per request) and writes blobs atomically.
 
 **Several phones on one server**
-- Every phone (and browser) with the token shares one dataset, which suits a household sharing chores. For separate people, run one container per person on its own port.
+- A group is shared with whoever has its link, which suits a household sharing chores; other groups stay private to a phone or go to other people. One server can hold many groups.
 - Resets are never lost: each has a UUID and the server keeps them all, even when two phones reset at the same moment.
 - Edits are whole-counter: the newer `updatedAt` replaces label, tags and reminder together, so two people changing different fields at almost the same time lose one change.
 - Edit order uses each phone's clock; a phone whose clock is off by minutes can win or lose an edit it shouldn't.
 - Reminders fire on every phone that has the counter. A tag paired on one phone works on all of them: the tag holds the counter's sync id, and the pairing syncs.
-- The server handles one sync at a time, and each sync carries the full state, which is fine for a few phones and hundreds of counters (requests are capped at 10 MB).
+- Each sync carries the full state of the group, which is fine for a few phones and hundreds of counters (requests are capped at 10 MB).
 
 ## License
 
