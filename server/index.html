@@ -16,6 +16,7 @@
   #shell { display: grid; grid-template-columns: 280px 1fr; align-items: start; }
   main { max-width: 640px; width: 100%; box-sizing: border-box; margin: 0 auto; padding: 16px 16px 96px; }
   header { display: flex; align-items: center; gap: 8px; }
+  header .logo { width: 40px; height: 40px; }
   #menu, #scrim { display: none; }
   #drawer { position: sticky; top: 0; height: 100vh; overflow-y: auto; box-sizing: border-box; padding: 16px; background: var(--card); display: flex; flex-direction: column; gap: 16px; }
   #drawer .brand { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 1.1rem; }
@@ -109,7 +110,7 @@
 </aside>
 <div id="scrim"></div>
 <main>
-<header><button id="menu" aria-label="Menu" data-i18n-label="menu">☰</button><h1 id="title">How Long Since?</h1></header>
+<header><button id="menu" aria-label="Menu" data-i18n-label="menu">☰</button><img src="icon.svg" alt="" class="logo"><h1 id="title">How Long Since?</h1></header>
 <form id="login" hidden>
   <input name="username" autocomplete="username" value="howlongsince" readonly>
   <input id="token" name="password" type="password" autocomplete="current-password" placeholder="Token" required>
