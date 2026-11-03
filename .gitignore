@@ -5,3 +5,4 @@ local.properties
 *.iml
 server/.env
 server/data/
+deploy.sh

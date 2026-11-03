@@ -159,7 +159,7 @@ Then:
 
 **Configuration** (environment variables): `TOKEN` (bearer token, required: the server won't start without it), `INSECURE=1` (run without a token, only on a trusted network), `DATA_DIR` (default `/data`, blobs go in `s/` inside it), `ADDR` (default `:8080`). `compose.yml` maps `HLS_TOKEN` from `.env` to `TOKEN`.
 
-**API**: `GET /` web app, `GET /health` returns `ok`, `GET /s/{id}` returns `{etag, ciphertext}` (404 if there is none), `PUT /s/{id}` takes `{ciphertext}` and `If-Match: <etag>` and answers 409 if someone else wrote first (no `If-Match` means create only). `{id}` is 32 hex characters derived from the group's secret. All of it takes the bearer token.
+**API**: `GET /` web app, `GET /health` returns `ok`, `GET /s/{id}` returns `{etag, ciphertext}` (404 if there is none), `PUT /s/{id}` takes `{ciphertext}` and `If-Match: <etag>` and answers 409 if someone else wrote first (no `If-Match` means create only, and the creator counts as the group's first device). `POST /s/{id}/join` and `POST /s/{id}/leave` add and remove a device; at zero devices the server deletes the group (404 if there is none). Apps call them when joining a group, turning sync off or deleting a synced group. `{id}` is 32 hex characters derived from the group's secret. All of it takes the bearer token.
 
 **How sync works**
 - The key: each synced group has a random 32-byte secret made on the phone. HKDF-SHA256 turns it into the id the server sees and an AES-256-GCM key; the id is also authenticated data, so the server can't hand one group's blob out as another's. The secret is kept in a separate preferences file that backups skip. The server sees an anonymous id, the blob size, timing and your IP address.
@@ -170,6 +170,7 @@ Then:
 - The app syncs when it opens, shortly after every change, and every 15 minutes in the background (the Android minimum). The web app syncs every 15 minutes and when its tab comes back into view.
 - Deleted counters are dropped for good after 90 days. A device that has been offline for longer could bring one back. A server that serves an old blob could do the same.
 - If every phone holding a group's key is lost, its data is gone. Keep the share link.
+- Next to the ciphertext the server keeps, for its own use and never sent to clients, the number of devices in the group and when it was last synced (any `GET` or `PUT`), joined and left. The counts are best effort: a join or leave that never reaches the server leaves them off by one.
 - The server drops slow or stuck connections (10 s to send headers, 30 s per request) and writes blobs atomically.
 
 **Several phones on one server**

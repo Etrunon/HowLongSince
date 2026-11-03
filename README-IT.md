@@ -159,7 +159,7 @@ Poi:
 
 **Configurazione** (variabili d'ambiente): `TOKEN` (token bearer, obbligatorio: senza il server non parte), `INSECURE=1` (avvio senza token, solo su una rete fidata), `DATA_DIR` (default `/data`, i blob vanno in `s/` al suo interno), `ADDR` (default `:8080`). `compose.yml` mappa `HLS_TOKEN` da `.env` su `TOKEN`.
 
-**API**: `GET /` web app, `GET /health` risponde `ok`, `GET /s/{id}` restituisce `{etag, ciphertext}` (404 se non c'è nulla), `PUT /s/{id}` riceve `{ciphertext}` e `If-Match: <etag>` e risponde 409 se qualcun altro ha scritto prima (senza `If-Match` crea soltanto). `{id}` è di 32 caratteri esadecimali derivati dal segreto del gruppo. Tutto richiede il token bearer.
+**API**: `GET /` web app, `GET /health` risponde `ok`, `GET /s/{id}` restituisce `{etag, ciphertext}` (404 se non c'è nulla), `PUT /s/{id}` riceve `{ciphertext}` e `If-Match: <etag>` e risponde 409 se qualcun altro ha scritto prima (senza `If-Match` crea soltanto, e chi crea conta come primo dispositivo del gruppo). `POST /s/{id}/join` e `POST /s/{id}/leave` aggiungono e tolgono un dispositivo; a zero dispositivi il server elimina il gruppo (404 se non c'è). Le app li chiamano quando entrano in un gruppo, spengono la sincronizzazione o eliminano un gruppo sincronizzato. `{id}` è di 32 caratteri esadecimali derivati dal segreto del gruppo. Tutto richiede il token bearer.
 
 **Come funziona la sincronizzazione**
 - La chiave: ogni gruppo sincronizzato ha un segreto casuale di 32 byte creato sul telefono. HKDF-SHA256 lo trasforma nell'id che vede il server e in una chiave AES-256-GCM; l'id è anche dato autenticato, così il server non può consegnare il blob di un gruppo come se fosse di un altro. Il segreto sta in un file di preferenze a parte che i backup saltano. Il server vede un id anonimo, la dimensione del blob, gli orari e il tuo indirizzo IP.
@@ -170,6 +170,7 @@ Poi:
 - L'app si sincronizza all'apertura, poco dopo ogni modifica e ogni 15 minuti in background (il minimo di Android). La web app si sincronizza ogni 15 minuti e quando la sua scheda torna visibile.
 - I contatori eliminati vengono rimossi definitivamente dopo 90 giorni. Un dispositivo offline più a lungo potrebbe riportarne indietro uno. Può farlo anche un server che serve un blob vecchio.
 - Se vanno persi tutti i telefoni che hanno la chiave di un gruppo, i suoi dati sono persi. Conserva il link di condivisione.
+- Accanto al testo cifrato il server tiene, per uso proprio e senza mai inviarli ai client, il numero di dispositivi del gruppo e quando è stato sincronizzato (ogni `GET` o `PUT`), quando qualcuno è entrato e quando è uscito. I conteggi sono approssimativi: un join o leave che non arriva al server lascia il numero sbagliato di uno.
 - Il server chiude le connessioni lente o bloccate (10 s per inviare gli header, 30 s per richiesta) e scrive i blob in modo atomico.
 
 **Più telefoni sullo stesso server**
