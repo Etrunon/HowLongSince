@@ -10,71 +10,131 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="shell">
 <aside id="drawer">
-  <h2 class="brand"><img src="icon.svg" alt=""><span>How Long Since?</span></h2>
+  <button class="brand" id="home"><img src="icon.svg" alt="" class="logo"><span>How Long Since?</span></button>
   <nav id="views"></nav>
-  <div class="grp">
-    <button id="newgroup" data-i18n="new_group">New group</button><button id="addgroup" data-i18n="join">Join</button>
-  </div>
-  <div class="grp" id="groupopts" hidden>
-    <h3 id="groupname"></h3>
-    <button id="shareview" data-i18n="share">Share</button><button id="rename" data-i18n="rename">Rename</button><button id="forget" data-i18n="forget">Forget</button>
-    <button id="devices" data-i18n="devices">Devices</button><button id="setpw" data-i18n="change_password">Change recovery password</button><button id="promote" data-i18n="become_admin">Become admin</button>
-    <a id="app" href="#" data-i18n="open_app">Open in app</a>
-  </div>
-  <div class="grp">
-    <h3 data-i18n="settings">Settings</h3>
-    <label><input type="checkbox" id="dark"> <span data-i18n="dark_theme">Dark theme</span></label>
-    <label><input type="checkbox" id="debug"> <span data-i18n="debug_mode">Debug mode</span></label>
-    <span class="muted" data-i18n="debug_hint">Allow "notify after" in minutes</span>
-    <label><span data-i18n="device_name">Device name</span> <input id="devname" maxlength="40"></label>
-    <span class="muted" data-i18n="device_name_hint">Shown next to the resets you log, on every device in a synced group</span>
-    <label><span data-i18n="language">Language</span> <select id="lang" aria-label="Language"><option value="">Auto</option><option value="en">English</option><option value="it">Italiano</option></select></label>
-    <button id="export" data-i18n="export_data">Export data</button><button id="import" data-i18n="import_data">Import data</button>
-    <input type="file" id="file" accept=".json,application/json" hidden>
-  </div>
+  <hr>
+  <button class="nav" id="addgroup" data-icon="login"><span data-i18n="join_group">Join a group</span></button>
+  <button class="nav" id="newgroup" data-icon="newfolder"><span data-i18n="new_group">New group</span></button>
+  <button class="nav" id="opensettings" data-icon="gear"><span data-i18n="settings">Settings</span></button>
 </aside>
 <div id="scrim"></div>
+
 <main>
-<header><button id="menu" aria-label="Menu" data-i18n-label="menu">☰</button><img src="icon.svg" alt="" class="logo"><h1 id="title">How Long Since?</h1></header>
-<div id="main">
-<p id="undo" hidden><span></span> <button data-i18n="undo">Undo</button></p>
-<div class="row" id="tools"><input id="q" type="search" data-i18n-ph="search" placeholder="Search labels and tags">
-  <select id="sort"><option value="due" data-i18n="sort_due">Most overdue</option><option value="recent" data-i18n="sort_recent">Recently reset</option><option value="name" data-i18n="sort_name">Name</option></select></div>
-<div id="tags"></div>
-<div id="list"></div>
-</div>
-<p id="err"></p>
+  <header class="bar">
+    <button class="ib" id="menu" data-icon="menu" data-i18n-label="menu"></button>
+    <img src="icon.svg" alt="" class="logo">
+    <h1 id="title">How Long Since?</h1>
+    <button class="ib" id="sharehead" data-icon="share" data-i18n-label="share" hidden></button>
+    <button class="ib" id="gearhead" data-icon="gear" data-i18n-label="group_settings" hidden></button>
+  </header>
+  <div class="content">
+    <div id="filters">
+      <label class="search" id="searchbox" data-icon="search"><input id="q" type="search" data-i18n-ph="search" data-i18n-label="search"></label>
+      <div class="chips" id="chips"></div>
+    </div>
+    <div id="list"></div>
+  </div>
 </main>
-</div>
-<button id="fab"><span aria-hidden="true">+</span><span class="lbl" data-i18n="new_">New</span></button>
-<dialog id="newdlg">
-  <form id="newform">
-    <h2 data-i18n="new_counter">New counter</h2>
-    <label><span data-i18n="label">Label</span> <input name="label" required></label>
-    <label><span data-i18n="tags">Tags</span> <input name="tags" data-i18n-ph="comma" placeholder="comma separated"></label>
-    <label id="newgroupl"><span data-i18n="group">Group</span> <select name="group"></select></label>
-    <label><span data-i18n="notify_after">Notify after</span> <span class="row"><input name="amount" type="number" min="1" data-i18n-ph="never" placeholder="never"><select name="unit"></select></span></label>
-    <div class="row"><button data-i18n="save">Save</button><button type="button" id="newcancel" data-i18n="cancel">Cancel</button></div>
+<button id="fab" data-icon="add"><span class="lbl" data-i18n="new_">New</span></button>
+
+<section class="screen" id="detail" hidden>
+  <header class="bar"><button class="ib back" data-icon="back" data-i18n-label="back"></button><h1 id="dtitle"></h1><button class="ib" id="dedit" data-icon="edit" data-i18n-label="edit"></button></header>
+  <div class="content" id="dbody"></div>
+</section>
+
+<section class="screen" id="gset" hidden>
+  <header class="bar"><button class="ib back" data-icon="back" data-i18n-label="back"></button><h1 id="gtitle"></h1><button class="ib" id="gshare" data-icon="share" data-i18n-label="share"></button></header>
+  <div class="content" id="gbody"></div>
+</section>
+
+<section class="screen" id="settings" hidden>
+  <header class="bar"><button class="ib back" data-icon="back" data-i18n-label="back"></button><h1 data-i18n="settings">Settings</h1></header>
+  <div class="content">
+    <label class="srow"><span data-i18n="dark_theme">Dark theme</span><input type="checkbox" class="switch" id="dark"></label>
+    <label class="srow"><span class="two"><span data-i18n="debug_mode">Debug mode</span><small class="muted" data-i18n="debug_hint"></small></span><input type="checkbox" class="switch" id="debug"></label>
+    <button class="srow" id="devname"><span class="two"><span data-i18n="device_name">Device name</span><small class="muted" id="devnameval"></small></span></button>
+    <label class="srow"><span data-i18n="language">Language</span><select id="lang" data-i18n-label="language"><option value="">Auto</option><option value="en">English</option><option value="it">Italiano</option></select></label>
+    <button class="srow" id="import"><span data-i18n="import_data">Import data</span></button>
+    <button class="srow" id="export"><span data-i18n="export_data">Export data</span></button>
+    <input type="file" id="file" accept=".json,application/json" hidden>
+  </div>
+</section>
+
+<dialog id="cdlg">
+  <form id="cform">
+    <h2 id="ctitle"></h2>
+    <label class="field"><span data-i18n="label">Label</span><input name="label" required></label>
+    <div class="field" id="cgroups"><span data-i18n="group">Group</span><div class="chips wrap" id="cgchips"></div></div>
+    <label class="field"><span data-i18n="tags">Tags</span><input name="tags" data-i18n-ph="comma"></label>
+    <div class="field"><span data-i18n="notify_after">Notify after</span>
+      <div class="row"><input name="amount" type="number" min="1" data-i18n-ph="never"><div class="chips wrap" id="cunits"></div></div>
+      <button type="button" class="tonal small" id="cavg" hidden></button>
+    </div>
+    <div class="actions">
+      <button type="button" class="text danger" id="cdel" data-i18n="delete">Delete</button>
+      <button type="button" class="text" id="carch"></button>
+      <span class="sp"></span>
+      <button type="button" class="text" id="ccancel" data-i18n="cancel">Cancel</button>
+      <button class="text" data-i18n="save">Save</button>
+    </div>
   </form>
 </dialog>
+
+<dialog id="resetdlg">
+  <form id="rform">
+    <h2 id="rtitle"></h2>
+    <input name="note" data-i18n-ph="note">
+    <input name="at" type="datetime-local" hidden>
+    <div class="actions">
+      <button type="button" class="text" id="rcancel" data-i18n="cancel">Cancel</button>
+      <button type="button" class="text" id="rearlier" data-i18n="earlier">Earlier…</button>
+      <button class="text" id="rnow" data-i18n="now">Now</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="joindlg">
+  <form id="jform">
+    <h2 data-i18n="join_group">Join a group</h2>
+    <input id="jlink" data-i18n-ph="paste_link">
+    <p id="jtext"></p>
+    <input id="jpw" type="password" data-i18n-ph="password" autocomplete="current-password">
+    <div class="actions">
+      <button type="button" class="text" id="japp" data-i18n="open_app">Open in app</button>
+      <span class="sp"></span>
+      <button type="button" class="text" id="jcancel" data-i18n="cancel">Cancel</button>
+      <button class="text" id="jgo"></button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="share">
   <h2 id="sharename"></h2>
   <div id="qr"></div>
-  <input id="sharelink" readonly aria-label="Link">
-  <p class="muted" data-i18n="share_warning"></p>
-  <div class="row"><button id="copy" data-i18n="copy_link">Copy link</button><button id="nativeshare" data-i18n="share" hidden>Share</button><button id="closeshare" data-i18n="close">Close</button></div>
+  <p class="muted" id="sharetext"></p>
+  <div class="actions">
+    <button class="text" id="copy" data-i18n="copy_link">Copy link</button>
+    <button class="text" id="nativeshare" data-i18n="share" hidden>Share</button>
+    <button class="text" id="closeshare" data-i18n="close">Close</button>
+  </div>
 </dialog>
-<dialog id="devdlg">
-  <h2 data-i18n="devices">Devices</h2>
-  <div id="devlist"></div>
-  <div class="row"><button id="closedev" data-i18n="close">Close</button></div>
-</dialog>
+
 <dialog id="importdlg">
   <p id="importtext"></p>
-  <div class="row"><button id="doreplace" data-i18n="replace">Replace</button><button id="dokeep" data-i18n="keep_both">Keep both</button><button id="nogo" data-i18n="cancel">Cancel</button></div>
+  <div class="actions"><button class="text" id="nogo" data-i18n="cancel">Cancel</button><button class="text danger" id="doreplace" data-i18n="replace">Replace</button><button class="text" id="dokeep" data-i18n="keep_both">Keep both</button></div>
 </dialog>
+
+<dialog id="ask">
+  <form method="dialog">
+    <p id="asktext"></p>
+    <input id="askinput">
+    <div class="actions"><button class="text" value="cancel" id="askcancel" formnovalidate data-i18n="cancel">Cancel</button><button class="text" value="ok" id="askok"></button></div>
+  </form>
+</dialog>
+
+<div id="toast" role="status" hidden><span></span><button></button></div>
+
 <script src="qrcode.js"></script>
 <script src="core.js"></script>
 <script src="app.js"></script>
