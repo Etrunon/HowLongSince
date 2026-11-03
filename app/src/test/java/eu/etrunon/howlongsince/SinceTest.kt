@@ -103,3 +103,28 @@ class GroupTest {
         assertEquals(listOf("Home", null), fromJson(toJson(c, e, mapOf(9L to "Home"))).map { it.third })
     }
 }
+
+class CryptoTest {
+    @Test fun hkdfMatchesRfc5869() { // test case 3: no salt, no info (first 32 bytes of the output)
+        assertEquals("8da4e775a563c18f715f802a063c5a31b8a11f5c5ee1879ec3454e5f3c738d2d", hkdf(ByteArray(22) { 0x0b }, "", 32).toHex())
+    }
+
+    @Test fun sealOpen() {
+        val k = keysOf(newSecret())
+        assertEquals(32, k.id.length)
+        assertEquals("hello", open(k, seal(k, "hello".toByteArray())).decodeToString())
+        val blob = seal(k, "hello".toByteArray())
+        fun fails(f: () -> Unit) = assertEquals(true, runCatching(f).isFailure)
+        fails { open(keysOf(newSecret()), blob) } // wrong key
+        fails { open(Keys("0".repeat(32), k.aes), blob) } // right key, blob served under another space id
+        fails { open(k, blob.also { it[20] = (it[20] + 1).toByte() }) } // tampered
+    }
+
+    @Test fun groupStateIsStable() {
+        val c = listOf(Counter(2, "b", uid = "b"), Counter(1, "a", uid = "a"))
+        val e = listOf(Event(2, 2, 5, "create", uid = "y"), Event(1, 1, 5, "create", uid = "x"))
+        assertEquals(stateJson(c, e, "Family", 7), stateJson(c.reversed(), e.reversed(), "Family", 7))
+        val r = parseState(stateJson(c, e, "Family", 7))
+        assertEquals("Family" to 7L, r.name to r.nameUpdatedAt)
+    }
+}

@@ -26,8 +26,7 @@ data class CounterGroup(
     val name: String,
     val nameUpdatedAt: Long = System.currentTimeMillis(), // newest rename wins on sync
     val deleted: Boolean = false,
-    val syncUrl: String? = null, // phase 2: null = local only
-    val syncKey: String? = null,
+    val syncUrl: String? = null, // null = local only. The key and token live in the "sync_keys" prefs, which backups skip
 )
 
 @Entity(foreignKeys = [ForeignKey(entity = Counter::class, parentColumns = ["id"], childColumns = ["counterId"], onDelete = ForeignKey.CASCADE)],
@@ -86,7 +85,10 @@ interface CounterDao {
     /** Its counters fall back to Ungrouped. */
     @Transaction
     suspend fun deleteGroup(id: Long) { ungroup(id); tombstone(id, System.currentTimeMillis()) }
-    @Query("UPDATE Counter SET groupId = :group WHERE id = :id") suspend fun setGroup(id: Long, group: Long?)
+    @Query("SELECT * FROM CounterGroup WHERE id = :id") suspend fun group(id: Long): CounterGroup?
+    @Query("UPDATE CounterGroup SET syncUrl = :url WHERE id = :id") suspend fun setSyncUrl(id: Long, url: String?)
+    /** Every loose counter joins group [id] (the old global sync becoming a group). */
+    @Query("UPDATE Counter SET groupId = :id WHERE groupId IS NULL AND deleted = 0") suspend fun adopt(id: Long)
 
     @Query("DELETE FROM Counter WHERE uid IN (:uids)") suspend fun purge(uids: List<String>) // events go too (cascade)
     @Query("UPDATE Counter SET deleted = 1, updatedAt = :now WHERE deleted = 0 AND groupId IS :group") suspend fun deleteAll(now: Long, group: Long?)
@@ -104,15 +106,21 @@ interface CounterDao {
         }
     }
 
-    /** Applies the server's state. Returns the local ids of counters that changed (to reschedule). */
+    /**
+     * Applies group [g]'s remote blob. Returns the local ids of counters that changed (to reschedule).
+     * A counter that sits in another local group only comes over if the remote copy is newer (it was moved here elsewhere);
+     * a tombstone of equal age revives, since moving writes a tombstone in the old group and the live copy in the new one at the same time.
+     */
     @Transaction
-    suspend fun merge(remote: Remote): Set<Long> {
+    suspend fun merge(remote: Remote, g: Long): Set<Long> {
         val changed = mutableSetOf<Long>()
         val local = rawCounters().associateBy { it.uid }.toMutableMap()
         for (c in remote.counters) {
             val l = local[c.uid]
-            if (l == null) local[c.uid] = c.copy(id = insert(c.copy(id = 0))).also { changed += it.id }
-            else if (c.updatedAt > l.updatedAt) { updateRaw(c.copy(id = l.id, groupId = l.groupId)); changed += l.id } // the server doesn't know groups
+            if (l == null) local[c.uid] = c.copy(id = insert(c.copy(id = 0, groupId = g)), groupId = g).also { changed += it.id }
+            else if (c.updatedAt > l.updatedAt || (l.groupId != g && l.deleted && !c.deleted && c.updatedAt == l.updatedAt)) {
+                updateRaw(c.copy(id = l.id, groupId = g)); local[c.uid] = c.copy(id = l.id, groupId = g); changed += l.id
+            }
         }
         val events = rawEvents().associateBy { it.uid }
         for ((counterUid, e) in remote.events) {
@@ -121,6 +129,8 @@ interface CounterDao {
             if (l == null) { insert(e.copy(id = 0, counterId = cid)); changed += cid }
             else if (e.deleted && !l.deleted) { deleteEvent(l.id); changed += cid }
         }
+        val mine = group(g)
+        if (mine != null && remote.name != null && remote.nameUpdatedAt > mine.nameUpdatedAt) rename(g, remote.name, remote.nameUpdatedAt)
         return changed
     }
 
@@ -143,7 +153,7 @@ interface CounterDao {
         insert(Event(counterId = id, at = at, source = source, note = note?.trim()?.ifEmpty { null }))
 }
 
-@Database(entities = [Counter::class, Event::class, CounterGroup::class], version = 4, exportSchema = false)
+@Database(entities = [Counter::class, Event::class, CounterGroup::class], version = 5, exportSchema = false)
 abstract class Db : RoomDatabase() {
     abstract fun dao(): CounterDao
 
@@ -174,9 +184,18 @@ abstract class Db : RoomDatabase() {
                 "ALTER TABLE Counter ADD COLUMN groupId INTEGER",
             ).forEach(db::execSQL)
         }
+        /** v5: the sync key moved out of the database (so backups skip it); the column is dropped. Nobody had a key yet. */
+        private val v5 = object : Migration(4, 5) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) = listOf(
+                "CREATE TABLE CounterGroup_new (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL, nameUpdatedAt INTEGER NOT NULL, deleted INTEGER NOT NULL, syncUrl TEXT)",
+                "INSERT INTO CounterGroup_new SELECT id, name, nameUpdatedAt, deleted, syncUrl FROM CounterGroup",
+                "DROP TABLE CounterGroup",
+                "ALTER TABLE CounterGroup_new RENAME TO CounterGroup",
+            ).forEach(db::execSQL)
+        }
         @Volatile private var instance: Db? = null
         fun get(ctx: Context) = instance ?: synchronized(this) {
-            instance ?: Room.databaseBuilder(ctx.applicationContext, Db::class.java, "hls.db").addMigrations(v2, v3, v4).build().also { instance = it }
+            instance ?: Room.databaseBuilder(ctx.applicationContext, Db::class.java, "hls.db").addMigrations(v2, v3, v4, v5).build().also { instance = it }
         }
     }
 }

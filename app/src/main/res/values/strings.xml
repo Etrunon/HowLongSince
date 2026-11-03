@@ -16,7 +16,7 @@
     <string name="archived">Archived</string>
     <string name="empty_title">Nothing tracked yet</string>
     <string name="empty_hint">Tap New to start counting</string>
-    <string name="sync_off">Sync is off: set a server in Settings</string>
+    <string name="sync_off">Sync is off: turn it on in a group in Groups</string>
     <string name="undo">Undo</string>
     <string name="new_counter">New counter</string>
     <string name="edit_counter">Edit counter</string>
@@ -38,8 +38,6 @@
     <string name="dark_theme">Dark theme</string>
     <string name="debug_mode">Debug mode</string>
     <string name="debug_hint">Allow \"notify after\" in minutes</string>
-    <string name="sync_server">Sync server</string>
-    <string name="url_hint">URL (empty = no sync)</string>
     <string name="token">Token</string>
     <string name="not_synced">Not synced yet</string>
     <string name="syncing">Syncing…</string>
@@ -108,4 +106,17 @@
     <string name="delete_group_text">«%s» is removed. Its counters move to Ungrouped.</string>
     <string name="imported">Imported</string>
     <string name="keep_both">Keep both</string>
+    <string name="synced_group">Synced</string>
+    <string name="key_missing">no key on this phone</string>
+    <string name="local_only">Local only</string>
+    <string name="synced_with">Synced with %s</string>
+    <string name="server_url">Server URL</string>
+    <string name="sync_hint">Counters are encrypted on this phone before they are sent. The server only stores data it can\'t read; the key stays here.</string>
+    <string name="turn_on">Turn on sync</string>
+    <string name="turn_off">Turn off sync</string>
+    <string name="turn_off_title">Turn off sync?</string>
+    <string name="turn_off_text">The key is deleted from this phone and the counters stay here, no longer synced. Without another phone holding the key you can\'t sync this group again.</string>
+    <string name="move_title">Move out of a synced group?</string>
+    <string name="move_text">The counter will be removed for everyone else in the group it leaves.</string>
+    <string name="move">Move</string>
 </resources>

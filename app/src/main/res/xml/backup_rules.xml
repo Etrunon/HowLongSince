@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sync keys never leave the phone: not in cloud backups, not in device-to-device transfers. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="sync_keys.xml" />
+</full-backup-content>

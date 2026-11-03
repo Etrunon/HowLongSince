@@ -13,7 +13,7 @@ Agreed 2026-11-03. Each phase ships on its own.
 
 Today the server merges data and the web app reads plaintext. With end-to-end encryption the server can do neither, so:
 
-- **Server:** a dumb blob store. `GET /s/{id}` returns `{etag, ciphertext}`. `PUT /s/{id}` takes `If-Match: <etag>` and returns 409 on a conflict. The ETag is a content hash, and each blob is one file. `merge`/`prune` in `main.go` are deleted.
+- **Server:** a dumb blob store (the old `/sync` and its plaintext web app stay until Phase 4, which deletes them and `merge`/`prune`). `GET /s/{id}` returns `{etag, ciphertext}`. `PUT /s/{id}` takes `If-Match: <etag>` and returns 409 on a conflict. The ETag is a content hash, and each blob is one file. `merge`/`prune` in `main.go` are deleted.
 - **Client sync:** GET, decrypt, merge (the existing `Dao.merge`, limited to one group), encrypt, PUT. On a 409, start again from the GET. Tombstone pruning (90 days) is done on the client.
 - **Crypto:** each synced group has a random 32-byte secret. HKDF derives two values from it: the space id the server sees, and an AES-256-GCM key. The space id is passed as associated data, so the server can't swap blobs between spaces. Only `javax.crypto` and WebCrypto are used, no new dependencies.
 - **What the server still sees:** an anonymous space id, blob size, timing and IP address.
@@ -30,12 +30,12 @@ Today the server merges data and the web app reads plaintext. With end-to-end en
 
 ## Phase 2: per-group encrypted sync
 
-- `CounterGroup` gets nullable `syncUrl` and `syncKey` columns. Groups don't need a uid, because the blob *is* the group. The name is stored inside the blob and merged by `nameUpdatedAt`, newest wins.
+- `CounterGroup` gets a nullable `syncUrl` column. The key and token live in a separate `sync_keys` prefs file (a database column can't be left out of a backup). Groups don't need a uid, because the blob *is* the group. The name is stored inside the blob and merged by `nameUpdatedAt`, newest wins.
 - `sync()` runs once per synced group, and each group shows its own status. Local-only groups never touch the network.
 - **Group-limited merge:** only rows in that group are matched by uid.
 - **Moving a counter between groups** keeps its uid, so NFC tags keep working. When the outgoing blob is built, a counter that is in the remote blob but now sits in another local group with a newer `updatedAt` is written as a tombstone. The UI asks for confirmation first, because the move removes the counter for the other members.
 - **Leaving a group or stopping its sync:** drop the key locally and tombstone nothing.
-- **Backups:** keys are excluded through `dataExtractionRules` and `fullBackupContent`. The JSON export never contains keys.
+- **Backups:** `sync_keys.xml` is excluded through `dataExtractionRules` and `fullBackupContent`. The JSON export never contains keys.
 - **Migration:** if the old global `syncUrl` is set, existing counters move into a new "Synced" group. The old global URL and token settings are removed, and the old `/sync` protocol is dropped (breaking change).
 
 ## Phase 3: share and join

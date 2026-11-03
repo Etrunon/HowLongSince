@@ -12,21 +12,24 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.text.DateFormat
+import java.util.Base64
 import java.util.Date
 import java.util.concurrent.TimeUnit
 
-/** Server state; events carry their counter's uid (local ids differ per device). */
-data class Remote(val counters: List<Counter>, val events: List<Pair<String, Event>>)
+/** One group's decrypted blob; events carry their counter's uid (local ids differ per device). The group name travels inside, newest rename wins. */
+data class Remote(val counters: List<Counter>, val events: List<Pair<String, Event>>, val name: String? = null, val nameUpdatedAt: Long = 0)
 
-fun stateJson(counters: List<Counter>, events: List<Event>): String {
+/** Sorted by uid, so the same data always gives the same text and an unchanged group isn't uploaded again. */
+fun stateJson(counters: List<Counter>, events: List<Event>, name: String? = null, nameUpdatedAt: Long = 0): String {
     val uids = counters.associate { it.id to it.uid }
     return JSONObject()
-        .put("counters", JSONArray(counters.map { c ->
+        .put("name", name ?: JSONObject.NULL).put("nameUpdatedAt", nameUpdatedAt)
+        .put("counters", JSONArray(counters.sortedBy { it.uid }.map { c ->
             JSONObject().put("id", c.uid).put("label", c.label).put("tags", c.tags)
                 .put("notifyAfterMs", c.notifyAfterMs ?: JSONObject.NULL).put("nfcTagId", c.nfcTagId ?: JSONObject.NULL)
                 .put("updatedAt", c.updatedAt).put("deleted", c.deleted).put("archived", c.archived)
         }))
-        .put("events", JSONArray(events.mapNotNull { e ->
+        .put("events", JSONArray(events.sortedBy { it.uid }.mapNotNull { e ->
             JSONObject().put("id", e.uid).put("counterId", uids[e.counterId] ?: return@mapNotNull null)
                 .put("at", e.at).put("source", e.source).put("deleted", e.deleted).putOpt("note", e.note)
         }))
@@ -49,29 +52,82 @@ fun parseState(s: String): Remote {
             e.getString("counterId") to Event(counterId = 0, at = e.getLong("at"), source = e.optString("source", "manual"),
                 uid = e.getString("id"), deleted = e.optBoolean("deleted"), note = if (e.isNull("note")) null else e.getString("note"))
         },
+        if (o.isNull("name")) null else o.getString("name"), o.optLong("nameUpdatedAt"),
     )
 }
 
 private val lock = Mutex()
 
-/** Sends everything to the server and applies the merged result. No-op without a server URL; never throws. */
+private fun keyPrefs(ctx: Context) = ctx.getSharedPreferences("sync_keys", 0) // "k<groupId>" = secret, "t<groupId>" = token; excluded from backups
+
+/** The old global server becomes a group ("Synced") holding every loose counter, with a fresh key. Other phones join in a later phase. */
+private suspend fun migrateOldSync(ctx: Context, dao: CounterDao, prefs: android.content.SharedPreferences) {
+    val url = prefs.getString("syncUrl", "")!!.trim()
+    if (url.isEmpty()) return
+    val id = dao.insert(CounterGroup(name = uniqueName(ctx.getString(R.string.synced_group), dao.allGroups().map { it.name }), syncUrl = url))
+    keyPrefs(ctx).edit().putString("k$id", newSecret()).putString("t$id", prefs.getString("syncToken", "")!!.trim()).commit()
+    dao.adopt(id)
+    // ponytail: a crash right here would migrate twice (a second, empty "Synced" group); not worth a transaction across prefs and Room.
+    prefs.edit().remove("syncUrl").remove("syncToken").remove("syncStatus").remove("syncFailed").apply()
+}
+
+/** Sends every synced group to its server and applies what came back. No-op without synced groups; never throws. */
 suspend fun sync(ctx: Context): Unit = lock.withLock {
     val prefs = ctx.getSharedPreferences("settings", 0)
-    val url = prefs.getString("syncUrl", "")!!.trim().trimEnd('/')
-    if (url.isEmpty()) return
     val dao = Db.get(ctx).dao()
-    val status = try {
-        dao.pruneDeleted(System.currentTimeMillis() - TimeUnit.DAYS.toMillis(90)) // same TTL as the server
-        // ponytail: sends the whole history each time; fine for thousands of resets, send a delta if it grows past that.
-        val body = stateJson(dao.rawCounters(), dao.rawEvents())
-        val res = withContext(Dispatchers.IO) { post("$url/sync", prefs.getString("syncToken", "")!!.trim(), body) }
-        dao.merge(parseState(res)).forEach { reschedule(ctx, it) }
-        ctx.getString(R.string.synced, DateFormat.getTimeInstance(DateFormat.SHORT).format(Date())) to false
-    } catch (e: Exception) {
-        ctx.getString(R.string.sync_failed, if (e.message == "wrong token") ctx.getString(R.string.wrong_token) else e.message) to true
+    migrateOldSync(ctx, dao, prefs)
+    dao.pruneDeleted(System.currentTimeMillis() - TimeUnit.DAYS.toMillis(90)) // same TTL as the server
+    for (g in dao.allGroups()) {
+        if (g.syncUrl == null) continue
+        val status = try {
+            val secret = keyPrefs(ctx).getString("k${g.id}", null) ?: throw IOException(ctx.getString(R.string.key_missing))
+            syncGroup(ctx, dao, g, secret, keyPrefs(ctx).getString("t${g.id}", "")!!)
+            ctx.getString(R.string.synced, DateFormat.getTimeInstance(DateFormat.SHORT).format(Date())) to false
+        } catch (e: Exception) {
+            ctx.getString(R.string.sync_failed, if (e.message == "wrong token") ctx.getString(R.string.wrong_token) else e.message) to true
+        }
+        prefs.edit().putString("syncStatus${g.id}", status.first).putBoolean("syncFailed${g.id}", status.second).apply()
     }
-    prefs.edit().putString("syncStatus", status.first).putBoolean("syncFailed", status.second).apply()
 }
+
+/** GET, decrypt, merge, encrypt, PUT; if someone else wrote in between (409) start over. */
+private suspend fun syncGroup(ctx: Context, dao: CounterDao, g: CounterGroup, secret: String, token: String) {
+    val k = keysOf(secret)
+    val url = "${g.syncUrl!!.trim().trimEnd('/')}/s/${k.id}"
+    repeat(5) {
+        val (code, text) = withContext(Dispatchers.IO) { http("GET", url, token) }
+        var etag: String? = null; var remote: String? = null
+        when (code) {
+            200 -> JSONObject(text).let { etag = it.getString("etag"); remote = open(k, Base64.getDecoder().decode(it.getString("ciphertext"))).decodeToString() }
+            404 -> {} // not uploaded yet
+            else -> throw httpError(code)
+        }
+        val parsed = remote?.let(::parseState)
+        parsed?.let { dao.merge(it, g.id).forEach { id -> reschedule(ctx, id) } }
+        val all = dao.rawCounters()
+        // A counter that moved out of this group since the blob was written: tombstone it there. id -1 keeps its events out.
+        val moved = parsed?.counters.orEmpty().filter { !it.deleted }.mapNotNull { r ->
+            all.find { it.uid == r.uid && it.groupId != g.id && it.updatedAt > r.updatedAt }
+                ?.let { Counter(id = -1, label = r.label, uid = r.uid, updatedAt = it.updatedAt, deleted = true) }
+        }
+        val me = dao.group(g.id) ?: return
+        // Tombstones already in the blob stay (until they are 90 days old) so phones that haven't synced yet still learn of them.
+        val mine = all.filter { it.groupId == g.id }
+        val cutoff = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(90)
+        val kept = parsed?.counters.orEmpty().filter { r -> r.deleted && r.updatedAt >= cutoff && mine.none { it.uid == r.uid } }.map { it.copy(id = -1) }
+        val out = stateJson(mine + moved + kept, dao.rawEvents(), me.name, me.nameUpdatedAt)
+        if (out == remote) return // nothing new to say
+        val body = JSONObject().put("ciphertext", Base64.getEncoder().encodeToString(seal(k, out.toByteArray()))).toString()
+        when (val c = withContext(Dispatchers.IO) { http("PUT", url, token, etag, body).first }) {
+            200 -> return
+            409 -> {}
+            else -> throw httpError(c)
+        }
+    }
+    throw IOException("busy, try again")
+}
+
+private fun httpError(code: Int) = IOException(if (code == 401) "wrong token" else "HTTP $code")
 
 /** Background sync, so web changes and reminders stay current without opening the app. */
 class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
@@ -87,14 +143,15 @@ fun schedulePeriodicSync(ctx: Context) = WorkManager.getInstance(ctx).enqueueUni
 fun syncSoon(ctx: Context) = WorkManager.getInstance(ctx).enqueueUniqueWork("sync-now", ExistingWorkPolicy.REPLACE,
     OneTimeWorkRequestBuilder<SyncWorker>().setConstraints(online).build())
 
-private fun post(url: String, token: String, body: String): String {
+/** [ifMatch] is the etag the PUT expects; none means create only. */
+private fun http(method: String, url: String, token: String, ifMatch: String? = null, body: String? = null): Pair<Int, String> {
     val c = URL(url).openConnection() as HttpURLConnection
     try {
-        c.requestMethod = "POST"; c.doOutput = true; c.connectTimeout = 10_000; c.readTimeout = 20_000
-        c.setRequestProperty("Content-Type", "application/json")
+        c.requestMethod = method; c.connectTimeout = 10_000; c.readTimeout = 20_000
         if (token.isNotEmpty()) c.setRequestProperty("Authorization", "Bearer $token")
-        c.outputStream.use { it.write(body.toByteArray()) }
-        if (c.responseCode != 200) throw IOException(if (c.responseCode == 401) "wrong token" else "HTTP ${c.responseCode}")
-        return c.inputStream.use { it.readBytes().decodeToString() }
+        if (ifMatch != null) c.setRequestProperty("If-Match", ifMatch)
+        if (body != null) { c.doOutput = true; c.setRequestProperty("Content-Type", "application/json"); c.outputStream.use { it.write(body.toByteArray()) } }
+        val code = c.responseCode
+        return code to ((if (code < 400) c.inputStream else c.errorStream)?.use { it.readBytes().decodeToString() } ?: "")
     } finally { c.disconnect() }
 }

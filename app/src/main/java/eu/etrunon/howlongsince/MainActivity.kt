@@ -280,9 +280,9 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, dark:
             // Pull down at the top: fetch from the sync server; show the error if it failed.
             PullToRefreshBox(refreshing, onRefresh = { scope.launch {
                 refreshing = true; sync(ctx); refreshing = false
-                val st = prefs.getString("syncStatus", null)
-                if (prefs.getString("syncUrl", "").isNullOrBlank()) snackbar.showSnackbar(ctx.getString(R.string.sync_off))
-                else if (st != null && prefs.getBoolean("syncFailed", false)) snackbar.showSnackbar(st)
+                val synced = groups.filter { it.syncUrl != null }
+                if (synced.isEmpty()) snackbar.showSnackbar(ctx.getString(R.string.sync_off))
+                else synced.firstOrNull { prefs.getBoolean("syncFailed${it.id}", false) }?.let { snackbar.showSnackbar("${it.name}: ${prefs.getString("syncStatus${it.id}", "")}") }
             } }) {
             LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp)) {
@@ -332,6 +332,10 @@ fun EditDialog(c: Counter, groups: List<CounterGroup>, debug: Boolean, dao: Coun
     var amount by remember { mutableStateOf(c.notifyAfterMs?.let { (it / start.second).toString() } ?: "") }
     val n = amount.toLongOrNull()?.takeIf { it > 0 }
     val avg by produceState<Long?>(null) { if (c.id != 0L) value = avgGap(dao.times(c.id)) }
+    var pendingMove by remember { mutableStateOf<Counter?>(null) }
+    // Moving a counter out of a synced group removes it for everyone else in that group.
+    val leavesSynced = c.id != 0L && group != c.groupId && groups.any { it.id == c.groupId && it.syncUrl != null }
+    fun commit(r: Counter) = if (leavesSynced) pendingMove = r else onSave(r)
     fun result() = c.copy(label = label.trim(), tags = tagList(tags).joinToString(","), notifyAfterMs = n?.times(unit.second), groupId = group)
 
     AlertDialog(
@@ -358,18 +362,25 @@ fun EditDialog(c: Counter, groups: List<CounterGroup>, debug: Boolean, dao: Coun
                     }) { Text(stringResource(R.string.use_average, since(a))) }
                 }
                 if (c.id != 0L) Row {
-                    TextButton(onClick = { onSave(result().copy(archived = !c.archived)) }) { Text(stringResource(if (c.archived) R.string.unarchive else R.string.archive)) }
+                    TextButton(onClick = { commit(result().copy(archived = !c.archived)) }) { Text(stringResource(if (c.archived) R.string.unarchive else R.string.archive)) }
                     TextButton(onClick = onDelete) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
                 }
             }
         },
         confirmButton = {
-            TextButton(enabled = label.isNotBlank(), onClick = {
-                onSave(result())
-            }) { Text(stringResource(R.string.save)) }
+            TextButton(enabled = label.isNotBlank(), onClick = { commit(result()) }) { Text(stringResource(R.string.save)) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
+    pendingMove?.let { r ->
+        AlertDialog(
+            onDismissRequest = { pendingMove = null },
+            title = { Text(stringResource(R.string.move_title)) },
+            text = { Text(stringResource(R.string.move_text)) },
+            confirmButton = { TextButton(onClick = { pendingMove = null; onSave(r) }) { Text(stringResource(R.string.move), color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { pendingMove = null }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -412,27 +423,6 @@ fun Settings(dark: Boolean, onDark: (Boolean) -> Unit, debug: Boolean, onDebug: 
         }
         HorizontalDivider()
         val scope = rememberCoroutineScope()
-        val prefs = remember { ctx.getSharedPreferences("settings", 0) }
-        var url by remember { mutableStateOf(prefs.getString("syncUrl", "")!!) }
-        var token by remember { mutableStateOf(prefs.getString("syncToken", "")!!) }
-        val notSynced = stringResource(R.string.not_synced)
-        var status by remember { mutableStateOf(prefs.getString("syncStatus", null) ?: notSynced) }
-        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.sync_server), style = MaterialTheme.typography.titleMedium)
-            OutlinedTextField(url, { url = it; prefs.edit().putString("syncUrl", it).apply() }, Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.url_hint)) }, placeholder = { Text("https://your-server.example") }, singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
-            OutlinedTextField(token, { token = it; prefs.edit().putString("syncToken", it).apply() }, Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.token)) }, singleLine = true, visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(status, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                TextButton(enabled = url.isNotBlank(), onClick = { scope.launch {
-                    status = ctx.getString(R.string.syncing); sync(ctx); status = prefs.getString("syncStatus", "")!!
-                } }) { Text(stringResource(R.string.sync_now)) }
-            }
-        }
-        HorizontalDivider()
         val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
             if (uri != null) scope.launch {
                 val msg = try { exportJson(ctx, uri).let { ctx.resources.getQuantityString(R.plurals.n_exported, it, it) } } catch (e: Exception) { ctx.getString(R.string.export_failed, e.message) }

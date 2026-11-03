@@ -15,7 +15,7 @@
     <string name="archived">Archiviati</string>
     <string name="empty_title">Ancora nessun contatore</string>
     <string name="empty_hint">Tocca Nuovo per iniziare a contare</string>
-    <string name="sync_off">Sincronizzazione disattivata: imposta un server nelle Impostazioni</string>
+    <string name="sync_off">Sincronizzazione disattivata: attivala in un gruppo, in Gruppi</string>
     <string name="undo">Annulla</string>
     <string name="new_counter">Nuovo contatore</string>
     <string name="edit_counter">Modifica contatore</string>
@@ -37,8 +37,6 @@
     <string name="dark_theme">Tema scuro</string>
     <string name="debug_mode">Modalità debug</string>
     <string name="debug_hint">Consenti \"avvisa dopo\" in minuti</string>
-    <string name="sync_server">Server di sincronizzazione</string>
-    <string name="url_hint">URL (vuoto = nessuna sincronizzazione)</string>
     <string name="token">Token</string>
     <string name="not_synced">Non ancora sincronizzato</string>
     <string name="syncing">Sincronizzazione…</string>
@@ -107,4 +105,17 @@
     <string name="delete_group_text">«%s» viene rimosso. I suoi contatori passano a Senza gruppo.</string>
     <string name="imported">Importati</string>
     <string name="keep_both">Tieni entrambi</string>
+    <string name="synced_group">Sincronizzati</string>
+    <string name="key_missing">nessuna chiave su questo telefono</string>
+    <string name="local_only">Solo locale</string>
+    <string name="synced_with">Sincronizzato con %s</string>
+    <string name="server_url">URL del server</string>
+    <string name="sync_hint">I contatori vengono cifrati su questo telefono prima dell\'invio. Il server conserva solo dati che non può leggere; la chiave resta qui.</string>
+    <string name="turn_on">Attiva la sincronizzazione</string>
+    <string name="turn_off">Disattiva la sincronizzazione</string>
+    <string name="turn_off_title">Disattivare la sincronizzazione?</string>
+    <string name="turn_off_text">La chiave viene cancellata da questo telefono e i contatori restano qui, non più sincronizzati. Senza un altro telefono con la chiave non potrai sincronizzare di nuovo questo gruppo.</string>
+    <string name="move_title">Spostare da un gruppo sincronizzato?</string>
+    <string name="move_text">Il contatore verrà rimosso per tutti gli altri nel gruppo che lascia.</string>
+    <string name="move">Sposta</string>
 </resources>
