@@ -101,7 +101,7 @@ const T = {
     intervals: 'Intervals · avg %s', archived: 'Archived', delete_counter: 'Delete counter', confirm_delete: 'Delete this counter?',
     reset_label: 'Reset %s', pick_past: 'Pick a time in the past', create: 'created', manual: 'manual', nfc: 'via NFC', d: 'd',
     open_app: 'Open in app', forget: 'Forget', paste_link: 'Paste a group link', bad_link: 'That isn\'t a group link',
-        no_data: 'Nothing found for this link on this server', decrypt_failed: 'Can\'t decrypt: wrong key?', needs_https: 'This page needs https to decrypt (or localhost).', busy: 'Busy, try again', all_groups: 'All', ungrouped: 'Ungrouped', synced: 'Synced %s', new_group: 'New group', group_name: 'Group name', rename: 'Rename', join: 'Join', join_question: 'Join «%s»?',
+        no_data: 'Nothing found for this link on this server', decrypt_failed: 'Can\'t decrypt: wrong key?', needs_https: 'This page needs https to decrypt (or localhost).', busy: 'Busy, try again', all_groups: 'All', ungrouped: 'Ungrouped', synced: 'Synced %s', group: 'Group', move_title: 'Move out of a synced group?', move_text: 'The counter will be removed for everyone else in the group it leaves.', new_group: 'New group', group_name: 'Group name', rename: 'Rename', join: 'Join', join_question: 'Join «%s»?',
     already_joined: 'Already joined as «%s»', other_server: 'That link is for %s. Open it on that server\'s page.', token: 'Token', share: 'Share', copy_link: 'Copy link', link_copied: 'Copied', close: 'Close',
     share_warning: 'Anyone with this link can read and change this group, and access can\'t be taken back. To cut someone off, make a new group and move the counters.',
     forget_backup: 'Copy this link first: it is the only backup of the key. OK forgets the group in this browser (the data stays on the server), Cancel keeps it.' },
@@ -115,7 +115,7 @@ const T = {
     intervals: 'Intervalli · media %s', archived: 'Archiviati', delete_counter: 'Elimina contatore', confirm_delete: 'Eliminare questo contatore?',
     reset_label: 'Azzera %s', pick_past: 'Scegli un momento nel passato', create: 'creato', manual: 'manuale', nfc: 'via NFC', d: 'g',
     open_app: 'Apri nell\'app', forget: 'Dimentica', paste_link: 'Incolla un link di gruppo', bad_link: 'Questo non è un link di gruppo',
-        no_data: 'Niente trovato per questo link su questo server', decrypt_failed: 'Impossibile decifrare: chiave sbagliata?', needs_https: 'Questa pagina richiede https per decifrare (o localhost).', busy: 'Occupato, riprova', all_groups: 'Tutti', ungrouped: 'Senza gruppo', synced: 'Sincronizzato alle %s', new_group: 'Nuovo gruppo', group_name: 'Nome del gruppo', rename: 'Rinomina', join: 'Unisciti', join_question: 'Unirti a «%s»?',
+        no_data: 'Niente trovato per questo link su questo server', decrypt_failed: 'Impossibile decifrare: chiave sbagliata?', needs_https: 'Questa pagina richiede https per decifrare (o localhost).', busy: 'Occupato, riprova', all_groups: 'Tutti', ungrouped: 'Senza gruppo', synced: 'Sincronizzato alle %s', group: 'Gruppo', move_title: 'Spostare da un gruppo sincronizzato?', move_text: 'Il contatore verrà rimosso per tutti gli altri nel gruppo che lascia.', new_group: 'Nuovo gruppo', group_name: 'Nome del gruppo', rename: 'Rinomina', join: 'Unisciti', join_question: 'Unirti a «%s»?',
     already_joined: 'Già unito come «%s»', other_server: 'Quel link è per %s. Aprilo sulla pagina di quel server.', token: 'Token', share: 'Condividi', copy_link: 'Copia link', link_copied: 'Copiato', close: 'Chiudi',
     share_warning: 'Chiunque abbia questo link può leggere e modificare questo gruppo, e l\'accesso non si può revocare. Per escludere qualcuno, crea un nuovo gruppo e sposta i contatori.',
     forget_backup: 'Copia prima questo link: è l\'unico backup della chiave. OK dimentica il gruppo in questo browser (i dati restano sul server), Annulla lo tiene.' },
@@ -165,7 +165,8 @@ function merge(s, inn) {
   const counters = [...cs.values()].filter(c => !c.deleted || c.updatedAt >= cutoff).sort(byId);
   const live = new Set(counters.map(c => c.id));
   const rename = inn.name != null && inn.nameUpdatedAt > (s.nameUpdatedAt ?? 0); // newest rename wins, like the phone
-  return { name: rename ? inn.name : s.name, nameUpdatedAt: rename ? inn.nameUpdatedAt : s.nameUpdatedAt, counters, events: [...es.values()].filter(e => live.has(e.counterId)).sort(byId) };
+  const dropped = new Set(inn.drop ?? []); // counters that moved to another group: their events go with them
+  return { name: rename ? inn.name : s.name, nameUpdatedAt: rename ? inn.nameUpdatedAt : s.nameUpdatedAt, counters, events: [...es.values()].filter(e => live.has(e.counterId) && !dropped.has(e.counterId)).sort(byId) };
 }
 
 const emptyState = () => ({ name: null, nameUpdatedAt: 0, counters: [], events: [] });
@@ -173,8 +174,9 @@ const emptyState = () => ({ name: null, nameUpdatedAt: 0, counters: [], events: 
 const stores = new Map();
 const store = k => stores.get(k) ?? stores.set(k, { state: emptyState(), etag: null, keys: null, status: '', failed: false, queue: Promise.resolve() }).get(k);
 try { Object.assign(store('').state, JSON.parse(localStorage.getItem('local') || '{}')); } catch {}
-const ownerOf = id => [...stores].find(([, s]) => s.state.counters.some(c => c.id === id))?.[0];
-const ownerOfEvent = id => [...stores].find(([, s]) => s.state.events.some(e => e.id === id))?.[0];
+// Only live counters: a moved one leaves a tombstone behind in its old store.
+const ownerOf = id => [...stores].find(([, s]) => s.state.counters.some(c => c.id === id && !c.deleted))?.[0];
+const ownerOfEvent = id => [...stores].find(([, s]) => s.state.events.some(e => e.id === id && s.state.counters.some(c => c.id === e.counterId && !c.deleted)))?.[0];
 const counterOf = id => stores.get(ownerOf(id))?.state.counters.find(c => c.id === id);
 let view = 'all'; // what the list shows: 'all', '' (Ungrouped) or a group's secret
 let loginFor = null;
@@ -333,13 +335,15 @@ const event = (counterId, source, at = Date.now()) => ({ id: crypto.randomUUID()
 const UNITS = [['minutes', 6e4], ['hours', 36e5], ['days', 864e5], ['weeks', 6048e5]];
 const tagList = s => [...new Set(s.split(',').map(t => t.trim().toLowerCase()).filter(Boolean))]; // same as the app
 
-function editForm(c, avg) {
+function editForm(c, avg, k) {
   const ms = c.notifyAfterMs;
   // Largest unit that divides the stored value evenly, like the app.
   const [unit, size] = ms ? UNITS.filter(([, n]) => ms % n === 0).pop() ?? UNITS[0] : UNITS[2];
   return `<form data-edit="${c.id}">
     <label>${t('label')} <input name="label" value="${esc(c.label)}" required></label>
     <label>${t('tags')} <input name="tags" value="${esc(tagList(c.tags).join(', '))}" placeholder="${t('comma')}"></label>
+    ${groups.length ? `<label>${t('group')} <select name="group">${[['', t('ungrouped')], ...[...groups].sort(byName).map(g => [g.secret, g.name || '…'])]
+      .map(([v, n]) => `<option value="${esc(v)}" ${v === k ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>` : ''}
     <label>${t('notify_after')} <span class="row"><input name="amount" type="number" min="1" value="${ms ? ms / size : ''}" placeholder="${t('never')}">
       <select name="unit">${UNITS.map(([u]) => `<option value="${u}" ${u === unit ? 'selected' : ''}>${t(u)}</option>`).join('')}</select>
       ${avg ? `<button type="button" data-avg="${avg}">${t('use_average', since(Date.now() - avg))}</button>` : ''}</span></label>
@@ -381,7 +385,7 @@ function rowHtml({ c, ev, last, k, overdue }) {
       <summary><span><b>${esc(c.label)}</b><br>${k && groups.length >= 2 ? `<span class="muted">${esc(groupName(k))}</span><br>` : ''}<span class="muted">${tagList(c.tags).map(t => '#' + esc(t)).join(' ')}${c.notifyAfterMs ? ' · ⏰' : ''}</span></span>
         <span class="since">${since(last)}</span><button data-reset="${c.id}">↻ ${t('reset')}</button></summary>
       ${chart(ev)}
-      ${editForm(c, ev.length >= 3 ? (ev[0].at - ev.at(-1).at) / (ev.length - 1) : 0)}
+      ${editForm(c, ev.length >= 3 ? (ev[0].at - ev.at(-1).at) / (ev.length - 1) : 0, k)}
       <ul>${ev.map(e => `<li>${new Date(e.at).toLocaleString()} <span class="muted">${t(e.source)}</span>${ev.length > 1 ? `<button data-del-event="${e.id}">✕</button>` : ''}${e.note ? `<span class="note">${esc(e.note)}</span>` : ''}</li>`).join('')}</ul>
       <button data-del="${c.id}">${t('delete_counter')}</button>
     </details>`;
@@ -438,12 +442,23 @@ $('#tags').onclick = e => {
   if (t) { filter = filter === t ? null : t; render(); }
 };
 
+/** Moves a counter, with its events, to another group (or Ungrouped): written to the new place first, then a tombstone in the old one. */
+async function moveCounter(from, to, edited) {
+  const events = store(from).state.events.filter(e => e.counterId === edited.id);
+  await commit(to, { counters: [edited], events });
+  if (to !== '' && store(to).failed) return; // not saved there, so it stays where it was; the section's status says why
+  await commit(from, { counters: [{ ...edited, deleted: true }], events: [], drop: [edited.id] });
+}
+
 $('#list').onsubmit = e => {
   e.preventDefault();
-  const f = new FormData(e.target), amount = Number(f.get('amount')), id = e.target.dataset.edit;
+  const f = new FormData(e.target), amount = Number(f.get('amount')), id = e.target.dataset.edit, from = ownerOf(id), to = f.get('group') ?? from;
+  const edited = { ...counterOf(id), label: f.get('label').trim(), tags: tagList(f.get('tags')).join(','),
+    notifyAfterMs: amount > 0 ? amount * UNITS.find(([u]) => u === f.get('unit'))[1] : null, updatedAt: Date.now() };
   document.activeElement.blur();
-  commit(ownerOf(id), { counters: [{ ...counterOf(id), label: f.get('label').trim(), tags: tagList(f.get('tags')).join(','),
-    notifyAfterMs: amount > 0 ? amount * UNITS.find(([u]) => u === f.get('unit'))[1] : null, updatedAt: Date.now() }], events: [] });
+  if (to === from) return commit(from, { counters: [edited], events: [] });
+  if (from !== '' && !confirm(t('move_title') + '\n\n' + t('move_text'))) return; // leaving a synced group removes it for everyone in it
+  moveCounter(from, to, edited);
 };
 
 $('#list').onclick = e => {
