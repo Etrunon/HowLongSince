@@ -4,5 +4,5 @@ services:
     restart: unless-stopped
     ports: ["127.0.0.1:13387:8080"] # put a reverse proxy (Caddy, tailscale serve) in front
     environment:
-      TOKEN: ${HLS_TOKEN:-} # required; set in .env, same value in the app/web settings
+      TOKEN: ${HLS_TOKEN:-} # optional: opens groups made before device tokens, and GET /stats
     volumes: ["./data:/data"] # must be writable by uid 1000

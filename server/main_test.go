@@ -1,58 +1,236 @@
 package main
 
 import (
-	"errors"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 )
 
-func TestBlobs(t *testing.T) {
-	dir := t.TempDir()
-	id := "0123456789abcdef0123456789abcdef"
-	if _, _, err := getBlob(dir, id); !errors.Is(err, os.ErrNotExist) {
-		t.Fatal("missing blob must be ErrNotExist", err)
+const gid = "0123456789abcdef0123456789abcdef"
+
+type tc struct {
+	t   *testing.T
+	s   *server
+	srv *httptest.Server
+}
+
+func newTC(t *testing.T) *tc {
+	s := &server{dir: t.TempDir(), token: "legacy", createsPerIP: 3, maxGr: 100}
+	srv := httptest.NewServer(s.routes())
+	t.Cleanup(srv.Close)
+	return &tc{t, s, srv}
+}
+
+// do sends a request and returns the status and the decoded JSON answer.
+func (c *tc) do(method, path, token, ifMatch string, body any) (int, map[string]any) {
+	var rd *strings.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		rd = strings.NewReader(string(b))
+	} else {
+		rd = strings.NewReader("")
 	}
-	e1, err := putBlob(dir, id, []byte("one"), "")
+	r, _ := http.NewRequest(method, c.srv.URL+path, rd)
+	if token != "" {
+		r.Header.Set("Authorization", "Bearer "+token)
+	}
+	if ifMatch != "" {
+		r.Header.Set("If-Match", ifMatch)
+	}
+	res, err := http.DefaultClient.Do(r)
 	if err != nil {
-		t.Fatal(err)
+		c.t.Fatal(err)
 	}
-	if _, err := putBlob(dir, id, []byte("x"), ""); !errors.Is(err, errConflict) {
-		t.Error("create over an existing blob must conflict")
-	}
-	if _, err := putBlob(dir, id, []byte("x"), "stale"); !errors.Is(err, errConflict) {
-		t.Error("stale etag must conflict")
-	}
-	e2, err := putBlob(dir, id, []byte("two"), e1)
-	if err != nil || e2 == e1 {
-		t.Fatal("update with the current etag must work", err)
-	}
-	if b, e, _ := getBlob(dir, id); string(b) != "two" || e != e2 {
-		t.Error("get must return the latest blob and its etag")
-	}
-	if _, err := putBlob(dir, "ffffffffffffffffffffffffffffffff", []byte("x"), e1); !errors.Is(err, errConflict) {
-		t.Error("update of a missing blob must conflict")
-	}
-	if idRe.MatchString("../etc/passwd") || idRe.MatchString("ABC") {
-		t.Error("ids must be 32 lowercase hex chars")
-	}
-	if err := addDevices(dir, id, 1); err != nil { // 1 (creator) + 1
-		t.Fatal(err)
-	}
-	if bl, _ := readBlob(dir, id); bl.LastSynced == 0 || bl.LastJoined == 0 || bl.LastLeft != 0 {
-		t.Error("join and sync must be stamped, leave not yet")
-	}
-	addDevices(dir, id, -1)
-	if bl, _ := readBlob(dir, id); bl.LastLeft == 0 {
-		t.Error("leave must be stamped")
-	}
-	if _, _, err := getBlob(dir, id); err != nil {
-		t.Error("group with a device left must stay")
-	}
-	addDevices(dir, id, -1)
-	if _, _, err := getBlob(dir, id); !errors.Is(err, os.ErrNotExist) {
-		t.Error("group with no devices must be deleted")
-	}
-	if err := addDevices(dir, id, 1); !errors.Is(err, os.ErrNotExist) {
-		t.Error("join of a missing group must be ErrNotExist")
+	defer res.Body.Close()
+	out := map[string]any{}
+	json.NewDecoder(res.Body).Decode(&out)
+	return res.StatusCode, out
+}
+
+func (c *tc) want(code int, got int, what string) {
+	c.t.Helper()
+	if got != code {
+		c.t.Errorf("%s: got %d, want %d", what, got, code)
 	}
 }
+
+// create makes group gid with Alice's device as admin and returns her token and the etag.
+func (c *tc) create() (string, string) {
+	code, out := c.do("PUT", "/s/"+gid, "", "", map[string]any{"ciphertext": []byte("one"), "deviceId": "alice", "recovery": "pw"})
+	c.want(200, code, "create")
+	return out["token"].(string), out["etag"].(string)
+}
+
+func (c *tc) invite(admin string) string {
+	code, out := c.do("POST", "/s/"+gid+"/invite", admin, "", map[string]any{})
+	c.want(200, code, "invite")
+	return out["nonce"].(string)
+}
+
+func (c *tc) enroll(dev string, body map[string]any) (int, string) {
+	body["deviceId"] = dev
+	code, out := c.do("POST", "/s/"+gid+"/enroll", "", "", body)
+	tok, _ := out["token"].(string)
+	return code, tok
+}
+
+func TestSyncAndRoles(t *testing.T) {
+	c := newTC(t)
+	alice, e1 := c.create()
+	code, _ := c.do("PUT", "/s/"+gid, "", "", map[string]any{"ciphertext": []byte("x"), "deviceId": "eve", "recovery": "x"})
+	c.want(409, code, "create over an existing group")
+	code, out := c.do("GET", "/s/"+gid, alice, "", nil)
+	c.want(200, code, "get")
+	if out["etag"] != e1 {
+		t.Error("etag")
+	}
+	c.want(401, first(c.do("GET", "/s/"+gid, "", "", nil)), "get without token")
+	c.want(401, first(c.do("GET", "/s/"+gid, "legacy", "", nil)), "TOKEN can't open a new group")
+	c.want(409, first(c.do("PUT", "/s/"+gid, alice, "stale", map[string]any{"ciphertext": []byte("x")})), "stale etag")
+	c.want(200, first(c.do("PUT", "/s/"+gid, alice, e1, map[string]any{"ciphertext": []byte("two")})), "update")
+
+	// Bob joins with an invite; the nonce is single use.
+	n := c.invite(alice)
+	code, bob := c.enroll("bob", map[string]any{"nonce": n})
+	c.want(200, code, "enroll")
+	c.want(401, first(c.enroll("eve", map[string]any{"nonce": n})), "spent nonce")
+	c.want(200, first(c.do("GET", "/s/"+gid, bob, "", nil)), "bob syncs")
+
+	// Bob is a member: no invite, revoke, list or changing the password.
+	c.want(403, first(c.do("POST", "/s/"+gid+"/invite", bob, "", map[string]any{})), "member invite")
+	c.want(403, first(c.do("POST", "/s/"+gid+"/revoke", bob, "", map[string]any{"deviceId": "alice"})), "member revoke")
+	c.want(403, first(c.do("GET", "/s/"+gid+"/devices", bob, "", nil)), "member list")
+	c.want(403, first(c.do("POST", "/s/"+gid+"/recovery", bob, "", map[string]any{"recovery": "mine"})), "member sets password")
+
+	// Alice lists and revokes Bob.
+	r, _ := http.NewRequest("GET", c.srv.URL+"/s/"+gid+"/devices", nil)
+	r.Header.Set("Authorization", "Bearer "+alice)
+	res, _ := http.DefaultClient.Do(r)
+	var list []device
+	json.NewDecoder(res.Body).Decode(&list)
+	if len(list) != 2 || !list[0].Admin || list[1].Admin || list[0].TokenHash != "" {
+		t.Errorf("device list: %+v", list)
+	}
+	c.want(200, first(c.do("POST", "/s/"+gid+"/revoke", alice, "", map[string]any{"deviceId": "bob"})), "revoke")
+	c.want(401, first(c.do("GET", "/s/"+gid, bob, "", nil)), "revoked device")
+}
+
+func TestExpiredInvite(t *testing.T) {
+	c := newTC(t)
+	alice, _ := c.create()
+	n := c.invite(alice)
+	bl, _ := readBlob(c.s.dir, gid)
+	bl.Invites[0].Expires = now() - 1
+	b, _ := json.Marshal(bl)
+	os.WriteFile(blobPath(c.s.dir, gid), b, 0o600)
+	c.want(401, first(c.enroll("bob", map[string]any{"nonce": n})), "expired nonce")
+}
+
+func TestRecovery(t *testing.T) {
+	c := newTC(t)
+	alice, _ := c.create()
+	// Alice's new phone joins with the backup link and the password, then revokes the lost one.
+	c.want(401, first(c.enroll("alice2", map[string]any{"recovery": "wrong"})), "wrong password")
+	code, alice2 := c.enroll("alice2", map[string]any{"recovery": "pw"})
+	c.want(200, code, "recovery enroll")
+	c.want(200, first(c.do("POST", "/s/"+gid+"/revoke", alice2, "", map[string]any{"deviceId": "alice"})), "new phone revokes old")
+	c.want(401, first(c.do("GET", "/s/"+gid, alice, "", nil)), "old phone is out")
+
+	// A member promotes itself with the password.
+	_, bob := c.enroll("bob", map[string]any{"nonce": c.invite(alice2)})
+	c.want(401, first(c.do("POST", "/s/"+gid+"/promote", bob, "", map[string]any{"recovery": "nope"})), "wrong promote")
+	c.want(200, first(c.do("POST", "/s/"+gid+"/promote", bob, "", map[string]any{"recovery": "pw"})), "promote")
+	c.want(200, first(c.do("POST", "/s/"+gid+"/invite", bob, "", map[string]any{})), "promoted can invite")
+
+	// Five wrong passwords lock recovery for the hour, even the right one.
+	for range 5 {
+		c.enroll("eve", map[string]any{"recovery": "guess"})
+	}
+	c.want(429, first(c.enroll("eve", map[string]any{"recovery": "pw"})), "attempt limit")
+}
+
+func TestLegacyClaim(t *testing.T) {
+	c := newTC(t)
+	writeBlob(c.s.dir, gid, blob{Ciphertext: []byte("old"), LastSynced: now()}) // made before devices existed
+	c.want(200, first(c.do("GET", "/s/"+gid, "legacy", "", nil)), "TOKEN opens a legacy group")
+	code, out := c.do("POST", "/s/"+gid+"/claim", "legacy", "", map[string]any{"deviceId": "alice"})
+	c.want(200, code, "claim")
+	alice := out["token"].(string)
+	_, out = c.do("POST", "/s/"+gid+"/claim", "legacy", "", map[string]any{"deviceId": "bob"})
+	bob := out["token"].(string)
+	c.want(403, first(c.do("POST", "/s/"+gid+"/invite", alice, "", map[string]any{})), "claimed devices are members")
+	c.want(200, first(c.do("POST", "/s/"+gid+"/recovery", alice, "", map[string]any{"recovery": "pw"})), "first sets password")
+	c.want(200, first(c.do("POST", "/s/"+gid+"/invite", alice, "", map[string]any{})), "and is admin")
+	c.want(403, first(c.do("POST", "/s/"+gid+"/recovery", bob, "", map[string]any{"recovery": "bob"})), "second can't")
+	c.want(401, first(c.do("POST", "/s/"+gid+"/claim", "legacy", "", map[string]any{"deviceId": "eve"})), "claim closed")
+	c.want(401, first(c.do("GET", "/s/"+gid, "legacy", "", nil)), "TOKEN closed")
+	c.want(200, first(c.do("GET", "/s/"+gid, bob, "", nil)), "bob still syncs")
+}
+
+func TestLeaveDeletes(t *testing.T) {
+	c := newTC(t)
+	alice, _ := c.create()
+	_, bob := c.enroll("bob", map[string]any{"nonce": c.invite(alice)})
+	c.want(200, first(c.do("POST", "/s/"+gid+"/leave", bob, "", map[string]any{})), "leave")
+	c.want(200, first(c.do("GET", "/s/"+gid, alice, "", nil)), "group stays")
+	c.do("POST", "/s/"+gid+"/leave", alice, "", map[string]any{})
+	if _, err := os.Stat(blobPath(c.s.dir, gid)); !os.IsNotExist(err) {
+		t.Error("group with no device left must be deleted")
+	}
+}
+
+func TestCaps(t *testing.T) {
+	c := newTC(t)
+	for i := range 4 {
+		id := strings.Repeat(string("abcd"[i]), 32)
+		code, _ := c.do("PUT", "/s/"+id, "", "", map[string]any{"ciphertext": []byte("x"), "deviceId": "d", "recovery": "pw"})
+		c.want(map[bool]int{true: 200, false: 429}[i < 3], code, "creates per IP")
+	}
+	c.want(400, first(c.do("GET", "/s/ABC", "", "", nil)), "bad id")
+	for range maxFails {
+		c.do("GET", "/s/"+strings.Repeat("a", 32), "bad", "", nil)
+	}
+	c.want(429, first(c.do("GET", "/s/"+strings.Repeat("a", 32), "bad", "", nil)), "backoff after failures")
+}
+
+func TestCleanupAndStats(t *testing.T) {
+	c := newTC(t)
+	v2 := func(live int, at int64) []byte {
+		var cs, es []string
+		for range live {
+			cs = append(cs, `{"deleted":false}`)
+		}
+		es = append(es, `{"at":`+itoa(at)+`,"deleted":false}`)
+		d, _ := json.Marshal(`{"counters":[` + strings.Join(cs, ",") + `],"events":[` + strings.Join(es, ",") + `]}`)
+		return []byte(`{"v":2,"doc":` + string(d) + `,"mac":"x"}`)
+	}
+	ago := func(days int64) int64 { return now() - days*day }
+	ids := map[string]blob{
+		strings.Repeat("1", 32): {LastSynced: ago(400), Ciphertext: v2(5, 0)},                                                           // a year idle: deleted
+		strings.Repeat("2", 32): {LastSynced: ago(200), Ciphertext: v2(1, 0)},                                                           // half a year, few counters: deleted
+		strings.Repeat("3", 32): {LastSynced: ago(200), Ciphertext: v2(3, 0)},                                                           // half a year, in use: kept
+		strings.Repeat("4", 32): {LastSynced: ago(1), Ciphertext: v2(2, (now()-day)*1000), Recovery: "h", Members: []device{{ID: "a"}}}, // kept
+	}
+	for id, bl := range ids {
+		writeBlob(c.s.dir, id, bl)
+	}
+	cleanup(c.s.dir)
+	for id, kept := range map[string]bool{strings.Repeat("1", 32): false, strings.Repeat("2", 32): false, strings.Repeat("3", 32): true, strings.Repeat("4", 32): true} {
+		if _, err := os.Stat(blobPath(c.s.dir, id)); (err == nil) != kept {
+			t.Errorf("%s kept=%v", id[:1], err == nil)
+		}
+	}
+	c.want(401, first(c.do("GET", "/stats", "", "", nil)), "stats need TOKEN")
+	code, out := c.do("GET", "/stats", "legacy", "", nil)
+	c.want(200, code, "stats")
+	if out["Groups"] != 2.0 || out["Devices"] != 1.0 || out["Counters"] != 5.0 || out["Resets7"] != 1.0 || out["Resets30"] != 1.0 {
+		t.Errorf("stats: %v", out)
+	}
+}
+
+func first(code int, _ any) int { return code }
+
+func itoa(n int64) string { b, _ := json.Marshal(n); return string(b) }

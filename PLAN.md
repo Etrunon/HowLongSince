@@ -15,7 +15,7 @@ The server never sees a text a user typed (names, labels, tags, notes, NFC ids) 
 - Because nonces are random, the "nothing new to say" check compares decrypted content, not bytes.
 - Tests: `SinceTest.kt` and `web.test.mjs` share one v2 document sealed by each side, and each opens the other's.
 
-## Phase 1: server access control and stats (Go, standard library only)
+## Phase 1: server access control and stats (Go, standard library only) (done)
 
 - **Roles:** a device is an *admin* or a *member*. The creator's device is an admin. Only admins invite, revoke and list devices. Members just sync and leave. Story: Alice creates the group (admin), invites Bob and Carl as members, and can revoke either of them; they can't revoke her. When Alice gets a new phone, she opens her backup link ("Copy link") and types the recovery password, and the new phone becomes an admin that can revoke her lost one. This works even if she has lost every device.
 - **Storage:** per group, in the blob's metadata file: `devices[{id, tokenHash, admin, created, lastSeen}]`, `invites[{nonceHash, expires}]`, `recoveryHash`. Credentials are keyed by `deviceId`, never by the editable name. The current `Devices` count becomes `len(devices)`; files that still have the count are treated as legacy groups.

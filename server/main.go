@@ -1,9 +1,12 @@
-// How Long Since sync server: the web app, and encrypted blobs at GET/PUT /s/{id} (one file per synced group) that it cannot read,
-// plus POST /s/{id}/join and /leave, which keep a device count per group (the group is deleted when it reaches 0).
-// Config (env): DATA_DIR (default /data), ADDR (default :8080), TOKEN (bearer token, required unless INSECURE=1).
+// How Long Since sync server: the web app, and encrypted group blobs at GET/PUT /s/{id} (one file per group) that it cannot read.
+// Each group has its own devices, each with a random token: admins invite, revoke and list; members sync and leave.
+// A recovery password (stretched on the client, only its hash stored) enrolls or promotes an admin. See PLAN.md.
+// Config (env): DATA_DIR (default /data), ADDR (default :8080), TOKEN (optional: legacy groups and /stats),
+// CREATES_PER_IP_HOUR (default 10), MAX_GROUPS (default 10000).
 package main
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	_ "embed"
@@ -11,10 +14,14 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -35,23 +42,80 @@ func env(k, d string) string {
 	return d
 }
 
+func envInt(k string, d int) int {
+	if n, err := strconv.Atoi(os.Getenv(k)); err == nil {
+		return n
+	}
+	return d
+}
+
 var (
-	idRe        = regexp.MustCompile(`^[0-9a-f]{32}$`) // space ids are hex, which also rules out path tricks
-	blobMu      sync.Mutex                             // guards the blob files
-	errConflict = errors.New("etag mismatch")
+	idRe   = regexp.MustCompile(`^[0-9a-f]{32}$`)       // group ids are hex, which also rules out path tricks
+	devRe  = regexp.MustCompile(`^[0-9A-Za-z-]{1,64}$`) // device ids are UUIDs
+	blobMu sync.Mutex                                   // guards the blob files; every request on a group holds it
+)
+
+const (
+	hour        = int64(time.Hour / time.Second)
+	day         = 24 * hour
+	inviteTTL   = day
+	maxFails    = 20 // failed logins and enrolls per IP per hour
+	maxRecovery = 5  // failed recovery passwords per group per hour
 )
 
 func etagOf(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:16]) }
+func hash(s string) string   { h := sha256.Sum256([]byte(s)); return hex.EncodeToString(h[:]) }
+func same(a, b string) bool  { return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1 }
+func now() int64             { return time.Now().Unix() }
+
+func randomHex() string {
+	b := make([]byte, 32)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
 
 func blobPath(dir, id string) string { return filepath.Join(dir, "s", id) }
 
-// blob is the file on disk: the ciphertext plus a device count only the server sees (never sent to clients).
+type device struct {
+	ID        string `json:"id"`
+	TokenHash string `json:"tokenHash"`
+	Admin     bool   `json:"admin"`
+	Created   int64  `json:"created"`
+	LastSeen  int64  `json:"lastSeen"`
+}
+
+type invite struct {
+	NonceHash string `json:"nonceHash"`
+	Expires   int64  `json:"expires"`
+}
+
+// blob is the file on disk: the ciphertext (a v2 envelope, see index.html) plus what only the server sees.
+// A group without a recovery hash is legacy (made before devices existed): TOKEN still opens it, and claim enrolls into it.
 type blob struct {
-	Devices    int    `json:"devices"`
-	LastSynced int64  `json:"lastSynced"` // unix seconds of the last GET or PUT
-	LastJoined int64  `json:"lastJoined"`
-	LastLeft   int64  `json:"lastLeft"`
-	Ciphertext []byte `json:"ciphertext"`
+	LastSynced int64    `json:"lastSynced"` // unix seconds, at most an hour stale
+	Members    []device `json:"members,omitempty"`
+	Invites    []invite `json:"invites,omitempty"`
+	Recovery   string   `json:"recovery,omitempty"` // sha256 of the client's stretched password
+	Ciphertext []byte   `json:"ciphertext"`
+}
+
+func (bl *blob) legacy() bool { return bl.Recovery == "" }
+
+func (bl *blob) member(id string) *device {
+	for i := range bl.Members {
+		if bl.Members[i].ID == id {
+			return &bl.Members[i]
+		}
+	}
+	return nil
+}
+
+// enroll adds (or re-keys) device id and returns its new token.
+func (bl *blob) enroll(id string, admin bool) string {
+	token := randomHex()
+	bl.Members = slices.DeleteFunc(bl.Members, func(d device) bool { return d.ID == id })
+	bl.Members = append(bl.Members, device{ID: id, TokenHash: hash(token), Admin: admin, Created: now(), LastSeen: now()})
+	return token
 }
 
 func readBlob(dir, id string) (blob, error) {
@@ -68,6 +132,7 @@ func writeBlob(dir, id string, bl blob) error {
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return err
 	}
+	bl.Invites = slices.DeleteFunc(bl.Invites, func(i invite) bool { return i.Expires < now() })
 	b, _ := json.Marshal(bl)
 	if err := os.WriteFile(p+".tmp", b, 0o600); err != nil {
 		return err
@@ -75,67 +140,270 @@ func writeBlob(dir, id string, bl blob) error {
 	return os.Rename(p+".tmp", p) // atomic replace
 }
 
-// getBlob returns the stored ciphertext and its etag; os.ErrNotExist if there is none.
-func getBlob(dir, id string) ([]byte, string, error) {
-	blobMu.Lock()
-	defer blobMu.Unlock()
-	bl, err := readBlob(dir, id)
-	if err == nil {
-		bl.LastSynced = time.Now().Unix()
-		writeBlob(dir, id, bl) // best effort: a failed stamp must not fail the read
-	}
-	return bl.Ciphertext, etagOf(bl.Ciphertext), err
+// limits counts events per key ("fail ip", "create ip", "recovery id") in memory; the counts reset every hour.
+type limits struct {
+	mu sync.Mutex
+	n  map[string]int
+	at int64
 }
 
-// putBlob stores b if ifMatch is the current etag; "" means create only (the creator is the first device). errConflict otherwise.
-func putBlob(dir, id string, b []byte, ifMatch string) (string, error) {
-	blobMu.Lock()
-	defer blobMu.Unlock()
-	old, err := readBlob(dir, id)
-	switch {
-	case errors.Is(err, os.ErrNotExist):
-		if ifMatch != "" {
-			return "", errConflict
+func (l *limits) count(key string, add int) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.n == nil || now()-l.at >= hour {
+		l.n, l.at = map[string]int{}, now()
+	}
+	l.n[key] += add
+	return l.n[key]
+}
+
+// clientIP: the server runs behind a reverse proxy on localhost (compose.yml), which appends the real address to X-Forwarded-For.
+func clientIP(r *http.Request) string {
+	if f := r.Header.Get("X-Forwarded-For"); f != "" {
+		parts := strings.Split(f, ",")
+		return strings.TrimSpace(parts[len(parts)-1])
+	}
+	host, _, _ := net.SplitHostPort(r.RemoteAddr)
+	return host
+}
+
+func bearer(r *http.Request) string {
+	return strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+}
+
+// doc is the readable part of a v2 envelope, for stats and cleanup.
+type doc struct {
+	Counters []struct {
+		Deleted bool `json:"deleted"`
+	} `json:"counters"`
+	Events []struct {
+		At      int64 `json:"at"` // ms
+		Deleted bool  `json:"deleted"`
+	} `json:"events"`
+}
+
+func readable(ciphertext []byte) (d doc) {
+	var env struct {
+		V   int    `json:"v"`
+		Doc string `json:"doc"`
+	}
+	if json.Unmarshal(ciphertext, &env) == nil && env.V == 2 {
+		json.Unmarshal([]byte(env.Doc), &d)
+	}
+	return d // empty for v1 blobs
+}
+
+func (d doc) live() (n int) {
+	for _, c := range d.Counters {
+		if !c.Deleted {
+			n++
 		}
-		old.Devices = 1
-	case err != nil:
-		return "", err
-	case ifMatch != etagOf(old.Ciphertext):
-		return "", errConflict
 	}
-	old.Ciphertext, old.LastSynced = b, time.Now().Unix()
-	return etagOf(b), writeBlob(dir, id, old)
+	return n
 }
 
-// addDevices adds delta (+1 join, -1 leave) to the group's device count; at 0 the group is deleted. os.ErrNotExist if missing.
-func addDevices(dir, id string, delta int) error {
+// cleanup deletes groups not synced for a year, or for half a year with fewer than 3 live counters.
+func cleanup(dir string) {
 	blobMu.Lock()
 	defer blobMu.Unlock()
-	bl, err := readBlob(dir, id)
+	files, _ := os.ReadDir(filepath.Join(dir, "s"))
+	for _, f := range files {
+		if !idRe.MatchString(f.Name()) {
+			continue
+		}
+		bl, err := readBlob(dir, f.Name())
+		if err != nil {
+			continue
+		}
+		idle := now() - bl.LastSynced
+		if idle > 365*day || idle > 180*day && readable(bl.Ciphertext).live() < 3 {
+			os.Remove(blobPath(dir, f.Name()))
+		}
+	}
+}
+
+type stats struct {
+	Groups, Devices, Counters, Resets7, Resets30 int
+}
+
+func collect(dir string) (s stats) {
+	blobMu.Lock()
+	defer blobMu.Unlock()
+	files, _ := os.ReadDir(filepath.Join(dir, "s"))
+	ms := now() * 1000
+	for _, f := range files {
+		bl, err := readBlob(dir, f.Name())
+		if !idRe.MatchString(f.Name()) || err != nil {
+			continue
+		}
+		d := readable(bl.Ciphertext)
+		s.Groups++
+		s.Devices += len(bl.Members)
+		s.Counters += d.live()
+		for _, e := range d.Events {
+			if !e.Deleted && e.At > ms-7*day*1000 {
+				s.Resets7++
+			}
+			if !e.Deleted && e.At > ms-30*day*1000 {
+				s.Resets30++
+			}
+		}
+	}
+	return s
+}
+
+func countGroups(dir string) int {
+	files, _ := os.ReadDir(filepath.Join(dir, "s"))
+	return len(files)
+}
+
+type server struct {
+	dir, token          string
+	createsPerIP, maxGr int
+	lim                 limits
+}
+
+type httpErr struct {
+	code int
+	msg  string
+}
+
+func (e httpErr) Error() string { return e.msg }
+
+var (
+	errAuth      = httpErr{401, "unauthorized"}
+	errForbidden = httpErr{403, "admins only"}
+	errNotFound  = httpErr{404, "not found"}
+	errConflict  = httpErr{409, "conflict"}
+	errBusy      = httpErr{429, "too many attempts, try again later"}
+	errBadBody   = httpErr{400, "bad body"}
+)
+
+// req is what a group request carries in its JSON body (each endpoint reads the fields it needs).
+type req struct {
+	Ciphertext []byte `json:"ciphertext"`
+	DeviceID   string `json:"deviceId"`
+	Recovery   string `json:"recovery"`
+	Nonce      string `json:"nonce"`
+}
+
+// caller is who sent a request: an enrolled device, or (legacy groups only) a holder of TOKEN.
+type caller struct {
+	dev    *device
+	legacy bool
+}
+
+func (s *server) auth(r *http.Request, bl *blob) (caller, error) {
+	t := bearer(r)
+	if t != "" {
+		h := hash(t)
+		for i := range bl.Members {
+			if same(bl.Members[i].TokenHash, h) {
+				return caller{dev: &bl.Members[i]}, nil
+			}
+		}
+		if s.token != "" && bl.legacy() && same(t, s.token) {
+			return caller{legacy: true}, nil
+		}
+	}
+	s.lim.count("fail "+clientIP(r), 1)
+	return caller{}, errAuth
+}
+
+func (s *server) admin(r *http.Request, bl *blob) (*device, error) {
+	c, err := s.auth(r, bl)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if delta > 0 {
-		bl.LastJoined = time.Now().Unix()
-	} else {
-		bl.LastLeft = time.Now().Unix()
+	if c.dev == nil || !c.dev.Admin {
+		return nil, errForbidden
 	}
-	if bl.Devices += delta; bl.Devices <= 0 {
-		return os.Remove(blobPath(dir, id))
-	}
-	return writeBlob(dir, id, bl)
+	return c.dev, nil
 }
 
-func main() {
-	token := os.Getenv("TOKEN")
-	if token == "" {
-		if os.Getenv("INSECURE") != "1" {
-			log.Fatal("TOKEN is not set; set it, or INSECURE=1 to run without auth (anyone who can reach the server can read and change the data)")
-		}
-		log.Print("WARNING: INSECURE=1, running without auth")
+// checkRecovery compares a stretched password, at most maxRecovery wrong ones per group per hour.
+func (s *server) checkRecovery(r *http.Request, id string, bl *blob, recovery string) error {
+	if s.lim.count("recovery "+id, 0) >= maxRecovery {
+		return errBusy
 	}
+	if bl.legacy() || recovery == "" || !same(hash(recovery), bl.Recovery) {
+		s.lim.count("recovery "+id, 1)
+		s.lim.count("fail "+clientIP(r), 1)
+		return httpErr{401, "wrong recovery password"}
+	}
+	return nil
+}
+
+// group runs f on group id under the lock. f says whether to save; a group that ends with no device and isn't legacy is deleted.
+// The returned value, if any, is sent as JSON.
+func (s *server) group(w http.ResponseWriter, r *http.Request, f func(id string, bl *blob, in req) (any, bool, error)) {
+	id := r.PathValue("id")
+	if !idRe.MatchString(id) {
+		http.Error(w, "bad id", 400)
+		return
+	}
+	if s.lim.count("fail "+clientIP(r), 0) >= maxFails {
+		http.Error(w, errBusy.msg, errBusy.code)
+		return
+	}
+	var in req
+	if r.Method != http.MethodGet {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 10<<20)).Decode(&in); err != nil {
+			http.Error(w, errBadBody.msg, 400)
+			return
+		}
+	}
+	blobMu.Lock()
+	out, err := func() (any, error) {
+		defer blobMu.Unlock()
+		bl, err := readBlob(s.dir, id)
+		create := r.Method == http.MethodPut && r.Header.Get("If-Match") == ""
+		switch {
+		case errors.Is(err, os.ErrNotExist) && create:
+		case errors.Is(err, os.ErrNotExist):
+			return nil, errNotFound
+		case err != nil:
+			return nil, err
+		case create:
+			return nil, errConflict
+		}
+		out, save, err := f(id, &bl, in)
+		if err != nil || !save {
+			return out, err
+		}
+		if len(bl.Members) == 0 && !bl.legacy() {
+			return out, os.Remove(blobPath(s.dir, id))
+		}
+		return out, writeBlob(s.dir, id, bl)
+	}()
+	var he httpErr
+	switch {
+	case errors.As(err, &he):
+		http.Error(w, he.msg, he.code)
+	case err != nil:
+		http.Error(w, err.Error(), 500)
+	case out != nil:
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(out)
+	}
+}
+
+// seen stamps the caller and the group, but only once an hour, so reads rarely write to disk.
+func seen(bl *blob, c caller) bool {
+	save := now()-bl.LastSynced > hour
+	if save {
+		bl.LastSynced = now()
+	}
+	if c.dev != nil && now()-c.dev.LastSeen > hour {
+		c.dev.LastSeen, save = now(), true
+	}
+	return save
+}
+
+func (s *server) routes() *http.ServeMux {
+	mux := http.NewServeMux()
 	static := func(path, typ string, body []byte) {
-		http.HandleFunc("GET "+path, func(w http.ResponseWriter, r *http.Request) {
+		mux.HandleFunc("GET "+path, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", typ)
 			w.Write(body)
 		})
@@ -143,75 +411,166 @@ func main() {
 	static("/{$}", "text/html; charset=utf-8", index)
 	static("/icon.svg", "image/svg+xml", icon)
 	static("/manifest.webmanifest", "application/manifest+json", []byte(manifest))
-	http.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
-	authed := func(h http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			if token != "" && subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+token)) != 1 {
-				http.Error(w, "unauthorized", 401)
-				return
-			}
-			h(w, r)
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
+	mux.HandleFunc("GET /stats", func(w http.ResponseWriter, r *http.Request) {
+		if s.token == "" || !same(bearer(r), s.token) {
+			http.Error(w, errAuth.msg, 401)
+			return
 		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(collect(s.dir))
+	})
+	handle := func(pattern string, f func(id string, bl *blob, in req, r *http.Request) (any, bool, error)) {
+		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+			s.group(w, r, func(id string, bl *blob, in req) (any, bool, error) { return f(id, bl, in, r) })
+		})
 	}
+	handle("GET /s/{id}", func(id string, bl *blob, in req, r *http.Request) (any, bool, error) {
+		c, err := s.auth(r, bl)
+		if err != nil {
+			return nil, false, err
+		}
+		return map[string]any{"etag": etagOf(bl.Ciphertext), "ciphertext": bl.Ciphertext}, seen(bl, c), nil // []byte is base64 in JSON
+	})
+	handle("PUT /s/{id}", func(id string, bl *blob, in req, r *http.Request) (any, bool, error) {
+		if len(in.Ciphertext) == 0 {
+			return nil, false, errBadBody
+		}
+		if bl.Ciphertext == nil { // create: open to anyone, within the caps
+			if !devRe.MatchString(in.DeviceID) || in.Recovery == "" {
+				return nil, false, errBadBody
+			}
+			if s.lim.count("create "+clientIP(r), 1) > s.createsPerIP || countGroups(s.dir) >= s.maxGr {
+				return nil, false, errBusy
+			}
+			bl.Recovery, bl.Ciphertext, bl.LastSynced = hash(in.Recovery), in.Ciphertext, now()
+			token := bl.enroll(in.DeviceID, true)
+			return map[string]string{"etag": etagOf(in.Ciphertext), "token": token}, true, nil
+		}
+		c, err := s.auth(r, bl)
+		if err != nil {
+			return nil, false, err
+		}
+		if r.Header.Get("If-Match") != etagOf(bl.Ciphertext) {
+			return nil, false, errConflict
+		}
+		bl.Ciphertext = in.Ciphertext
+		seen(bl, c)
+		return map[string]string{"etag": etagOf(in.Ciphertext)}, true, nil
+	})
+	handle("POST /s/{id}/invite", func(id string, bl *blob, in req, r *http.Request) (any, bool, error) {
+		if _, err := s.admin(r, bl); err != nil {
+			return nil, false, err
+		}
+		nonce := randomHex()
+		bl.Invites = append(bl.Invites, invite{hash(nonce), now() + inviteTTL})
+		return map[string]string{"nonce": nonce}, true, nil
+	})
+	handle("POST /s/{id}/enroll", func(id string, bl *blob, in req, r *http.Request) (any, bool, error) {
+		if !devRe.MatchString(in.DeviceID) {
+			return nil, false, errBadBody
+		}
+		if in.Nonce == "" {
+			if err := s.checkRecovery(r, id, bl, in.Recovery); err != nil {
+				return nil, false, err
+			}
+			return map[string]string{"token": bl.enroll(in.DeviceID, true)}, true, nil
+		}
+		h := hash(in.Nonce)
+		i := slices.IndexFunc(bl.Invites, func(i invite) bool { return same(i.NonceHash, h) && i.Expires >= now() })
+		if i < 0 {
+			s.lim.count("fail "+clientIP(r), 1)
+			return nil, false, httpErr{401, "invite used or expired"}
+		}
+		bl.Invites = slices.Delete(bl.Invites, i, i+1)
+		return map[string]string{"token": bl.enroll(in.DeviceID, false)}, true, nil
+	})
+	handle("POST /s/{id}/promote", func(id string, bl *blob, in req, r *http.Request) (any, bool, error) {
+		c, err := s.auth(r, bl)
+		if err != nil || c.dev == nil {
+			return nil, false, errAuth
+		}
+		if err := s.checkRecovery(r, id, bl, in.Recovery); err != nil {
+			return nil, false, err
+		}
+		c.dev.Admin = true
+		return nil, true, nil
+	})
+	// Sets the recovery password: an admin changes it; on a legacy group, the first claimed device sets it and becomes admin.
+	handle("POST /s/{id}/recovery", func(id string, bl *blob, in req, r *http.Request) (any, bool, error) {
+		c, err := s.auth(r, bl)
+		if err != nil || c.dev == nil {
+			return nil, false, errAuth
+		}
+		if !c.dev.Admin && !bl.legacy() {
+			return nil, false, errForbidden
+		}
+		if in.Recovery == "" {
+			return nil, false, errBadBody
+		}
+		bl.Recovery, c.dev.Admin = hash(in.Recovery), true
+		return nil, true, nil
+	})
+	handle("POST /s/{id}/revoke", func(id string, bl *blob, in req, r *http.Request) (any, bool, error) {
+		if _, err := s.admin(r, bl); err != nil {
+			return nil, false, err
+		}
+		if bl.member(in.DeviceID) == nil {
+			return nil, false, errNotFound
+		}
+		bl.Members = slices.DeleteFunc(bl.Members, func(d device) bool { return d.ID == in.DeviceID })
+		return nil, true, nil
+	})
+	handle("GET /s/{id}/devices", func(id string, bl *blob, in req, r *http.Request) (any, bool, error) {
+		if _, err := s.admin(r, bl); err != nil {
+			return nil, false, err
+		}
+		type pub struct {
+			ID       string `json:"id"`
+			Admin    bool   `json:"admin"`
+			Created  int64  `json:"created"`
+			LastSeen int64  `json:"lastSeen"`
+		}
+		out := []pub{}
+		for _, d := range bl.Members {
+			out = append(out, pub{d.ID, d.Admin, d.Created, d.LastSeen})
+		}
+		return out, false, nil
+	})
+	handle("POST /s/{id}/leave", func(id string, bl *blob, in req, r *http.Request) (any, bool, error) {
+		c, err := s.auth(r, bl)
+		if err != nil || c.dev == nil {
+			return nil, false, err
+		}
+		me := c.dev.ID
+		bl.Members = slices.DeleteFunc(bl.Members, func(d device) bool { return d.ID == me })
+		return nil, true, nil
+	})
+	handle("POST /s/{id}/claim", func(id string, bl *blob, in req, r *http.Request) (any, bool, error) {
+		if !bl.legacy() || s.token == "" || !same(bearer(r), s.token) {
+			s.lim.count("fail "+clientIP(r), 1)
+			return nil, false, errAuth
+		}
+		if !devRe.MatchString(in.DeviceID) {
+			return nil, false, errBadBody
+		}
+		return map[string]string{"token": bl.enroll(in.DeviceID, false)}, true, nil
+	})
+	return mux
+}
+
+func main() {
 	dir := env("DATA_DIR", "/data")
-	http.HandleFunc("GET /s/{id}", authed(func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
-		if !idRe.MatchString(id) {
-			http.Error(w, "bad id", 400)
-			return
+	s := &server{dir: dir, token: os.Getenv("TOKEN"), createsPerIP: envInt("CREATES_PER_IP_HOUR", 10), maxGr: envInt("MAX_GROUPS", 10000)}
+	go func() {
+		for {
+			cleanup(dir)
+			time.Sleep(24 * time.Hour)
 		}
-		b, etag, err := getBlob(dir, id)
-		if errors.Is(err, os.ErrNotExist) {
-			http.Error(w, "not found", 404)
-			return
-		} else if err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"etag": etag, "ciphertext": b}) // []byte is base64 in JSON
-	}))
-	http.HandleFunc("PUT /s/{id}", authed(func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
-		var in struct {
-			Ciphertext []byte `json:"ciphertext"`
-		}
-		if !idRe.MatchString(id) {
-			http.Error(w, "bad id", 400)
-			return
-		}
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 10<<20)).Decode(&in); err != nil || len(in.Ciphertext) == 0 {
-			http.Error(w, "bad body", 400)
-			return
-		}
-		etag, err := putBlob(dir, id, in.Ciphertext, r.Header.Get("If-Match"))
-		if errors.Is(err, errConflict) {
-			http.Error(w, "conflict", 409)
-			return
-		} else if err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"etag": etag})
-	}))
-	for name, delta := range map[string]int{"join": 1, "leave": -1} {
-		http.HandleFunc("POST /s/{id}/"+name, authed(func(w http.ResponseWriter, r *http.Request) {
-			id := r.PathValue("id")
-			if !idRe.MatchString(id) {
-				http.Error(w, "bad id", 400)
-				return
-			}
-			if err := addDevices(dir, id, delta); errors.Is(err, os.ErrNotExist) {
-				http.Error(w, "not found", 404)
-			} else if err != nil {
-				http.Error(w, err.Error(), 500)
-			}
-		}))
-	}
+	}()
 	addr := env("ADDR", ":8080")
 	log.Printf("listening on %s, data %s", addr, dir)
-	srv := &http.Server{Addr: addr, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second,
+	srv := &http.Server{Addr: addr, Handler: s.routes(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second,
 		WriteTimeout: 30 * time.Second, IdleTimeout: 2 * time.Minute} // drop slow or stuck clients
 	log.Fatal(srv.ListenAndServe())
 }
