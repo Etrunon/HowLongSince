@@ -34,7 +34,7 @@ The server never sees a text a user typed (names, labels, tags, notes, NFC ids) 
 - **Stats:** `GET /stats` with `TOKEN` returns totals from the readable fields: groups, devices, live counters, and resets in the last 7 and 30 days.
 - **Go tests:** create, enroll (spent and expired nonce), roles (a member can't invite, revoke or list), recovery (enroll and promote with the right and wrong password, attempt limit), claim (closed once a password is set), leave, caps, cleanup.
 
-## Phase 2: web
+## Phase 2: web (done)
 
 - Each group keeps its device token in `localStorage`.
 - A link with `n` enrolls the browser and spends the nonce.

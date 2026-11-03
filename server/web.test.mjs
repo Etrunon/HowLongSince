@@ -5,8 +5,8 @@ import { readFileSync } from 'node:fs';
 
 const html = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
 const core = html.slice(html.indexOf('// <core>'), html.indexOf('// </core>'));
-const { UNITS, unitsFor, tagList, uniqueName, merge, toBackup, parseBackup, planImport, deriveKeys, seal, unseal, sealBytes, b64, b64u } =
-  new Function(core + '; return { UNITS, unitsFor, tagList, uniqueName, merge, toBackup, parseBackup, planImport, deriveKeys, seal, unseal, sealBytes, b64, b64u };')();
+const { UNITS, unitsFor, tagList, uniqueName, merge, toBackup, parseBackup, planImport, deriveKeys, seal, unseal, sealBytes, b64, b64u, stretch, parseLink } =
+  new Function(core + '; return { UNITS, unitsFor, tagList, uniqueName, merge, toBackup, parseBackup, planImport, deriveKeys, seal, unseal, sealBytes, b64, b64u, stretch, parseLink };')();
 
 const c = (id, label, updatedAt = 1, extra = {}) => ({ id, label, tags: '', notifyAfterMs: null, nfcTagId: null, updatedAt, deleted: false, archived: false, ...extra });
 const e = (id, counterId, at = 1, extra = {}) => ({ id, counterId, at, source: 'manual', deleted: false, ...extra });
@@ -104,6 +104,7 @@ test('minutes only in debug mode, or when the counter already uses them', () => 
 
 // Format v2. KOTLIN_V2 was sealed by the phone (SinceTest.kt, DocV2Test) with the same secret.
 const SECRET = 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8';
+const STRETCHED = 'PHwhiIx1cylSWJVPIVMmYTP3aZR2NDTPX7TPSB8+mWo='; // PBKDF2-SHA256, 600k, by node:crypto
 const KOTLIN_V2 = 'eyJ2IjoyLCJkb2MiOiJ7XCJjb3VudGVyc1wiOlt7XCJuZmNUYWdJZFwiOm51bGwsXCJhcmNoaXZlZFwiOmZhbHNlLFwibm90aWZ5QWZ0ZXJNc1wiOm51bGwsXCJkZWxldGVkXCI6ZmFsc2UsXCJpZFwiOlwiYzFcIixcImxhYmVsXCI6XCJzc0tEWVc1R3E2SkF3L1dmRjZFMzBlZTY2RVNQT2FibmpFWXJtdEdpOXFaZkM4SVFSWHpsbGc9PVwiLFwidGFnc1wiOlwiQyt4cEJSYm42c05lK0F5OXllNE1lVi9EUldYOWJwdk0wZFhwcGpQREd0eWdPUT09XCIsXCJ1cGRhdGVkQXRcIjo1fV0sXCJkZXZpY2VzXCI6W3tcIm5hbWVcIjpcInMrU2ZIVHVVNHM5QzZtUGVId1VnNFg2YXBQZi84amJSSW5TQ3J6M0xaRXdlK2g0PVwiLFwiaWRcIjpcImQxXCIsXCJ1cGRhdGVkQXRcIjoxfV0sXCJuYW1lXCI6XCJQNXpMZng0b2FNaGM1OUdhSC9laHlPRnB2SVV6REdjZW9nV1NDbTJ5MTVVNHVhN1NcIixcIm5hbWVVcGRhdGVkQXRcIjo3LFwiZXZlbnRzXCI6W3tcIm5vdGVcIjpcIml0Z2tNY1BIb3ZERGFDMjVEanhuK28xOGk1aGlmZFp3RnRRbXhZVmRzVTNTcnFYWXg3RT1cIixcImF0XCI6NSxcImRlbGV0ZWRcIjpmYWxzZSxcImlkXCI6XCJlMVwiLFwic291cmNlXCI6XCJtYW51YWxcIixcImRldmljZUlkXCI6XCIyTGpHSEJRYmc5a2lrV0F0R0F0WExwTFBac1BQL0RwZ0NJU056Y21CXCIsXCJjb3VudGVySWRcIjpcImMxXCJ9XX0iLCJtYWMiOiJpUVRweGErNUtmaGxKS1ZtS25iWmlmb0ppZUhyWnlrSkx1anJnT3YvYVI4b04vWm9relkzdndrUTdrMGNpSTBNVjk5bWNrL0V0Y3ltRWFUSiJ9';
 const ST = { name: 'Família', nameUpdatedAt: 7, counters: [c('c1', 'Water plants', 5, { tags: 'garden' })],
   events: [e('e1', 'c1', 5, { note: 'new filter', deviceId: 'd1' })], devices: [{ id: 'd1', name: 'Pixel 9', updatedAt: 1 }] };
@@ -127,4 +128,16 @@ test('v2: opens what the phone sealed', async () => {
   const s = await unseal(await deriveKeys(SECRET), b64u(KOTLIN_V2));
   assert.deepEqual([s.name, s.counters[0].label, s.counters[0].tags, s.events[0].note, s.events[0].deviceId, s.devices[0].name],
     ['Família', 'Water plants', 'garden', 'new filter', 'd1', 'Pixel 9']);
+});
+
+test('links: invite, backup, legacy token, app form', () => {
+  assert.deepEqual(parseLink(`https://hls.example.com/sub/#k=${SECRET}&n=abc`), { server: 'https://hls.example.com/sub', secret: SECRET, nonce: 'abc', token: null });
+  assert.deepEqual(parseLink(`k=${SECRET}`), { server: null, secret: SECRET, nonce: null, token: null });
+  assert.equal(parseLink(`https://x.example/#k=${SECRET}&t=old`).token, 'old');
+  assert.equal(parseLink(`howlongsince://join?h=https%3A%2F%2Fhls.example.com%2Fsub%2F#k=${SECRET}&n=abc`).server, 'https://hls.example.com/sub');
+  for (const bad of ['', 'hello', 'https://x.example/', 'https://x.example/#k=abc', `howlongsince://join#k=${SECRET}`]) assert.equal(parseLink(bad), null, bad);
+});
+
+test('recovery password stretch (same vector as SinceTest.kt)', async () => {
+  assert.equal(await stretch('correct horse', '972a5ac5604d28f549b06e0ee52d7e3a'), STRETCHED);
 });
