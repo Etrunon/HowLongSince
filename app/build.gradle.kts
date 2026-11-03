@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -5,22 +7,33 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+// Play upload key: path and password live in the gitignored local.properties (upload.store, upload.password)
+val local = Properties().apply { rootProject.file("local.properties").takeIf { it.exists() }?.reader()?.use { load(it) } }
+
 android {
     namespace = "eu.etrunon.howlongsince"
-    compileSdk = 35
+    compileSdk = 36
     defaultConfig {
         applicationId = "eu.etrunon.howlongsince"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "0.1"
+    }
+    signingConfigs {
+        create("release") {
+            storeFile = local.getProperty("upload.store")?.let(::file)
+            storePassword = local.getProperty("upload.password")
+            keyAlias = "upload"
+            keyPassword = local.getProperty("upload.password")
+        }
     }
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
-            signingConfig = signingConfigs.getByName("debug") // ponytail: debug key, swap for a real keystore before Play Store
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     buildFeatures { compose = true }
