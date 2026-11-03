@@ -631,11 +631,67 @@ func cors(h http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		if r.Method == http.MethodOptions {
 			w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, If-Match")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Content-Encoding, If-Match")
 			w.Header().Set("Access-Control-Max-Age", "86400")
 			w.Header().Set("Access-Control-Allow-Private-Network", "true") // a public page syncing with a tailnet or LAN server
 			w.WriteHeader(http.StatusNoContent)
 			return
+		}
+		h.ServeHTTP(w, r)
+	})
+}
+
+// gzWriter decides when the status goes out (headers can't change after that): 204 and 304 stay plain, everything else is gzipped.
+type gzWriter struct {
+	http.ResponseWriter
+	zw   *gzip.Writer
+	sent bool
+}
+
+func (g *gzWriter) WriteHeader(code int) {
+	if !g.sent {
+		g.sent = true
+		if code != http.StatusNoContent && code != http.StatusNotModified {
+			h := g.Header()
+			h.Set("Content-Encoding", "gzip")
+			h.Add("Vary", "Accept-Encoding")
+			h.Del("Content-Length") // static files set it for the uncompressed size
+			g.zw = gzip.NewWriter(g.ResponseWriter)
+		}
+	}
+	g.ResponseWriter.WriteHeader(code)
+}
+
+func (g *gzWriter) Write(b []byte) (int, error) {
+	if !g.sent {
+		g.WriteHeader(http.StatusOK)
+	}
+	if g.zw == nil {
+		return g.ResponseWriter.Write(b)
+	}
+	return g.zw.Write(b)
+}
+
+// gz accepts gzipped request bodies and gzips responses for clients that ask. The handler's MaxBytesReader then caps the decompressed size.
+func gz(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Content-Encoding") == "gzip" {
+			zr, err := gzip.NewReader(r.Body)
+			if err != nil {
+				http.Error(w, "bad gzip body", http.StatusBadRequest)
+				return
+			}
+			r.Body = zr
+			r.Header.Del("Content-Encoding")
+		}
+		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			g := &gzWriter{ResponseWriter: w}
+			defer func() {
+				if g.zw != nil {
+					g.zw.Close()
+				}
+			}()
+			w = g
 		}
 		h.ServeHTTP(w, r)
 	})
@@ -653,7 +709,7 @@ func main() {
 	}()
 	addr := env("ADDR", ":8080")
 	log.Printf("listening on %s, data %s", addr, dir)
-	srv := &http.Server{Addr: addr, Handler: cors(s.routes()), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second,
+	srv := &http.Server{Addr: addr, Handler: cors(gz(s.routes())), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second,
 		WriteTimeout: 30 * time.Second, IdleTimeout: 2 * time.Minute} // drop slow or stuck clients
 	log.Fatal(srv.ListenAndServe())
 }

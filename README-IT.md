@@ -149,7 +149,7 @@ server {
     }
 }
 ```
-Con Caddy, gli stessi header vanno in un blocco `header`; il rate limiting richiede il plugin `caddy-ratelimit`. Lascia `connect-src 'self' https:` nella CSP: senza, la web app su questo server non può sincronizzare gruppi su un altro. Il server risponde da sé alle richieste cross-origin (CORS), quindi il proxy non deve fare nulla per questo. `tailscale serve` fornisce HTTPS ma non può aggiungere header né limiti, il che va bene quando il server è raggiungibile solo dalla tua tailnet.
+Con Caddy, gli stessi header vanno in un blocco `header`; il rate limiting richiede il plugin `caddy-ratelimit`. Lascia `connect-src 'self' https:` nella CSP: senza, la web app su questo server non può sincronizzare gruppi su un altro. Il server risponde da sé alle richieste cross-origin (CORS), quindi il proxy non deve fare nulla per questo. Lo stesso per la compressione: il server comprime le risposte con gzip e accetta corpi delle richieste compressi (`Content-Encoding: gzip`), quindi lascia spenta la compressione del proxy. Le app inviano sempre gzip, quindi serve un server recente almeno quanto loro. `tailscale serve` fornisce HTTPS ma non può aggiungere header né limiti, il che va bene quando il server è raggiungibile solo dalla tua tailnet.
 
 L'app Android richiede un URL `https://` con un certificato di cui Android si fida di default (Let's Encrypt, Tailscale, una CA commerciale). I certificati autofirmati o di una CA privata installati sul telefono non sono accettati dall'app.
 

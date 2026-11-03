@@ -154,8 +154,9 @@ const selected = new Set(); // ids of the cards picked for a move (long-press, o
 let view = 'all'; // what the list shows: 'all', '' (Ungrouped) or a group's secret
 // Each group has this browser's own device token (g.device); g.admin says whether it may invite and revoke.
 const headers = g => g.device ? { Authorization: 'Bearer ' + g.device } : {};
+const gz = s => new Response(new Blob([s]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
 const api = async (g, path, body) => fetch(`${srv(g)}/s/${(await deriveKeys(g.secret)).id}/${path}`,
-  { method: body ? 'POST' : 'GET', headers: headers(g), ...(body && { body: JSON.stringify(body) }) });
+  { method: body ? 'POST' : 'GET', headers: { ...headers(g), ...(body && { 'Content-Encoding': 'gzip' }) }, ...(body && { body: await gz(JSON.stringify(body)) }) });
 const stretchFor = async (g, pw) => stretch(pw, (await deriveKeys(g.secret)).id);
 
 /** A group from before device tokens: get one with the old server TOKEN, then offer to set the recovery password (the first device to do so is admin). */
@@ -163,7 +164,7 @@ async function claim(g) {
   const legacy = g.token || localStorage.getItem('token');
   if (!legacy) return false;
   const r = await fetch(`${srv(g)}/s/${(await deriveKeys(g.secret)).id}/claim`,
-    { method: 'POST', headers: { Authorization: 'Bearer ' + legacy }, body: JSON.stringify({ deviceId }) });
+    { method: 'POST', headers: { Authorization: 'Bearer ' + legacy, 'Content-Encoding': 'gzip' }, body: await gz(JSON.stringify({ deviceId })) });
   if (!r.ok) return false;
   g.device = (await r.json()).token; g.admin = false; delete g.token; saveGroups();
   setTimeout(async () => { const pw = await ask(t('set_recovery', g.name || '…'), { input: 'password' }); if (pw) setRecovery(g, pw); });
@@ -233,8 +234,8 @@ async function run(k, change) {
     const g = groupOf(k);
     if (!has && !g.fresh) return render();
     const next = merge(s.state, change), mine = s.etag;
-    const r = await fetch(`${srv(g)}/s/${s.keys.id}`, { method: 'PUT', headers: { ...headers(g), ...(mine && { 'If-Match': mine }) },
-      body: JSON.stringify({ ciphertext: b64(await seal(s.keys, next)), ...(!mine && { deviceId, recovery: g.recovery }) }) });
+    const r = await fetch(`${srv(g)}/s/${s.keys.id}`, { method: 'PUT', headers: { ...headers(g), 'Content-Encoding': 'gzip', ...(mine && { 'If-Match': mine }) },
+      body: await gz(JSON.stringify({ ciphertext: b64(await seal(s.keys, next)), ...(!mine && { deviceId, recovery: g.recovery }) })) });
     if (r.ok) {
       const j = await r.json();
       s.state = next; s.etag = j.etag;

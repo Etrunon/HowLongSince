@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -21,7 +22,7 @@ type tc struct {
 
 func newTC(t *testing.T) *tc {
 	s := &server{dir: t.TempDir(), token: "legacy", createsPerIP: 3, maxGr: 100, maxAdmin: 3}
-	srv := httptest.NewServer(cors(s.routes()))
+	srv := httptest.NewServer(cors(gz(s.routes())))
 	t.Cleanup(srv.Close)
 	return &tc{t, s, srv}
 }
@@ -286,5 +287,116 @@ func TestBlobRoundTrip(t *testing.T) {
 	out, err := readBlob(dir, gid)
 	if err != nil || out.LastSynced != 5 || out.Recovery != "h" || string(out.Ciphertext) != string(in.Ciphertext) {
 		t.Fatalf("got %+v, %v", out, err)
+	}
+}
+
+func gzBody(b []byte) *bytes.Reader {
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	zw.Write(b)
+	zw.Close()
+	return bytes.NewReader(buf.Bytes())
+}
+
+func (c *tc) raw(method, path, token string, body *bytes.Reader, hdr map[string]string) *http.Response {
+	var r *http.Request
+	if body != nil {
+		r, _ = http.NewRequest(method, c.srv.URL+path, body)
+	} else {
+		r, _ = http.NewRequest(method, c.srv.URL+path, nil)
+	}
+	if token != "" {
+		r.Header.Set("Authorization", "Bearer "+token)
+	}
+	for k, v := range hdr {
+		r.Header.Set(k, v)
+	}
+	res, err := http.DefaultClient.Do(r)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	res.Body.Close()
+	return res
+}
+
+func TestGzip(t *testing.T) {
+	c := newTC(t)
+	enc := map[string]string{"Content-Encoding": "gzip"}
+	b0, _ := json.Marshal(map[string]any{"ciphertext": []byte("one"), "deviceId": "alice", "recovery": "pw"})
+	r0, _ := http.NewRequest("PUT", c.srv.URL+"/s/"+gid, gzBody(b0))
+	r0.Header.Set("Content-Encoding", "gzip")
+	res0, err := http.DefaultClient.Do(r0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var o map[string]any
+	json.NewDecoder(res0.Body).Decode(&o)
+	res0.Body.Close()
+	c.want(200, res0.StatusCode, "gzipped create")
+	tok, etag := o["token"].(string), o["etag"].(string)
+	b, _ := json.Marshal(map[string]any{"ciphertext": []byte("two")})
+	c.want(200, c.raw("PUT", "/s/"+gid, tok, gzBody(b), map[string]string{"Content-Encoding": "gzip", "If-Match": etag}).StatusCode, "gzipped update")
+
+	c.want(400, c.raw("PUT", "/s/"+gid, tok, bytes.NewReader([]byte("not gzip")), enc).StatusCode, "bad gzip header")
+	if code := c.raw("PUT", "/s/"+gid, tok, gzBody(make([]byte, 11<<20)), enc).StatusCode; code == 200 {
+		t.Error("zip bomb accepted")
+	}
+
+	get := func(ae string) (*http.Response, []byte) {
+		r, _ := http.NewRequest("GET", c.srv.URL+"/s/"+gid, nil)
+		r.Header.Set("Authorization", "Bearer "+tok)
+		r.Header.Set("Accept-Encoding", ae) // set explicitly so Go doesn't decompress for us
+		res, err := http.DefaultClient.Do(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		d, _ := io.ReadAll(res.Body)
+		return res, d
+	}
+	plainRes, plain := get("identity")
+	zres, zb := get("gzip")
+	if plainRes.Header.Get("Content-Encoding") != "" {
+		t.Error("plain GET was compressed")
+	}
+	if zres.Header.Get("Content-Encoding") != "gzip" {
+		t.Fatal("GET not gzipped")
+	}
+	zr, err := gzip.NewReader(bytes.NewReader(zb))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if un, _ := io.ReadAll(zr); !bytes.Equal(un, plain) {
+		t.Error("gunzipped body differs from plain body")
+	}
+
+	r, _ := http.NewRequest("OPTIONS", c.srv.URL+"/s/"+gid, nil)
+	r.Header.Set("Accept-Encoding", "gzip")
+	res, _ := http.DefaultClient.Do(r)
+	res.Body.Close()
+	if res.StatusCode != 204 || res.Header.Get("Content-Encoding") != "" {
+		t.Errorf("preflight: %d, encoding %q", res.StatusCode, res.Header.Get("Content-Encoding"))
+	}
+	if !strings.Contains(res.Header.Get("Access-Control-Allow-Headers"), "Content-Encoding") {
+		t.Error("preflight doesn't allow Content-Encoding")
+	}
+
+	// Handlers that call WriteHeader before Write (static files, errors) must still say they're gzipped.
+	for path, want := range map[string]string{"/": "<html", "/s/" + gid + "/devices": "unauthorized"} {
+		r, _ := http.NewRequest("GET", c.srv.URL+path, nil)
+		r.Header.Set("Accept-Encoding", "gzip")
+		r.Header.Set("Authorization", "Bearer nope")
+		res, err := http.DefaultClient.Do(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		zr, err := gzip.NewReader(res.Body)
+		if res.Header.Get("Content-Encoding") != "gzip" || err != nil {
+			t.Fatalf("%s: encoding %q, %v", path, res.Header.Get("Content-Encoding"), err)
+		}
+		if b, _ := io.ReadAll(zr); !strings.Contains(strings.ToLower(string(b)), want) {
+			t.Errorf("%s: %d %q", path, res.StatusCode, b)
+		}
+		res.Body.Close()
 	}
 }

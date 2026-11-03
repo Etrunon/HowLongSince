@@ -278,7 +278,7 @@ private fun http(method: String, url: String, token: String, ifMatch: String? = 
         c.requestMethod = method; c.connectTimeout = 10_000; c.readTimeout = 20_000
         if (token.isNotEmpty()) c.setRequestProperty("Authorization", "Bearer $token")
         if (ifMatch != null) c.setRequestProperty("If-Match", ifMatch)
-        if (body != null) { c.doOutput = true; c.setRequestProperty("Content-Type", "application/json"); c.outputStream.use { it.write(body.toByteArray()) } }
+        if (body != null) { c.doOutput = true; c.setRequestProperty("Content-Type", "application/json"); c.setRequestProperty("Content-Encoding", "gzip"); java.util.zip.GZIPOutputStream(c.outputStream).use { it.write(body.toByteArray()) } }
         val code = c.responseCode
         return code to ((if (code < 400) c.inputStream else c.errorStream)?.use { it.readBytes().decodeToString() } ?: "")
     } finally { c.disconnect() }
