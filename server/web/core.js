@@ -16,27 +16,38 @@ async function sealBytes(k, bytes, ad = enc.encode(k.id)) {
   return Uint8Array.from([...iv, ...new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: ad }, k.key, bytes))]);
 }
 const openBytes = async (k, blob, ad = enc.encode(k.id)) => new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: blob.slice(0, 12), additionalData: ad }, k.key, blob.slice(12)));
-// Format v3: typed text is sealed per field (authenticated with group id, record uid and field), the rest stays readable for the server's stats.
-// Device ids are sealed once for the whole doc as `who` ({d: distinct ids, i: per event index into d or -1}), not per event: random bytes don't compress.
-// The envelope is {v: 3, doc: '<json>', mac}; the mac seals SHA-256 of the exact doc bytes, so nobody without the key can edit anything.
-const SEALED = { counters: ['label', 'tags', 'nfcTagId'], events: ['note'], devices: ['name'] };
+// Format v4: typed text is sealed per field (authenticated with group id, record uid and field), the rest stays readable for the server's stats.
+// Each counter carries its own events (identity: counter id + `at`, no event ids). A note's uid is `<counter id>@<at>`.
+// Device ids are sealed once for the whole doc as `who` ({d: distinct ids, i: per event index into d or -1, in doc order}), not per event: random bytes don't compress.
+// The envelope is {v: 4, doc: '<json>', mac}; the mac seals SHA-256 of the exact doc bytes, so nobody without the key can edit anything.
+const SEALED = { counters: ['label', 'tags', 'nfcTagId'], devices: ['name'] };
 const fieldAd = (k, uid, field) => enc.encode(`${k.id}\0${uid}\0${field}`);
 const sha256 = async b => new Uint8Array(await crypto.subtle.digest('SHA-256', b));
-async function mapFields(k, state, f) {
-  const o = structuredClone(state), jobs = [];
+async function mapFields(k, o, f) {
+  const jobs = [];
   if (o.name != null) jobs.push(f(o.name, fieldAd(k, '', 'name')).then(v => o.name = v));
   for (const [list, fields] of Object.entries(SEALED)) for (const r of o[list] ?? []) for (const fl of fields)
     if (r[fl] != null) jobs.push(f(r[fl], fieldAd(k, r.id, fl)).then(v => r[fl] = v));
+  for (const c of o.counters ?? []) for (const x of c.events) if (x.note != null) jobs.push(f(x.note, fieldAd(k, `${c.id}@${x.at}`, 'note')).then(v => x.note = v));
   await Promise.all(jobs);
   return o;
 }
 async function seal(k, state) {
-  const d = [], evs = state.events ?? [], i = evs.map(x => x.deviceId == null ? -1 : (d.includes(x.deviceId) || d.push(x.deviceId), d.indexOf(x.deviceId)));
-  const plain = { ...state, events: evs.map(({ deviceId, ...x }) => x) };
-  const o = await mapFields(k, plain, async (v, ad) => b64(await sealBytes(k, enc.encode(v), ad)));
+  const byC = new Map((state.counters ?? []).map(c => [c.id, new Map()]));
+  for (const x of state.events ?? []) { // same counter + at is one event: deleted if either is, with a note if either has one
+    const m = byC.get(x.counterId), o = m?.get(x.at);
+    if (m) m.set(x.at, o ? { ...x, deleted: x.deleted || o.deleted, note: x.note ?? o.note } : x);
+  }
+  const d = [], i = [];
+  const counters = [...state.counters].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0).map(c => ({ ...c, events: [...byC.get(c.id).values()].sort((a, b) => a.at - b.at).map(({ id, counterId, deviceId, note, ...x }) => {
+    i.push(deviceId == null ? -1 : (d.includes(deviceId) || d.push(deviceId), d.indexOf(deviceId)));
+    return note == null ? x : { ...x, note };
+  }) }));
+  const { events, ...rest } = state;
+  const o = await mapFields(k, structuredClone({ ...rest, counters }), async (v, ad) => b64(await sealBytes(k, enc.encode(v), ad)));
   o.who = b64(await sealBytes(k, enc.encode(JSON.stringify({ d, i })), fieldAd(k, '', 'who')));
   const doc = JSON.stringify(o);
-  return enc.encode(JSON.stringify({ v: 3, doc, mac: b64(await sealBytes(k, await sha256(enc.encode(doc)))) }));
+  return enc.encode(JSON.stringify({ v: 4, doc, mac: b64(await sealBytes(k, await sha256(enc.encode(doc)))) }));
 }
 /** The recovery password as the server gets it: PBKDF2-SHA256 salted with the group id (same as the app), so the password never leaves the device. */
 async function stretch(password, id) {
@@ -53,16 +64,17 @@ function parseLink(link) {
   if (!secret || !validSecret(secret)) return null;
   return { server: server && server.replace(/\/$/, ''), secret, nonce: p.get('n'), token: p.get('t') };
 }
-/** A v3 blob to the group state; throws an OperationError if anything was altered. */
+/** A v4 blob to the group state; throws an OperationError if anything was altered. */
 async function unseal(k, blob) {
   let env; try { env = JSON.parse(dec.decode(blob)); } catch {}
-  if (env?.v !== 3) throw new Error('unsupported format');
+  if (env?.v !== 4) throw new Error('unsupported format');
   if (b64(await openBytes(k, b64u(env.mac))) !== b64(await sha256(enc.encode(env.doc)))) throw new DOMException('tampered', 'OperationError');
   const o = await mapFields(k, JSON.parse(env.doc), async (v, ad) => dec.decode(await openBytes(k, b64u(v), ad)));
   const { d, i } = JSON.parse(dec.decode(await openBytes(k, b64u(o.who), fieldAd(k, '', 'who'))));
   delete o.who;
-  if (i.length !== (o.events ?? []).length) throw new DOMException('tampered', 'OperationError');
-  o.events?.forEach((x, n) => { if (i[n] >= 0) x.deviceId = d[i[n]]; });
+  o.events = o.counters.flatMap(c => { const evs = c.events; delete c.events; return evs.map(x => ({ id: `${c.id}@${x.at}`, counterId: c.id, ...x })); });
+  if (i.length !== o.events.length) throw new DOMException('tampered', 'OperationError');
+  o.events.forEach((x, n) => { if (i[n] >= 0) x.deviceId = d[i[n]]; });
   return o;
 }
 const UNITS = [['minutes', 6e4], ['hours', 36e5], ['days', 864e5], ['weeks', 6048e5]];
@@ -121,7 +133,8 @@ function parseBackup(text) {
       nfcTagId: o.nfcTagId ?? null, updatedAt: o.updatedAt ?? Date.now(), deleted: false, archived: !!o.archived };
     const events = o.events.map(e => {
       if (typeof e.at !== 'number') throw new Error(`"${label}" has an event without a time`);
-      return { id: e.uid || crypto.randomUUID(), counterId: uid, at: e.at, source: e.source || 'manual', deleted: false, ...(e.note && { note: e.note }) };
+      const at = Math.floor(e.at / 1000) * 1000;
+      return { id: `${uid}@${at}`, counterId: uid, at, source: e.source || 'manual', deleted: false, ...(e.note && { note: e.note }) };
     });
     return { group: typeof o.group === 'string' && o.group.trim() ? o.group.trim() : null, counter, events };
   });
@@ -137,7 +150,7 @@ function planImport(items, replace, groupNames, fallbackName = 'Imported') {
   for (const it of items) byGroup.set(it.group, [...(byGroup.get(it.group) ?? []), it]);
   const taken = [...groupNames], out = [];
   const fresh = ({ counter, events, group }) => { const id = crypto.randomUUID();
-    return { group, counter: { ...counter, id, nfcTagId: null }, events: events.map(e => ({ ...e, id: crypto.randomUUID(), counterId: id })) }; };
+    return { group, counter: { ...counter, id, nfcTagId: null }, events: events.map(e => ({ ...e, id: `${id}@${e.at}`, counterId: id })) }; };
   for (const [name, list] of byGroup) {
     if (replace && name === null) { out.push({ name: null, isNew: false, items: list }); continue; }
     const old = replace ? groupNames.find(n => n.toLowerCase() === name.toLowerCase()) : undefined;

@@ -237,21 +237,24 @@ func TestAdminLimit(t *testing.T) {
 
 func TestCleanupAndStats(t *testing.T) {
 	c := newTC(t)
-	v3 := func(live int, at int64) []byte {
-		var cs, es []string
-		for range live {
-			cs = append(cs, `{"deleted":false}`)
+	v4 := func(live int, at int64) []byte {
+		var cs []string
+		for i := range live {
+			es := ""
+			if i == 0 {
+				es = `{"at":` + itoa(at) + `,"deleted":false}`
+			}
+			cs = append(cs, `{"deleted":false,"events":[`+es+`]}`)
 		}
-		es = append(es, `{"at":`+itoa(at)+`,"deleted":false}`)
-		d, _ := json.Marshal(`{"counters":[` + strings.Join(cs, ",") + `],"events":[` + strings.Join(es, ",") + `]}`)
-		return []byte(`{"v":3,"doc":` + string(d) + `,"mac":"x"}`)
+		d, _ := json.Marshal(`{"counters":[` + strings.Join(cs, ",") + `]}`)
+		return []byte(`{"v":4,"doc":` + string(d) + `,"mac":"x"}`)
 	}
 	ago := func(days int64) int64 { return now() - days*day }
 	ids := map[string]blob{
-		strings.Repeat("1", 32): {LastSynced: ago(400), Ciphertext: v3(5, 0)},                                                           // a year idle: deleted
-		strings.Repeat("2", 32): {LastSynced: ago(200), Ciphertext: v3(1, 0)},                                                           // half a year, few counters: deleted
-		strings.Repeat("3", 32): {LastSynced: ago(200), Ciphertext: v3(3, 0)},                                                           // half a year, in use: kept
-		strings.Repeat("4", 32): {LastSynced: ago(1), Ciphertext: v3(2, (now()-day)*1000), Recovery: "h", Members: []device{{ID: "a"}}}, // kept
+		strings.Repeat("1", 32): {LastSynced: ago(400), Ciphertext: v4(5, 0)},                                                           // a year idle: deleted
+		strings.Repeat("2", 32): {LastSynced: ago(200), Ciphertext: v4(1, 0)},                                                           // half a year, few counters: deleted
+		strings.Repeat("3", 32): {LastSynced: ago(200), Ciphertext: v4(3, 0)},                                                           // half a year, in use: kept
+		strings.Repeat("4", 32): {LastSynced: ago(1), Ciphertext: v4(2, (now()-day)*1000), Recovery: "h", Members: []device{{ID: "a"}}}, // kept
 	}
 	for id, bl := range ids {
 		writeBlob(c.s.dir, id, bl)

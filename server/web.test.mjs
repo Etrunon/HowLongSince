@@ -91,6 +91,8 @@ test('import plans', () => {
   assert.notEqual(keep[0].items[0].counter.id, items[0].counter.id); // fresh ids: never merges with the originals
   assert.equal(keep[1].items[0].counter.nfcTagId, null);
   assert.equal(keep[0].items[0].events[1].counterId, keep[0].items[0].counter.id);
+  assert.deepEqual(keep[0].items[0].events.map(x => x.id), keep[0].items[0].events.map(x => `${keep[0].items[0].counter.id}@${x.at}`));
+  assert.deepEqual(items[0].events.map(x => x.id), items[0].events.map(x => `${items[0].counter.id}@${x.at}`)); // kept ids too
 });
 
 test('minutes only in debug mode, or when the counter already uses them', () => {
@@ -101,44 +103,64 @@ test('minutes only in debug mode, or when the counter already uses them', () => 
   assert.equal(names(unitsFor(90 * 6e4, false)), 'minutes,hours,days,weeks'); // 90 minutes can't be shown in hours
 });
 
-// Format v3. KOTLIN_V3 was sealed by the phone (SinceTest.kt, DocV3Test) with the same secret.
-const KOTLIN_V3 = 'eyJ2IjozLCJkb2MiOiJ7XCJjb3VudGVyc1wiOlt7XCJuZmNUYWdJZFwiOm51bGwsXCJhcmNoaXZlZFwiOmZhbHNlLFwibm90aWZ5QWZ0ZXJNc1wiOm51bGwsXCJkZWxldGVkXCI6ZmFsc2UsXCJpZFwiOlwiYzFcIixcImxhYmVsXCI6XCI5clM0WUEwVjkwdU85djVYL2wzbnJDWkYvSFMvTVFNOGQ4bGJFeVpaenAzWFhOS0J1MStqdkE9PVwiLFwidGFnc1wiOlwiQWtpZDVlckdoRklwT0ZZZ3NJajVsd1U1ZTNYUURlSVdjUjhoSFRkMkhHZkw0Zz09XCIsXCJ1cGRhdGVkQXRcIjo1fV0sXCJkZXZpY2VzXCI6W3tcIm5hbWVcIjpcIm8vYjVLR3BHbm14S3EwaEJpRG5QYnZGWEprYjIxRFBCS1FJdnV0U0YxUGtpaVlRPVwiLFwiaWRcIjpcImQxXCIsXCJ1cGRhdGVkQXRcIjoxfV0sXCJuYW1lXCI6XCJRMk1PWU9ndHFobWRoVHhILzVGKzJJZHhaOG1OYkprMk13eEpPNjBOZktEeVAxb2JcIixcIm5hbWVVcGRhdGVkQXRcIjo3LFwiZXZlbnRzXCI6W3tcIm5vdGVcIjpcIlRDY1YzMkd1bTFWN0NPMzZEWElQVDkyRDl4MGZMcFgzWndXY2lRL3VYTFhLWUZvM1Vzbz1cIixcImF0XCI6NSxcImRlbGV0ZWRcIjpmYWxzZSxcImlkXCI6XCJlMVwiLFwic291cmNlXCI6XCJtYW51YWxcIixcImNvdW50ZXJJZFwiOlwiYzFcIn1dLFwid2hvXCI6XCJIQ2liK1FvRUxyd0E4NE5ybDZTVU45L0Y5cTFTSzd5QzhVYnR0VjE5aHAveStvdTAxY0RtL2JtV1dsNEkzQnNFXCJ9IiwibWFjIjoiV3lFQ0o5MEFqZzBVbllNSUQ2V2FxV2hySWJUR284V1BPRHRUbjRkR1pjc3pRbVUrN3lDOTdRenkvTEtlTm1BMjJLei9zM0xtS1VKTFlGU2EifQ==';
+// Format v4. KOTLIN_V4 was sealed by the phone (SinceTest.kt, DocV4Test) with the same secret.
+const KOTLIN_V4 = 'eyJ2Ijo0LCJkb2MiOiJ7XCJjb3VudGVyc1wiOlt7XCJuZmNUYWdJZFwiOm51bGwsXCJhcmNoaXZlZFwiOmZhbHNlLFwibm90aWZ5QWZ0ZXJNc1wiOm51bGwsXCJkZWxldGVkXCI6ZmFsc2UsXCJpZFwiOlwiYzFcIixcImxhYmVsXCI6XCJid0RMeEpXQzFNMU9pN3RHMmY2cEhqNnJXY3M0cndZT0NwS2s4eENCWVFmaDcwejE1clB3OHc9PVwiLFwiZXZlbnRzXCI6W3tcIm5vdGVcIjpcIktJTThhczFzSU5BOVFxUTJOWFlhT08rNEpURGttNnZNSEU1WnN1RW9MTXFWTjBTd3ZoRT1cIixcImF0XCI6NTAwMCxcImRlbGV0ZWRcIjpmYWxzZSxcInNvdXJjZVwiOlwibWFudWFsXCJ9XSxcInRhZ3NcIjpcIlpRZEhPaVFqRDY0ZE1zYUc2R2FHSG01Rm56YXZRZTJWQTd3VlAxbTM1UHFzMmc9PVwiLFwidXBkYXRlZEF0XCI6NX1dLFwiZGV2aWNlc1wiOlt7XCJuYW1lXCI6XCJOald0WGRYMDYralNHKytvN3VFRFNKbXh1ZFVWRCttMlU4ZGhQNTdxOWVyUC82ND1cIixcImlkXCI6XCJkMVwiLFwidXBkYXRlZEF0XCI6MX1dLFwibmFtZVwiOlwiaGh0aTN2S1BNc1hCU0g2dExTTlg2SytQT2JhSXJRbEpKbklueHlEYU5FNWNYd2l0XCIsXCJuYW1lVXBkYXRlZEF0XCI6NyxcIndob1wiOlwiZXJjYzlkZTh3dWcyL3VrVy9WVmttNmNBWkxjYk1qRHFwbE5Nem5xNDBRaXU2djV6UUwyT3dEeXlZdG1MTXJFd1wifSIsIm1hYyI6IjZBbzlYdm5YZ3l1Vm1iZmNLRkVoVVpHYmNpVmdhVkc4UnQ0dE82MW9GekJ3TUMralZSSjBTWWhiOEpMQk5wS2FtUmFxaGlkR2phTVJUUTFUIn0=';
 const SECRET = 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8';
 const STRETCHED = 'PHwhiIx1cylSWJVPIVMmYTP3aZR2NDTPX7TPSB8+mWo='; // PBKDF2-SHA256, 600k, by node:crypto
+const ev = (counterId, at, extra = {}) => e(`${counterId}@${at}`, counterId, at, extra);
 const ST = { name: 'Família', nameUpdatedAt: 7, counters: [c('c1', 'Water plants', 5, { tags: 'garden' })],
-  events: [e('e1', 'c1', 5, { note: 'new filter', deviceId: 'd1' })], devices: [{ id: 'd1', name: 'Pixel 9', updatedAt: 1 }] };
+  events: [ev('c1', 5000, { note: 'new filter', deviceId: 'd1' })], devices: [{ id: 'd1', name: 'Pixel 9', updatedAt: 1 }] };
 
-test('v3: round trip hides typed text and device ids, keeps metadata readable', async () => {
+test('v4: round trip hides typed text and device ids, keeps metadata readable', async () => {
   const k = await deriveKeys(SECRET), blob = await seal(k, ST), text = new TextDecoder().decode(blob);
   assert.deepEqual(await unseal(k, blob), ST);
-  for (const s of ['Water plants', 'garden', 'new filter', 'Pixel 9', 'Família', 'deviceId']) assert.ok(!text.includes(s), s);
+  const raw = JSON.parse(JSON.parse(text).doc);
+  for (const s of ['Water plants', 'garden', 'new filter', 'Pixel 9', 'Família', 'deviceId', 'counterId']) assert.ok(!text.includes(s), s);
   assert.ok(text.includes('updatedAt'));
+  assert.equal(raw.events, undefined);
+  assert.deepEqual(Object.keys(raw.counters[0].events[0]).sort(), ['at', 'deleted', 'note', 'source']); // no id
 });
 
-test('v3: events without a device id stay without one', async () => {
-  const k = await deriveKeys(SECRET), st = { ...ST, events: [e('e1', 'c1', 5), e('e2', 'c1', 6, { deviceId: 'd1' }), e('e3', 'c1', 7, { deviceId: 'd1' })] };
+test('v4: events without a device id stay without one', async () => {
+  const k = await deriveKeys(SECRET), st = { ...ST, events: [ev('c1', 5000), ev('c1', 6000, { deviceId: 'd1' }), ev('c1', 7000, { deviceId: 'd1' })] };
   const back = await unseal(k, await seal(k, st));
   assert.deepEqual(back, st);
   assert.ok(!('deviceId' in back.events[0]));
 });
 
-test('v3: refuses edits, a wrong who length, v1 and v2', async () => {
+test('v4: refuses edits, a wrong who length, v3 and v2', async () => {
   const k = await deriveKeys(SECRET), T = new TextEncoder(), env = JSON.parse(new TextDecoder().decode(await seal(k, ST)));
   const bad = o => assert.rejects(unseal(k, T.encode(JSON.stringify(o))));
-  await bad({ ...env, doc: env.doc.replace('"at":5', '"at":6') });
+  await bad({ ...env, doc: env.doc.replace('"at":5000', '"at":6000') });
   const mac = async doc => b64(await sealBytes(k, new Uint8Array(await crypto.subtle.digest('SHA-256', T.encode(doc)))));
   const doc = JSON.parse(env.doc); // right mac, but `who` from a doc with two events
-  doc.who = JSON.parse(JSON.parse(new TextDecoder().decode(await seal(k, { ...ST, events: [ST.events[0], ST.events[0]] }))).doc).who;
+  doc.who = JSON.parse(JSON.parse(new TextDecoder().decode(await seal(k, { ...ST, events: [ST.events[0], ev('c1', 6000)] }))).doc).who;
   const d2 = JSON.stringify(doc);
-  await bad({ v: 3, doc: d2, mac: await mac(d2) });
+  await bad({ v: 4, doc: d2, mac: await mac(d2) });
+  await bad({ ...env, v: 3 });
   await bad({ ...env, v: 2 });
   await assert.rejects(unseal(k, await sealBytes(k, T.encode(JSON.stringify(ST)))));
 });
 
-test('v3: opens what the phone sealed', async () => {
-  const s = await unseal(await deriveKeys(SECRET), b64u(KOTLIN_V3));
-  assert.deepEqual([s.name, s.counters[0].label, s.counters[0].tags, s.events[0].note, s.events[0].deviceId, s.devices[0].name],
-    ['Família', 'Water plants', 'garden', 'new filter', 'd1', 'Pixel 9']);
+test('v4: orders by counter then time, and one event per counter and time', async () => {
+  const k = await deriveKeys(SECRET), st = { ...ST, counters: [c('c2', 'b'), c('c1', 'a')],
+    events: [ev('c2', 1000), ev('c1', 9000), ev('c1', 2000, { deleted: true }), ev('c1', 2000, { note: 'n' }), ev('zz', 1000)] };
+  const back = await unseal(k, await seal(k, st));
+  assert.deepEqual(back.events.map(x => x.id), ['c1@2000', 'c1@9000', 'c2@1000']);
+  assert.equal(back.events[0].deleted, true);
+  assert.equal(back.events[0].note, 'n');
+});
+
+test('v4: opens what the phone sealed', async () => {
+  const s = await unseal(await deriveKeys(SECRET), b64u(KOTLIN_V4));
+  assert.deepEqual([s.name, s.counters[0].label, s.counters[0].tags, s.events[0].note, s.events[0].deviceId, s.devices[0].name, s.events[0].id],
+    ['Família', 'Water plants', 'garden', 'new filter', 'd1', 'Pixel 9', 'c1@5000']);
+});
+
+test('merge: the same counter and time is one event', () => {
+  const out = merge({ ...empty, counters: [c('a', 'a')], events: [ev('a', 3000)] }, { counters: [], events: [ev('a', 3000, { deleted: true })] });
+  assert.equal(out.events.length, 1);
+  assert.equal(out.events[0].deleted, true);
 });
 
 test('links: invite, backup, legacy token, app form', () => {

@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit
 /** One group's decrypted blob; events carry their counter's uid (local ids differ per device). The group name travels inside, newest rename wins. */
 data class Remote(val counters: List<Counter>, val events: List<Pair<String, Event>>, val name: String? = null, val nameUpdatedAt: Long = 0, val devices: List<Device> = emptyList())
 
-/** Sorted by uid, so the same data always gives the same text and an unchanged group isn't uploaded again. */
+/** Sorted by uid (events by counter uid, then at), so the same data always gives the same text and an unchanged group isn't uploaded again. */
 fun stateJson(counters: List<Counter>, events: List<Event>, name: String? = null, nameUpdatedAt: Long = 0, devices: List<Device> = emptyList()): String {
     val uids = counters.associate { it.id to it.uid }
     val sent = events.filter { it.counterId in uids }
@@ -31,10 +31,10 @@ fun stateJson(counters: List<Counter>, events: List<Event>, name: String? = null
                 .put("notifyAfterMs", c.notifyAfterMs ?: JSONObject.NULL).put("nfcTagId", c.nfcTagId ?: JSONObject.NULL)
                 .put("updatedAt", c.updatedAt).put("deleted", c.deleted).put("archived", c.archived)
         }))
-        .put("events", JSONArray(events.sortedBy { it.uid }.mapNotNull { e ->
-            JSONObject().put("id", e.uid).put("counterId", uids[e.counterId] ?: return@mapNotNull null)
+        .put("events", JSONArray(events.mapNotNull { e ->
+            JSONObject().put("counterId", uids[e.counterId] ?: return@mapNotNull null)
                 .put("at", e.at).put("source", e.source).put("deleted", e.deleted).putOpt("note", e.note).putOpt("deviceId", e.deviceId)
-        }))
+        }.sortedWith(compareBy({ it.getString("counterId") }, { it.getLong("at") }))))
         .put("devices", JSONArray(devices.filter { it.id in named }.sortedBy { it.id }.map { JSONObject().put("id", it.id).put("name", it.name).put("updatedAt", it.updatedAt) }))
         .toString()
 }
@@ -53,7 +53,7 @@ fun parseState(s: String): Remote {
         (0 until es.length()).map { i ->
             val e = es.getJSONObject(i)
             e.getString("counterId") to Event(counterId = 0, at = e.getLong("at"), source = e.optString("source", "manual"),
-                uid = e.getString("id"), deleted = e.optBoolean("deleted"), note = if (e.isNull("note")) null else e.getString("note"),
+                deleted = e.optBoolean("deleted"), note = if (e.isNull("note")) null else e.getString("note"),
                 deviceId = if (e.isNull("deviceId")) null else e.optString("deviceId", "").ifEmpty { null })
         },
         if (o.isNull("name")) null else o.getString("name"), o.optLong("nameUpdatedAt"),

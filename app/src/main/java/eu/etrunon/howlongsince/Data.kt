@@ -36,7 +36,7 @@ data class Event(
     val counterId: Long,
     val at: Long,
     val source: String, // "create" | "manual" | "nfc"
-    val uid: String = UUID.randomUUID().toString(),
+    val uid: String = UUID.randomUUID().toString(), // local only since format v4 (events are identified by counter + at); export still writes it
     val deleted: Boolean = false,
     val note: String? = null, // set when logged, never edited (sync merges events by union)
     val deviceId: String? = null, // who logged it; the name lives in [Device] so a rename reaches old events. null = before this existed
@@ -134,10 +134,10 @@ interface CounterDao {
                 updateRaw(c.copy(id = l.id, groupId = g)); local[c.uid] = c.copy(id = l.id, groupId = g); changed += l.id
             }
         }
-        val events = rawEvents().associateBy { it.uid }
+        val events = rawEvents().associateBy { it.counterId to it.at }
         for ((counterUid, e) in remote.events) {
             val cid = local[counterUid]?.id ?: continue
-            val l = events[e.uid]
+            val l = events[cid to e.at]
             if (l == null) { insert(e.copy(id = 0, counterId = cid)); changed += cid }
             else if (e.deleted && !l.deleted) { deleteEvent(l.id); changed += cid }
         }
@@ -159,13 +159,19 @@ interface CounterDao {
     @Transaction
     suspend fun create(c: Counter): Long {
         val id = insert(c)
-        insert(Event(counterId = id, at = System.currentTimeMillis(), source = "create", deviceId = Db.deviceId))
+        insert(Event(counterId = id, at = secs(System.currentTimeMillis()), source = "create", deviceId = Db.deviceId))
         return id
     }
 
-    suspend fun reset(id: Long, source: String = "manual", at: Long = System.currentTimeMillis(), note: String? = null) =
-        insert(Event(counterId = id, at = at, source = source, note = note?.trim()?.ifEmpty { null }, deviceId = Db.deviceId))
+    @Query("SELECT id FROM Event WHERE counterId = :id AND at = :at") suspend fun eventAt(id: Long, at: Long): Long?
+
+    /** A second reset in the same second is the same event (a double tap or NFC read): nothing is inserted, the existing id comes back. */
+    suspend fun reset(id: Long, source: String = "manual", at: Long = System.currentTimeMillis(), note: String? = null): Long =
+        secs(at).let { s -> eventAt(id, s) ?: insert(Event(counterId = id, at = s, source = source, note = note?.trim()?.ifEmpty { null }, deviceId = Db.deviceId)) }
 }
+
+/** Event times are whole seconds from format v4 on: an event is identified by its counter and `at`. */
+fun secs(ms: Long) = ms / 1000 * 1000
 
 @Database(entities = [Counter::class, Event::class, CounterGroup::class, Device::class], version = 6, exportSchema = false)
 abstract class Db : RoomDatabase() {

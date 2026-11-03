@@ -59,10 +59,10 @@ fun fromJson(s: String): Backup {
         )
         val events = (0 until ev.length()).map { j ->
             val e = ev.getJSONObject(j)
-            Event(counterId = id, at = e.getLong("at"), source = e.optString("source", "manual"),
+            Event(counterId = id, at = secs(e.getLong("at")), source = e.optString("source", "manual"),
                 uid = e.optString("uid").ifEmpty { UUID.randomUUID().toString() },
                 note = if (e.isNull("note")) null else e.getString("note"))
-        }
+        }.distinctBy { it.at } // same counter and second = same event
         Triple(counter, events, if (o.isNull("group")) null else o.getString("group").trim().ifEmpty { null })
     }
     require(out.map { it.first.id }.toSet().size == out.size) { "Duplicate counter ids" }

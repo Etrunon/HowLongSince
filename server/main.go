@@ -90,7 +90,7 @@ type invite struct {
 	Expires   int64  `json:"expires"`
 }
 
-// blob is the file on disk: the ciphertext (a v3 envelope, see web/core.js) plus what only the server sees.
+// blob is the file on disk: the ciphertext (a v4 envelope, see web/core.js) plus what only the server sees.
 // A group without a recovery hash is legacy (made before devices existed): TOKEN still opens it, and claim enrolls into it.
 type blob struct {
 	LastSynced int64    `json:"lastSynced"` // unix seconds, at most an hour stale
@@ -194,15 +194,15 @@ func bearer(r *http.Request) string {
 	return strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 }
 
-// doc is the readable part of a v3 envelope, for stats and cleanup.
+// doc is the readable part of a v4 envelope, for stats and cleanup.
 type doc struct {
 	Counters []struct {
 		Deleted bool `json:"deleted"`
+		Events  []struct {
+			At      int64 `json:"at"` // ms
+			Deleted bool  `json:"deleted"`
+		} `json:"events"`
 	} `json:"counters"`
-	Events []struct {
-		At      int64 `json:"at"` // ms
-		Deleted bool  `json:"deleted"`
-	} `json:"events"`
 }
 
 func readable(ciphertext []byte) (d doc) {
@@ -210,10 +210,10 @@ func readable(ciphertext []byte) (d doc) {
 		V   int    `json:"v"`
 		Doc string `json:"doc"`
 	}
-	if json.Unmarshal(ciphertext, &env) == nil && env.V == 3 {
+	if json.Unmarshal(ciphertext, &env) == nil && env.V == 4 {
 		json.Unmarshal([]byte(env.Doc), &d)
 	}
-	return d // empty for anything but v3
+	return d // empty for anything but v4
 }
 
 func (d doc) live() (n int) {
@@ -263,12 +263,14 @@ func collect(dir string) (s stats) {
 		s.Groups++
 		s.Devices += len(bl.Members)
 		s.Counters += d.live()
-		for _, e := range d.Events {
-			if !e.Deleted && e.At > ms-7*day*1000 {
-				s.Resets7++
-			}
-			if !e.Deleted && e.At > ms-30*day*1000 {
-				s.Resets30++
+		for _, c := range d.Counters {
+			for _, e := range c.Events {
+				if !e.Deleted && e.At > ms-7*day*1000 {
+					s.Resets7++
+				}
+				if !e.Deleted && e.At > ms-30*day*1000 {
+					s.Resets30++
+				}
 			}
 		}
 	}

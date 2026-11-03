@@ -402,7 +402,7 @@ function tick() {
 
 /* ---------- List ---------- */
 
-const event = (counterId, source, at = Date.now()) => ({ id: crypto.randomUUID(), counterId, at, source, deleted: false, deviceId });
+const event = (counterId, source, at = Date.now()) => (at = Math.floor(at / 1000) * 1000, { id: `${counterId}@${at}`, counterId, at, source, deleted: false, deviceId });
 // Same hue as the app's tagColor: Java String.hashCode() mod 360.
 const tagHue = t => { let h = 0; for (const ch of t) h = Math.imul(h, 31) + ch.charCodeAt(0) | 0; return (h % 360 + 360) % 360; };
 const tagColor = t => `hsl(${tagHue(t)} 55% var(--tag-l))`;

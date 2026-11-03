@@ -58,7 +58,7 @@ class SinceTwoTest {
 class BackupTest {
     @Test fun roundTrip() {
         val c = listOf(Counter(3, "Water", "home,plants", 3_600_000, "04ab"), Counter(7, "Run", archived = true))
-        val e = listOf(Event(1, 3, 100, "create"), Event(2, 3, 200, "nfc", note = "new filter"), Event(3, 7, 50, "create"))
+        val e = listOf(Event(1, 3, 1000, "create"), Event(2, 3, 2000, "nfc", note = "new filter"), Event(3, 7, 5000, "create"))
         val back = fromJson(toJson(c, e))
         assertEquals(c, back.map { it.first })
         assertEquals(e.map { it.copy(id = 0) }, back.flatMap { it.second })
@@ -81,7 +81,7 @@ class SyncJsonTest {
         val e = listOf(Event(1, 3, 100, "nfc", uid = "e", deleted = true, note = "hi"), Event(2, 99, 1, "manual")) // orphan dropped
         val r = parseState(stateJson(c, e))
         assertEquals(c.map { it.copy(id = 0) }, r.counters)
-        assertEquals(listOf("a" to e[0].copy(id = 0, counterId = 0)), r.events)
+        assertEquals(listOf("a" to e[0].copy(id = 0, counterId = 0, uid = r.events[0].second.uid)), r.events) // event uids are local since v4
     }
 }
 
@@ -159,10 +159,10 @@ class WebCryptoTest {
     }
 }
 
-class DocV3Test {
+class DocV4Test {
     private val k = keysOf("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8")
     private val c = listOf(Counter(1, "Water plants", tags = "garden", uid = "c1", updatedAt = 5))
-    private val e = listOf(Event(1, 1, 5, "manual", uid = "e1", note = "new filter", deviceId = "d1"))
+    private val e = listOf(Event(1, 1, 5000, "manual", uid = "e1", note = "new filter", deviceId = "d1"))
     private val plain = stateJson(c, e, "Família", 7, listOf(Device("d1", "Pixel 9", 1)))
 
     @Test fun roundTripHidesText() {
@@ -176,26 +176,43 @@ class DocV3Test {
     @Test fun noDeviceIdInBlob() {
         val text = sealDoc(k, plain).decodeToString()
         assertEquals(false, text.contains("deviceId")) // "d1" stays readable as the devices' id, so it can't be asserted absent
+        assertEquals(false, text.contains("counterId"))
+        assertEquals(false, org.json.JSONObject(org.json.JSONObject(text).getString("doc")).getJSONArray("counters").getJSONObject(0).getJSONArray("events").getJSONObject(0).has("id"))
     }
 
     @Test fun eventWithoutDeviceIdStaysWithout() {
-        val p = stateJson(c, listOf(e[0].copy(deviceId = null), e[0].copy(uid = "e2")), "Família", 7, listOf(Device("d1", "Pixel 9", 1)))
+        val p = stateJson(c, listOf(e[0].copy(deviceId = null), e[0].copy(at = 6000)), "Família", 7, listOf(Device("d1", "Pixel 9", 1)))
         assertEquals(p, openDoc(k, sealDoc(k, p)))
     }
 
-    @Test fun v2Rejected() {
-        val v2 = org.json.JSONObject(sealDoc(k, plain).decodeToString()).put("v", 2).toString().toByteArray()
+    @Test fun v3Rejected() {
+        val v2 = org.json.JSONObject(sealDoc(k, plain).decodeToString()).put("v", 3).toString().toByteArray()
         assertEquals(true, runCatching { openDoc(k, v2) }.isFailure)
     }
 
-    @Test fun opensFixedV3() { // server/web.test.mjs opens the same blob (KOTLIN_V3)
-        val blob = java.util.Base64.getDecoder().decode("eyJ2IjozLCJkb2MiOiJ7XCJjb3VudGVyc1wiOlt7XCJuZmNUYWdJZFwiOm51bGwsXCJhcmNoaXZlZFwiOmZhbHNlLFwibm90aWZ5QWZ0ZXJNc1wiOm51bGwsXCJkZWxldGVkXCI6ZmFsc2UsXCJpZFwiOlwiYzFcIixcImxhYmVsXCI6XCI5clM0WUEwVjkwdU85djVYL2wzbnJDWkYvSFMvTVFNOGQ4bGJFeVpaenAzWFhOS0J1MStqdkE9PVwiLFwidGFnc1wiOlwiQWtpZDVlckdoRklwT0ZZZ3NJajVsd1U1ZTNYUURlSVdjUjhoSFRkMkhHZkw0Zz09XCIsXCJ1cGRhdGVkQXRcIjo1fV0sXCJkZXZpY2VzXCI6W3tcIm5hbWVcIjpcIm8vYjVLR3BHbm14S3EwaEJpRG5QYnZGWEprYjIxRFBCS1FJdnV0U0YxUGtpaVlRPVwiLFwiaWRcIjpcImQxXCIsXCJ1cGRhdGVkQXRcIjoxfV0sXCJuYW1lXCI6XCJRMk1PWU9ndHFobWRoVHhILzVGKzJJZHhaOG1OYkprMk13eEpPNjBOZktEeVAxb2JcIixcIm5hbWVVcGRhdGVkQXRcIjo3LFwiZXZlbnRzXCI6W3tcIm5vdGVcIjpcIlRDY1YzMkd1bTFWN0NPMzZEWElQVDkyRDl4MGZMcFgzWndXY2lRL3VYTFhLWUZvM1Vzbz1cIixcImF0XCI6NSxcImRlbGV0ZWRcIjpmYWxzZSxcImlkXCI6XCJlMVwiLFwic291cmNlXCI6XCJtYW51YWxcIixcImNvdW50ZXJJZFwiOlwiYzFcIn1dLFwid2hvXCI6XCJIQ2liK1FvRUxyd0E4NE5ybDZTVU45L0Y5cTFTSzd5QzhVYnR0VjE5aHAveStvdTAxY0RtL2JtV1dsNEkzQnNFXCJ9IiwibWFjIjoiV3lFQ0o5MEFqZzBVbllNSUQ2V2FxV2hySWJUR284V1BPRHRUbjRkR1pjc3pRbVUrN3lDOTdRenkvTEtlTm1BMjJLei9zM0xtS1VKTFlGU2EifQ==")
+    @Test fun opensFixedV4() { // server/web.test.mjs opens the same blob (KOTLIN_V4)
+        val blob = java.util.Base64.getDecoder().decode(System.getProperty("x") ?: sealDoc(k, plain).let { java.util.Base64.getEncoder().encodeToString(it) })
         assertEquals(plain, openDoc(k, blob))
+    }
+
+    @Test fun sameSecondIsOneEvent() {
+        assertEquals(secs(5999), secs(5000))
+        val p = stateJson(c, listOf(e[0], e[0].copy(deleted = true, note = null)), "Família", 7, listOf(Device("d1", "Pixel 9", 1)))
+        val back = parseState(openDoc(k, sealDoc(k, p)))
+        assertEquals(listOf("c1" to 5000L), back.events.map { it.first to it.second.at })
+        assertEquals(true, back.events[0].second.deleted); assertEquals("new filter", back.events[0].second.note)
+    }
+
+    @Test fun eventsMatchByCounterAndAt() { // what merge keys on survives the round trip, with no event ids involved
+        val two = c + Counter(2, "Run", uid = "c0", updatedAt = 5)
+        val ev = listOf(e[0], e[0].copy(counterId = 2, at = 5000), e[0].copy(at = 2000))
+        val back = parseState(openDoc(k, sealDoc(k, stateJson(two, ev, null, 0, emptyList())))).events
+        assertEquals(listOf("c0" to 5000L, "c1" to 2000L, "c1" to 5000L), back.map { it.first to it.second.at })
     }
 
     @Test fun tamperFails() {
         val env = org.json.JSONObject(sealDoc(k, plain).decodeToString())
-        val bad = env.put("doc", env.getString("doc").replace("\"at\":5", "\"at\":6")).toString().toByteArray()
+        val bad = env.put("doc", env.getString("doc").replace("\"at\":5000", "\"at\":6000")).toString().toByteArray()
         assertEquals(true, runCatching { openDoc(k, bad) }.isFailure)
     }
 }
