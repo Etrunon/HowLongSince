@@ -54,9 +54,34 @@ Today the server merges data and the web app reads plaintext. With end-to-end en
 - Known groups (key, token, name) are kept in `localStorage`. The host is the server that serves the page, so it isn't stored.
 - The browser does the merge, pushing with `If-Match` and starting over on a 409. Needs https or localhost for WebCrypto.
 
+## Phase 5: web app parity
+
+Agreed 2026-11-03. The web app can open and edit a group someone shared, but can't create, share or manage them. Goal: everything the phone does, except what needs the phone. No server change: groups are blobs, so every step is client code in `server/index.html`. Each step ships on its own.
+
+Decisions: a vendored QR generator (about 20 KB, MIT, pinned version, pasted inline), counters kept only in the browser ("Ungrouped" in `localStorage`, like the phone), and foldable sections for all groups like the phone.
+
+- **5a. Many groups at once.**
+  - State becomes one entry per group (`secret` → state, etag, keys, status) plus the local Ungrouped state in `localStorage`. All groups are fetched in parallel on load, on tab focus and every 15 minutes. Writes queue per group, so a slow group never blocks another.
+  - Home: one sticky, foldable section per group ("Name · count"), Ungrouped first, empty sections hidden, a search opens every section. Folded sections are kept in `localStorage`. The switcher becomes a filter: All, Ungrouped, or one group (headers are dropped for a single group). The card shows the group name when there are at least two groups. Tags, search, sort and archived keep working inside each section.
+  - Each section header shows that group's status ("Synced 12:30", or the error with a retry), instead of one global error line.
+- **5b. Create, rename, forget, join.**
+  - New group: asks for a name, makes a random 32-byte secret in the browser, and uploads the first blob with a create-only `PUT` (name and `nameUpdatedAt`). The host is the page's own server; the token is the one from the login form.
+  - Rename: writes the new name with `nameUpdatedAt = now` into the blob, so the newest rename wins on the phone too.
+  - Forget: confirms, offers the link first as a key backup, and drops the key from this browser (the blob stays).
+  - Join: pasting a link reads the blob, shows "Join «name»?", and says "already joined" for a known key. A link to another server can't be fetched (no CORS), so the page says to open it on that server's page.
+- **5c. Share.** A share icon on each synced group (like the phone) opens a dialog with the QR code, the link, Copy link, the browser's Share (when it exists), and the same warning as the phone. Opening a link in a new browser then works end to end. "Open in app" stays.
+- **5d. Move a counter between groups.** The edit form gets a group picker (Ungrouped included). Moving writes the counter, with its events and `updatedAt = now`, into the destination first, then a tombstone with the same `updatedAt` and no events into the source. If the second write fails, the counter is in both and the newest copy wins on the next sync, as on the phone. Leaving a synced group asks first: "It will be removed for everyone else in that group."
+- **5e. Import and export.** Export writes the phone's version 1 JSON (all groups, group name per counter), so a file moves between phone and web. Import has the same checks and the same choice: Replace swaps the groups of the same name for the file's, Keep both creates new groups renamed if the name is taken, with fresh uids and no NFC tag. New groups are uploaded with create-only `PUT`s.
+- **5f. Settings.** A dark theme switch (follows the system until changed) and a debug switch that allows minutes in "Notify after", like the phone. Language and sort exist already.
+- **Tests.** The pure functions (merge, move, link parsing, export/import, key derivation) sit between marked comments, and `server/web.test.mjs` loads that part and runs it with `node --test`. It shares test vectors with `SinceTest.kt` for link parsing and for a blob sealed in the browser. It isn't part of the Docker build, which stays Go only.
+- **Docs.** README (English and Italian) and the screenshot get updated when the last step ships.
+
+Can't be done on the web: NFC pairing (unpair stays), reminders and notifications (they fire on the phone), the widget, and groups that live on a different server than the page.
+
 ## Known limits
 
 - **Lost key:** if every phone holding a group's key is lost, its data is gone. "Copy link" is the backup.
 - **No revoking access:** anyone with the link has the key. To cut someone off, create a new group and move the counters into it.
 - **Rollback:** a server that serves an older blob can bring back a deleted counter. Events merge by union, so nothing else is lost.
 - **Blob size** is visible to the server. There is no padding for now.
+- **Web keys** live in the browser's `localStorage`: clearing site data loses them, and so does an Ungrouped counter that exists only there. "Copy link" is the backup for groups; Export is the backup for Ungrouped.
