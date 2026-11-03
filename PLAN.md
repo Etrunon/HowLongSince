@@ -43,7 +43,7 @@ The server never sees a text a user typed (names, labels, tags, notes, NFC ids) 
 - The token login form and `&t=` go away. Old groups claim themselves on the first sync, using the `TOKEN` the browser already has.
 - `web.test.mjs` covers link parsing.
 
-## Phase 3: Android
+## Phase 3: Android (done)
 
 - The same flows. The token lives in `sync_keys`, which backups skip.
 - For admins, Share mints a fresh invite for the link and the QR code. Create, join and "Become admin" work as on the web.

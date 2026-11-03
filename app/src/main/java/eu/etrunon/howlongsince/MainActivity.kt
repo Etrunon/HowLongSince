@@ -314,7 +314,7 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, joinR
       }
     }
 
-    if (sharing) groups.find { it.id == view }?.let { g -> shareLinkOf(ctx, g)?.let { ShareDialog(g.name, it) { sharing = false } } }
+    if (sharing) groups.find { it.id == view }?.let { g -> GroupShare(g) { sharing = false } }
     joining?.let { JoinDialog(it, groups) { joining = null } }
     editing?.let { c ->
         EditDialog(c, groups, debug, dao, onDismiss = { editing = null }, onDelete = { scope.launch { dao.delete(c.id); reschedule(ctx, c.id) }; editing = null }) { saved ->

@@ -63,7 +63,9 @@ fun parseState(s: String): Remote {
 
 private val lock = Mutex()
 
-private fun keyPrefs(ctx: Context) = ctx.getSharedPreferences("sync_keys", 0) // "k<groupId>" = secret, "t<groupId>" = token; excluded from backups
+/** Excluded from backups. Per group: "k<id>" secret, "d<id>" this phone's device token, "a<id>" admin, "r<id>" stretched recovery password
+ *  of a group not uploaded yet, "t<id>" the old server TOKEN (only to claim a group made before device tokens). */
+fun keyPrefs(ctx: Context): android.content.SharedPreferences = ctx.getSharedPreferences("sync_keys", 0)
 
 /** The old global server becomes a group ("Synced") holding every loose counter, with a fresh key. Other phones join in a later phase. */
 private suspend fun migrateOldSync(ctx: Context, dao: CounterDao, prefs: android.content.SharedPreferences) {
@@ -87,25 +89,34 @@ suspend fun sync(ctx: Context): Unit = lock.withLock {
         if (g.syncUrl == null) continue
         val status = try {
             val secret = keyPrefs(ctx).getString("k${g.id}", null) ?: throw IOException(ctx.getString(R.string.key_missing))
-            syncGroup(ctx, dao, g, secret, keyPrefs(ctx).getString("t${g.id}", "")!!)
+            syncGroup(ctx, dao, g, secret)
             ctx.getString(R.string.synced, DateFormat.getTimeInstance(DateFormat.SHORT).format(Date())) to false
         } catch (e: Exception) {
-            ctx.getString(R.string.sync_failed, if (e.message == "wrong token") ctx.getString(R.string.wrong_token) else e.message) to true
+            ctx.getString(R.string.sync_failed, e.message) to true
         }
         prefs.edit().putString("syncStatus${g.id}", status.first).putBoolean("syncFailed${g.id}", status.second).apply()
     }
 }
 
 /** GET, decrypt, merge, encrypt, PUT; if someone else wrote in between (409) start over. */
-private suspend fun syncGroup(ctx: Context, dao: CounterDao, g: CounterGroup, secret: String, token: String) {
+private suspend fun syncGroup(ctx: Context, dao: CounterDao, g: CounterGroup, secret: String) {
     val k = keysOf(secret)
     val url = "${g.syncUrl!!.trim().trimEnd('/')}/s/${k.id}"
+    val keys = keyPrefs(ctx)
+    keys.getString("t${g.id}", null)?.takeIf { keys.getString("d${g.id}", null) == null && it.isNotEmpty() }?.let { legacy ->
+        val (code, text) = withContext(Dispatchers.IO) { http("POST", "$url/claim", legacy, body = JSONObject().put("deviceId", Db.deviceId).toString()) }
+        if (code == 200) keys.edit().putString("d${g.id}", JSONObject(text).getString("token")).remove("t${g.id}").commit() // a member; "Become admin" sets the password
+    }
+    val token = keys.getString("d${g.id}", null)
+    val recovery = keys.getString("r${g.id}", null)
+    if (token == null && recovery == null) throw IOException(ctx.getString(R.string.need_invite))
     repeat(5) {
-        val (code, text) = withContext(Dispatchers.IO) { http("GET", url, token) }
+        val (code, text) = withContext(Dispatchers.IO) { http("GET", url, token ?: "") }
         var etag: String? = null; var remote: String? = null
         when (code) {
             200 -> JSONObject(text).let { etag = it.getString("etag"); remote = openDoc(k, Base64.getDecoder().decode(it.getString("ciphertext"))) }
-            404 -> {} // not uploaded yet
+            404 -> if (recovery == null) throw IOException(ctx.getString(R.string.no_data)) // else: not uploaded yet
+            401 -> throw IOException(ctx.getString(if (token == null) R.string.need_invite else R.string.no_access))
             else -> throw httpError(code)
         }
         val parsed = remote?.let(::parseState)
@@ -123,9 +134,14 @@ private suspend fun syncGroup(ctx: Context, dao: CounterDao, g: CounterGroup, se
         val kept = parsed?.counters.orEmpty().filter { r -> r.deleted && r.updatedAt >= cutoff && mine.none { it.uid == r.uid } }.map { it.copy(id = -1) }
         val out = stateJson(mine + moved + kept, dao.rawEvents(), me.name, me.nameUpdatedAt, dao.allDevices())
         if (out == remote) return // nothing new to say
-        val body = JSONObject().put("ciphertext", Base64.getEncoder().encodeToString(sealDoc(k, out))).toString()
-        when (val c = withContext(Dispatchers.IO) { http("PUT", url, token, etag, body).first }) {
-            200 -> return
+        val body = JSONObject().put("ciphertext", Base64.getEncoder().encodeToString(sealDoc(k, out)))
+        if (etag == null) body.put("deviceId", Db.deviceId).put("recovery", recovery) // create: this phone becomes its admin
+        val (c, answer) = withContext(Dispatchers.IO) { http("PUT", url, token ?: "", etag, body.toString()) }
+        when (c) {
+            200 -> {
+                JSONObject(answer).optString("token").ifEmpty { null }?.let { keys.edit().putString("d${g.id}", it).putBoolean("a${g.id}", true).remove("r${g.id}").commit() }
+                return
+            }
             409 -> {}
             else -> throw httpError(c)
         }
@@ -133,40 +149,92 @@ private suspend fun syncGroup(ctx: Context, dao: CounterDao, g: CounterGroup, se
     throw IOException("busy, try again")
 }
 
-/** Reads a group's blob without touching anything, to show its name before joining. Null if the server has nothing under that key. */
-suspend fun peekGroup(j: Join): Remote? {
+/** Joins the group in [j]: with an invite as a member, with an old server token by claiming, else with the recovery [password] as an admin.
+ *  Null when joined (and synced once), else the reason. */
+suspend fun joinGroup(ctx: Context, j: Join, password: String): String? {
     val k = keysOf(j.secret)
-    val (code, text) = withContext(Dispatchers.IO) { http("GET", "${j.url}/s/${k.id}", j.token) }
-    return when (code) {
-        200 -> parseState(openDoc(k, Base64.getDecoder().decode(JSONObject(text).getString("ciphertext"))))
-        404 -> null
-        else -> throw httpError(code)
+    val url = "${j.url}/s/${k.id}"
+    val (code, text) = try {
+        withContext(Dispatchers.IO) {
+            val me = JSONObject().put("deviceId", Db.deviceId)
+            when {
+                j.nonce.isNotEmpty() -> http("POST", "$url/enroll", "", body = me.put("nonce", j.nonce).toString())
+                j.token.isNotEmpty() -> http("POST", "$url/claim", j.token, body = me.toString())
+                else -> http("POST", "$url/enroll", "", body = me.put("recovery", stretch(password, k.id)).toString())
+            }
+        }
+    } catch (e: IOException) { return ctx.getString(R.string.sync_failed, e.message) }
+    when (code) {
+        200 -> {}
+        404 -> return ctx.getString(R.string.no_data)
+        401, 429 -> return ctx.getString(if (j.nonce.isEmpty() && j.token.isEmpty()) R.string.wrong_password else R.string.need_invite)
+        else -> return ctx.getString(R.string.sync_failed, "HTTP $code")
     }
-}
-
-/** Adds the group from [j] (its blob [r] already read) and runs its first sync. */
-suspend fun joinGroup(ctx: Context, j: Join, r: Remote) {
-    count(j.url, keysOf(j.secret).id, j.token, "join")
     lock.withLock { // so a running sync never sees the URL without its key
-        val id = Db.get(ctx).dao().insert(CounterGroup(name = r.name ?: ctx.getString(R.string.synced_group), nameUpdatedAt = r.nameUpdatedAt, syncUrl = j.url))
-        keyPrefs(ctx).edit().putString("k$id", j.secret).putString("t$id", j.token).commit()
+        val id = Db.get(ctx).dao().insert(CounterGroup(name = ctx.getString(R.string.synced_group), nameUpdatedAt = 0, syncUrl = j.url)) // the real name comes with the first sync
+        keyPrefs(ctx).edit().putString("k$id", j.secret).putString("d$id", JSONObject(text).getString("token"))
+            .putBoolean("a$id", j.nonce.isEmpty() && j.token.isEmpty()).commit()
     }
     sync(ctx)
+    return null
+}
+
+/** This phone's call on group [g]'s server: (HTTP code, body). (0, "") if the group isn't synced here or the server can't be reached. */
+private suspend fun call(ctx: Context, g: CounterGroup, method: String, path: String, body: JSONObject? = null): Pair<Int, String> {
+    val keys = keyPrefs(ctx)
+    val secret = keys.getString("k${g.id}", null) ?: return 0 to ""
+    val url = "${(g.syncUrl ?: return 0 to "").trim().trimEnd('/')}/s/${keysOf(secret).id}/$path"
+    return try { withContext(Dispatchers.IO) { http(method, url, keys.getString("d${g.id}", null) ?: "", body = body?.toString()) } } catch (_: IOException) { 0 to "" }
+}
+
+fun isAdmin(ctx: Context, g: CounterGroup) = keyPrefs(ctx).getBoolean("a${g.id}", false)
+fun hasDevice(ctx: Context, g: CounterGroup) = keyPrefs(ctx).getString("d${g.id}", null) != null
+
+/** The link to share: a fresh single-use invite for admins, else the key backup (joining with it needs the recovery password). Null if not synced. */
+suspend fun inviteLink(ctx: Context, g: CounterGroup): Pair<String, Boolean>? {
+    val secret = keyPrefs(ctx).getString("k${g.id}", null) ?: return null
+    val nonce = if (isAdmin(ctx, g)) call(ctx, g, "POST", "invite", JSONObject()).let { (c, t) -> if (c == 200) JSONObject(t).getString("nonce") else null } else null
+    return shareLink(Join(g.syncUrl ?: return null, secret, nonce.orEmpty())) to (nonce != null)
+}
+
+/** A device enrolled in a group, as an admin sees it. */
+data class Member(val id: String, val admin: Boolean, val lastSeen: Long)
+
+suspend fun members(ctx: Context, g: CounterGroup): List<Member>? = call(ctx, g, "GET", "devices").let { (c, t) ->
+    if (c != 200) null else JSONArray(t).let { a -> (0 until a.length()).map { a.getJSONObject(it) }.map { Member(it.getString("id"), it.getBoolean("admin"), it.getLong("lastSeen")) } }
+}
+
+suspend fun revoke(ctx: Context, g: CounterGroup, deviceId: String) = call(ctx, g, "POST", "revoke", JSONObject().put("deviceId", deviceId)).first == 200
+
+/** With the recovery password: a member becomes admin, an admin changes the password, a phone without access joins as admin,
+ *  and a group not uploaded yet keeps it for its first upload. False if the password is wrong (or tried too often). */
+suspend fun useRecovery(ctx: Context, g: CounterGroup, password: String): Boolean {
+    val keys = keyPrefs(ctx)
+    val secret = keys.getString("k${g.id}", null) ?: return false
+    val recovery = withContext(Dispatchers.Default) { stretch(password, keysOf(secret).id) }
+    val body = JSONObject().put("recovery", recovery)
+    val ok = when {
+        !hasDevice(ctx, g) -> call(ctx, g, "POST", "enroll", body.put("deviceId", Db.deviceId)).let { (c, t) ->
+            when (c) {
+                200 -> { keys.edit().putString("d${g.id}", JSONObject(t).getString("token")).commit(); true }
+                404 -> { keys.edit().putString("r${g.id}", recovery).commit(); true } // not on the server yet: the next sync creates it
+                else -> false
+            }
+        }
+        isAdmin(ctx, g) -> call(ctx, g, "POST", "recovery", body).first == 200
+        else -> call(ctx, g, "POST", "promote", body).first == 200 || call(ctx, g, "POST", "recovery", body).first == 200 // the second only works on a group without a password yet
+    }
+    if (ok) { keys.edit().putBoolean("a${g.id}", true).commit(); sync(ctx) }
+    return ok
 }
 
 /** Tells the server this phone stopped syncing [g], so it can delete the group once no device is left. Call before the key is removed. */
-suspend fun leaveGroup(ctx: Context, g: CounterGroup) {
-    val keys = keyPrefs(ctx)
-    val secret = keys.getString("k${g.id}", null) ?: return
-    count(g.syncUrl ?: return, keysOf(secret).id, keys.getString("t${g.id}", "")!!, "leave")
-}
+suspend fun leaveGroup(ctx: Context, g: CounterGroup) { call(ctx, g, "POST", "leave", JSONObject()) }
 
-/** Best effort: a failure only leaves the server's device count off by one. */
-private suspend fun count(url: String, id: String, token: String, what: String) {
-    try { withContext(Dispatchers.IO) { http("POST", "${url.trim().trimEnd('/')}/s/$id/$what", token) } } catch (_: IOException) {}
-}
+/** Forgets everything this phone keeps for [g]'s sync. */
+fun dropKeys(ctx: Context, id: Long) = keyPrefs(ctx).edit().remove("k$id").remove("d$id").remove("a$id").remove("r$id").remove("t$id").apply()
 
-private fun httpError(code: Int) = IOException(if (code == 401) "wrong token" else "HTTP $code")
+private fun httpError(code: Int) = IOException("HTTP $code")
 
 /** Background sync, so web changes and reminders stay current without opening the app. */
 class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {

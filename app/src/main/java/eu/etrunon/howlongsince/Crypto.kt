@@ -71,3 +71,13 @@ fun openDoc(k: Keys, blob: ByteArray): String {
     if (!MessageDigest.isEqual(open(k, unb64.decode(env.getString("mac"))), sha256(doc.toByteArray()))) throw GeneralSecurityException("tampered")
     return JSONObject(doc).also { o -> mapFields(k, o) { v, ad -> open(k, unb64.decode(v), ad).decodeToString() } }.toString()
 }
+
+/** The recovery password as the server gets it (same as index.html): PBKDF2-HMAC-SHA256 over UTF-8, salted with the group id, 600k rounds, 32 bytes.
+ *  Written out (one block) because Android's PBKDF2 providers differ on non-ASCII passwords. Slow on purpose: call off the main thread. */
+fun stretch(password: String, id: String): String {
+    val mac = Mac.getInstance("HmacSHA256").apply { init(SecretKeySpec(password.toByteArray(), "HmacSHA256")) }
+    var u = mac.doFinal(id.toByteArray() + byteArrayOf(0, 0, 0, 1))
+    val out = u.copyOf()
+    repeat(600_000 - 1) { u = mac.doFinal(u); for (i in out.indices) out[i] = (out[i].toInt() xor u[i].toInt()).toByte() }
+    return b64.encodeToString(out)
+}

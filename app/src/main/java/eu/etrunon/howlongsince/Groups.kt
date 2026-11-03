@@ -15,9 +15,15 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Alignment
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.text.DateFormat
+import java.util.Date
 
 /** Create, rename and delete groups. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -52,9 +58,7 @@ fun Groups(groups: List<CounterGroup>, dao: CounterDao, onMenu: () -> Unit, onJo
             }
         }
     }
-    groups.find { it.id == sharing }?.let { g ->
-        shareLinkOf(ctx, g)?.let { ShareDialog(g.name, it) { sharing = null } }
-    }
+    groups.find { it.id == sharing }?.let { g -> GroupShare(g) { sharing = null } }
     groups.find { it.id == syncing }?.let { SyncDialog(it, dao, prefs) { syncing = null } }
     editing?.let { c ->
         var name by remember { mutableStateOf(c.name) }
@@ -82,7 +86,7 @@ fun Groups(groups: List<CounterGroup>, dao: CounterDao, onMenu: () -> Unit, onJo
                     scope.launch {
                         leaveGroup(ctx, c)
                         dao.deleteGroup(c.id)
-                        ctx.getSharedPreferences("sync_keys", 0).edit().remove("k${c.id}").remove("t${c.id}").apply() // its counters stay here, local only
+                        dropKeys(ctx, c.id) // its counters stay here, local only
                     }
                     deleting = null
                 }) {
@@ -94,40 +98,79 @@ fun Groups(groups: List<CounterGroup>, dao: CounterDao, onMenu: () -> Unit, onJo
     }
 }
 
-/** Turn a group's sync on (server, optional token; the key is made here and never sent), see its status, or turn it off. */
+/** Turn a group's sync on (server and recovery password; the key is made here and never sent), see its status and devices, or turn it off.
+ *  The recovery password also makes this phone an admin (or lets it back in) and, for admins, changes it. */
 @Composable
 private fun SyncDialog(g: CounterGroup, dao: CounterDao, prefs: android.content.SharedPreferences, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    val keys = remember { ctx.getSharedPreferences("sync_keys", 0) }
     var url by remember { mutableStateOf("") }
-    var token by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
     var status by remember { mutableStateOf(prefs.getString("syncStatus${g.id}", null)) }
     var confirmOff by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var admin by remember { mutableStateOf(isAdmin(ctx, g)) }
+    var members by remember { mutableStateOf<List<Member>?>(null) }
+    var revoking by remember { mutableStateOf<Member?>(null) }
+    val names by dao.devices().collectAsState(emptyList())
     val on = g.syncUrl != null
+    LaunchedEffect(admin) { if (on && admin) members = members(ctx, g) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(g.name) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (on) {
                     Text(g.syncUrl!!)
                     Text(status ?: stringResource(R.string.not_synced), style = MaterialTheme.typography.bodySmall)
+                    members?.forEach { m ->
+                        val name = if (m.id == Db.deviceId) stringResource(R.string.this_device) else names.find { it.id == m.id }?.name ?: m.id.take(8)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(name)
+                                Text(stringResource(if (m.admin) R.string.admin else R.string.member) + " · " +
+                                    DateFormat.getDateInstance(DateFormat.SHORT).format(Date(m.lastSeen * 1000)), style = MaterialTheme.typography.bodySmall)
+                            }
+                            if (m.id != Db.deviceId) TextButton(onClick = { revoking = m }) { Text(stringResource(R.string.revoke), color = MaterialTheme.colorScheme.error) }
+                        }
+                    }
+                    PasswordField(password, stringResource(when {
+                        !hasDevice(ctx, g) -> R.string.recovery_join
+                        admin -> R.string.change_password
+                        else -> R.string.become_admin
+                    })) { password = it }
                 } else {
                     Text(stringResource(R.string.sync_hint), style = MaterialTheme.typography.bodySmall)
                     OutlinedTextField(url, { url = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.server_url)) },
                         placeholder = { Text("https://your-server.example") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
-                    OutlinedTextField(token, { token = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.token)) }, singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+                    PasswordField(password, stringResource(R.string.recovery_new)) { password = it }
                 }
+                if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             }
         },
         confirmButton = {
-            if (on) TextButton(onClick = { scope.launch { status = ctx.getString(R.string.syncing); sync(ctx); status = prefs.getString("syncStatus${g.id}", null) } }) { Text(stringResource(R.string.sync_now)) }
-            else TextButton(enabled = url.isNotBlank(), onClick = {
-                keys.edit().putString("k${g.id}", newSecret()).putString("t${g.id}", token.trim()).commit() // key first, so a sync never sees a URL without one
-                scope.launch { dao.setSyncUrl(g.id, url.trim().trimEnd('/')); sync(ctx) }
-                onDismiss()
+            if (on) Row {
+                if (password.isNotEmpty()) TextButton(enabled = !busy, onClick = {
+                    busy = true
+                    scope.launch {
+                        val ok = useRecovery(ctx, g, password)
+                        busy = false; password = ""
+                        if (ok) admin = true
+                        status = if (ok) prefs.getString("syncStatus${g.id}", null) else ctx.getString(R.string.wrong_password)
+                    }
+                }) { Text(stringResource(R.string.save)) }
+                TextButton(enabled = !busy, onClick = { scope.launch { status = ctx.getString(R.string.syncing); sync(ctx); status = prefs.getString("syncStatus${g.id}", null) } }) { Text(stringResource(R.string.sync_now)) }
+            }
+            else TextButton(enabled = url.isNotBlank() && password.isNotEmpty() && !busy, onClick = {
+                busy = true
+                scope.launch {
+                    val secret = newSecret()
+                    val recovery = withContext(Dispatchers.Default) { stretch(password, keysOf(secret).id) }
+                    keyPrefs(ctx).edit().putString("k${g.id}", secret).putString("r${g.id}", recovery).commit() // key first, so a sync never sees a URL without one
+                    dao.setSyncUrl(g.id, url.trim().trimEnd('/'))
+                    sync(ctx)
+                    onDismiss()
+                }
             }) { Text(stringResource(R.string.turn_on)) }
         },
         dismissButton = {
@@ -135,6 +178,18 @@ private fun SyncDialog(g: CounterGroup, dao: CounterDao, prefs: android.content.
             else TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         },
     )
+    revoking?.let { m ->
+        AlertDialog(
+            onDismissRequest = { revoking = null },
+            text = { Text(stringResource(R.string.confirm_revoke, names.find { it.id == m.id }?.name ?: m.id.take(8))) },
+            confirmButton = {
+                TextButton(onClick = { scope.launch { revoke(ctx, g, m.id); members = members(ctx, g) }; revoking = null }) {
+                    Text(stringResource(R.string.revoke), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { revoking = null }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
     if (confirmOff) AlertDialog(
         onDismissRequest = { confirmOff = false },
         title = { Text(stringResource(R.string.turn_off_title)) },
@@ -143,7 +198,7 @@ private fun SyncDialog(g: CounterGroup, dao: CounterDao, prefs: android.content.
             TextButton(onClick = {
                 scope.launch {
                     leaveGroup(ctx, g)
-                    keys.edit().remove("k${g.id}").remove("t${g.id}").apply()
+                    dropKeys(ctx, g.id)
                     dao.setSyncUrl(g.id, null)
                 }
                 onDismiss()
@@ -151,10 +206,4 @@ private fun SyncDialog(g: CounterGroup, dao: CounterDao, prefs: android.content.
         },
         dismissButton = { TextButton(onClick = { confirmOff = false }) { Text(stringResource(R.string.cancel)) } },
     )
-}
-
-/** The share link of a synced group, or null if it isn't synced or this phone has no key for it. */
-fun shareLinkOf(ctx: android.content.Context, g: CounterGroup): String? {
-    val keys = ctx.getSharedPreferences("sync_keys", 0)
-    return keys.getString("k${g.id}", null)?.let { shareLink(Join(g.syncUrl ?: return null, it, keys.getString("t${g.id}", "")!!)) }
 }

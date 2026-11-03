@@ -40,13 +40,11 @@
     <string name="device_name">Device name</string>
     <string name="device_name_hint">Shown next to the resets you log, on every device in a synced group</string>
     <string name="debug_hint">Allow \"notify after\" in minutes</string>
-    <string name="token">Token</string>
     <string name="not_synced">Not synced yet</string>
     <string name="syncing">Syncing…</string>
     <string name="sync_now">Sync now</string>
     <string name="synced">Synced %s</string>
     <string name="sync_failed">Sync failed: %s</string>
-    <string name="wrong_token">wrong token</string>
     <string name="export_failed">Export failed: %s</string>
     <string name="cant_read">Can\'t read file: %s</string>
     <string name="replace_title">Import data?</string>
@@ -123,7 +121,7 @@
     <string name="move">Move</string>
     <string name="join">Join</string>
     <string name="join_title">Join a group</string>
-    <string name="join_question">Join «%1$s» on %2$s?</string>
+    <string name="join_question">Join a group on %1$s?</string>
     <string name="link">Link</string>
     <string name="next">Next</string>
     <string name="bad_link">That isn\'t a group link</string>
@@ -133,5 +131,18 @@
     <string name="copy_link">Copy link</string>
     <string name="link_copied">Link copied</string>
     <string name="close">Close</string>
-    <string name="share_warning">Anyone with this link can read and change this group, and access can\'t be taken back. To cut someone off, make a new group and move the counters.</string>
+    <string name="share_warning">A single-use invite, valid for 24 hours. Whoever joins with it can read and change this group until an admin revokes them; they keep what they already saw.</string>
+    <string name="share_backup">Only admins can invite. This link is the backup of the key: joining with it needs the recovery password.</string>
+    <string name="need_invite">No access yet: join with an invite, or enter the recovery password in the group\'s sync settings</string>
+    <string name="no_access">This phone was removed from the group: ask an admin for an invite</string>
+    <string name="wrong_password">Wrong password, or too many attempts: try later</string>
+    <string name="recovery_new">Recovery password (with the group link, it lets you rejoin as an admin)</string>
+    <string name="recovery_join">Recovery password, to join as an admin</string>
+    <string name="change_password">New recovery password</string>
+    <string name="become_admin">Recovery password, to become admin</string>
+    <string name="this_device">This phone</string>
+    <string name="admin">admin</string>
+    <string name="member">member</string>
+    <string name="revoke">Revoke</string>
+    <string name="confirm_revoke">Revoke «%1$s»? It stops syncing this group, but keeps what it already has.</string>
 </resources>

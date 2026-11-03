@@ -132,16 +132,20 @@ class CryptoTest {
 class JoinTest {
     private val secret = newSecret()
     @Test fun roundTrip() {
-        val j = Join("https://hls.example.com/sub", secret, "to ken&1")
+        val j = Join("https://hls.example.com/sub", secret, "abc")
         assertEquals(j, parseJoin(shareLink(j)))
-        assertEquals(j.copy(token = ""), parseJoin(shareLink(j.copy(token = ""))))
-        assertEquals(j, parseJoin("howlongsince://join?h=https%3A%2F%2Fhls.example.com%2Fsub%2F#k=$secret&t=to+ken%261"))
+        assertEquals(j.copy(nonce = ""), parseJoin(shareLink(j.copy(nonce = ""))))
+        assertEquals(Join("https://x.example", secret, token = "to ken&1"), parseJoin("https://x.example/#k=$secret&t=to+ken%261")) // links from before invites
+        assertEquals(j, parseJoin("howlongsince://join?h=https%3A%2F%2Fhls.example.com%2Fsub%2F#k=$secret&n=abc"))
     }
 
     @Test fun rejects() {
         for (s in listOf("", "hello", "https://x.example/", "https://x.example/#k=abc", "ftp://x.example/#k=$secret", "howlongsince://join#k=$secret", "howlongsince://join?h=nope#k=$secret"))
             assertEquals(s, null, parseJoin(s))
     }
+
+    @Test fun recoveryStretchMatchesTheWebApp() = // the same vector as STRETCHED in server/web.test.mjs
+        assertEquals("PHwhiIx1cylSWJVPIVMmYTP3aZR2NDTPX7TPSB8+mWo=", stretch("correct horse", "972a5ac5604d28f549b06e0ee52d7e3a"))
 }
 
 class WebCryptoTest {

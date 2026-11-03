@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
@@ -28,11 +29,13 @@ import java.net.URLDecoder
 import java.net.URLEncoder
 import java.util.Base64
 
-/** What a share link carries: where the group lives, its secret, and the server's token (empty if none). */
-data class Join(val url: String, val secret: String, val token: String)
+/** What a share link carries: where the group lives, its secret, a single-use invite (empty: none, joining needs the recovery password),
+ *  and the old server token of links made before device tokens (empty if none). */
+data class Join(val url: String, val secret: String, val nonce: String = "", val token: String = "")
 
 /** The link to share: opens the web app for the group (which offers "Open in app"). The key sits in the fragment, so no server ever sees it. */
-fun shareLink(j: Join) = "${j.url}/#k=${j.secret}" + if (j.token.isEmpty()) "" else "&t=${URLEncoder.encode(j.token, "UTF-8")}"
+fun shareLink(j: Join) = "${j.url}/#k=${j.secret}" + (if (j.nonce.isEmpty()) "" else "&n=${j.nonce}") +
+    if (j.token.isEmpty()) "" else "&t=${URLEncoder.encode(j.token, "UTF-8")}"
 
 /** Accepts the web link, or `howlongsince://join?h=<server url>#k=...`. Null for anything else. */
 fun parseJoin(link: String): Join? {
@@ -42,55 +45,70 @@ fun parseJoin(link: String): Join? {
     val server = if (u.scheme == "howlongsince") u.rawQuery?.split("&")?.firstOrNull { it.startsWith("h=") }?.let { URLDecoder.decode(it.removePrefix("h="), "UTF-8") }
         else link.trim().substringBefore('#')
     if (server == null || !server.matches(Regex("https?://[^/\\s]+.*"))) return null
-    return Join(server.trimEnd('/'), secret, p["t"].orEmpty())
+    return Join(server.trimEnd('/'), secret, p["n"].orEmpty(), p["t"].orEmpty())
 }
 
-/** Asks for a link if [initial] is empty, shows the group's name from the server, and on a yes joins it. */
+/** Asks for a link if [initial] is empty, then joins: an invite needs nothing more, a link without one needs the recovery password. */
 @Composable
 fun JoinDialog(initial: String, groups: List<CounterGroup>, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var text by remember { mutableStateOf(initial) }
+    var password by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var found by remember { mutableStateOf<Pair<Join, Remote>?>(null) }
+    var found by remember { mutableStateOf<Join?>(null) }
     fun next() {
         val j = parseJoin(text) ?: return run { error = ctx.getString(R.string.bad_link) }
-        val keys = ctx.getSharedPreferences("sync_keys", 0)
+        val keys = keyPrefs(ctx)
         groups.find { keys.getString("k${it.id}", null) == j.secret }?.let { return run { error = ctx.getString(R.string.already_joined, it.name) } }
-        busy = true; error = null
-        scope.launch {
-            try { peekGroup(j)?.let { found = j to it } ?: run { error = ctx.getString(R.string.no_data) } }
-            catch (e: Exception) { error = ctx.getString(R.string.sync_failed, if (e.message == "wrong token") ctx.getString(R.string.wrong_token) else e.message) }
-            busy = false
-        }
+        found = j; error = null
     }
     LaunchedEffect(Unit) { if (initial.isNotBlank()) next() }
+    val f = found
+    val needsPassword = f != null && f.nonce.isEmpty() && f.token.isEmpty()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.join_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                val f = found
-                if (f != null) Text(stringResource(R.string.join_question, f.second.name ?: stringResource(R.string.synced_group), f.first.url.substringAfter("://")))
-                else OutlinedTextField(text, { text = it; error = null }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.link)) }, singleLine = true,
+                if (f != null) {
+                    Text(stringResource(R.string.join_question, f.url.substringAfter("://")))
+                    if (needsPassword) PasswordField(password, stringResource(R.string.recovery_join)) { password = it; error = null }
+                } else OutlinedTextField(text, { text = it; error = null }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.link)) }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), isError = error != null)
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = {
-            val f = found
-            if (f != null) TextButton(enabled = !busy, onClick = { busy = true; scope.launch { joinGroup(ctx.applicationContext, f.first, f.second); onDismiss() } }) { Text(stringResource(R.string.join)) } // dismissing first would cancel this scope
+            if (f != null) TextButton(enabled = !busy && (!needsPassword || password.isNotEmpty()), onClick = {
+                busy = true
+                scope.launch { error = joinGroup(ctx.applicationContext, f, password); busy = false; if (error == null) onDismiss() } // dismissing first would cancel this scope
+            }) { Text(stringResource(R.string.join)) }
             else TextButton(enabled = text.isNotBlank() && !busy, onClick = ::next) { Text(stringResource(R.string.next)) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
-/** The link and a QR code of it. Whoever has it has the key. */
 @Composable
-fun ShareDialog(name: String, link: String, onDismiss: () -> Unit) {
+fun PasswordField(value: String, label: String, onChange: (String) -> Unit) =
+    OutlinedTextField(value, onChange, Modifier.fillMaxWidth(), label = { Text(label) }, singleLine = true,
+        visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+
+/** Share for group [g]: admins get a fresh invite, members the key backup. */
+@Composable
+fun GroupShare(g: CounterGroup, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    var link by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
+    LaunchedEffect(g.id) { link = inviteLink(ctx, g) ?: return@LaunchedEffect onDismiss() }
+    link?.let { (l, invite) -> ShareDialog(g.name, l, stringResource(if (invite) R.string.share_warning else R.string.share_backup), onDismiss) }
+}
+
+/** The link and a QR code of it. */
+@Composable
+fun ShareDialog(name: String, link: String, warning: String, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -98,7 +116,7 @@ fun ShareDialog(name: String, link: String, onDismiss: () -> Unit) {
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Qr(link, Modifier.fillMaxWidth())
-                Text(stringResource(R.string.share_warning), style = MaterialTheme.typography.bodySmall)
+                Text(warning, style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = {

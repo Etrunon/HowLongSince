@@ -39,13 +39,11 @@
     <string name="device_name">Nome del dispositivo</string>
     <string name="device_name_hint">Mostrato accanto agli azzeramenti che registri, su ogni dispositivo di un gruppo sincronizzato</string>
     <string name="debug_hint">Consenti \"avvisa dopo\" in minuti</string>
-    <string name="token">Token</string>
     <string name="not_synced">Non ancora sincronizzato</string>
     <string name="syncing">Sincronizzazione…</string>
     <string name="sync_now">Sincronizza ora</string>
     <string name="synced">Sincronizzato alle %s</string>
     <string name="sync_failed">Sincronizzazione non riuscita: %s</string>
-    <string name="wrong_token">token errato</string>
     <string name="export_failed">Esportazione non riuscita: %s</string>
     <string name="cant_read">Impossibile leggere il file: %s</string>
     <string name="replace_title">Importare i dati?</string>
@@ -122,7 +120,7 @@
     <string name="move">Sposta</string>
     <string name="join">Unisciti</string>
     <string name="join_title">Unisciti a un gruppo</string>
-    <string name="join_question">Unirti a «%1$s» su %2$s?</string>
+    <string name="join_question">Unirti a un gruppo su %1$s?</string>
     <string name="link">Link</string>
     <string name="next">Avanti</string>
     <string name="bad_link">Questo non è un link di gruppo</string>
@@ -132,5 +130,18 @@
     <string name="copy_link">Copia link</string>
     <string name="link_copied">Link copiato</string>
     <string name="close">Chiudi</string>
-    <string name="share_warning">Chiunque abbia questo link può leggere e modificare questo gruppo, e l\'accesso non si può revocare. Per escludere qualcuno, crea un nuovo gruppo e sposta i contatori.</string>
+    <string name="share_warning">Un invito monouso, valido 24 ore. Chi entra con esso può leggere e modificare questo gruppo finché un amministratore non lo revoca; tiene ciò che ha già visto.</string>
+    <string name="share_backup">Solo gli amministratori possono invitare. Questo link è il backup della chiave: per unirsi serve la password di recupero.</string>
+    <string name="need_invite">Nessun accesso: unisciti con un invito, o inserisci la password di recupero nelle impostazioni di sincronizzazione del gruppo</string>
+    <string name="no_access">Questo telefono è stato rimosso dal gruppo: chiedi un invito a un amministratore</string>
+    <string name="wrong_password">Password errata, o troppi tentativi: riprova più tardi</string>
+    <string name="recovery_new">Password di recupero (con il link del gruppo ti fa rientrare come amministratore)</string>
+    <string name="recovery_join">Password di recupero, per entrare come amministratore</string>
+    <string name="change_password">Nuova password di recupero</string>
+    <string name="become_admin">Password di recupero, per diventare amministratore</string>
+    <string name="this_device">Questo telefono</string>
+    <string name="admin">amministratore</string>
+    <string name="member">membro</string>
+    <string name="revoke">Revoca</string>
+    <string name="confirm_revoke">Revocare «%1$s»? Smette di sincronizzare questo gruppo, ma tiene ciò che ha già.</string>
 </resources>
