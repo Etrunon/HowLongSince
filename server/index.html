@@ -58,9 +58,10 @@
 <div class="row" id="groups" hidden>
   <select id="group" aria-label="Group"></select>
   <a id="app" href="#" data-i18n="open_app">Open in app</a>
+  <button id="rename" data-i18n="rename">Rename</button>
   <button id="forget" data-i18n="forget">Forget</button>
 </div>
-<button id="addgroup" data-i18n="add_group">Add group</button>
+<div class="row" style="margin-bottom:12px"><button id="newgroup" data-i18n="new_group">New group</button><button id="addgroup" data-i18n="join">Join</button></div>
 <div id="main">
 <form id="add"><input id="label" data-i18n-ph="new_counter" placeholder="New counter" required><button data-i18n="add">Add</button></form>
 <p id="undo" hidden><span></span> <button data-i18n="undo">Undo</button></p>
@@ -86,8 +87,10 @@ const T = {
     nfc_paired: 'NFC tag paired', unpair: 'Unpair', save: 'Save', archive: 'Archive', unarchive: 'Unarchive',
     intervals: 'Intervals · avg %s', archived: 'Archived', delete_counter: 'Delete counter', confirm_delete: 'Delete this counter?',
     reset_label: 'Reset %s', pick_past: 'Pick a time in the past', create: 'created', manual: 'manual', nfc: 'via NFC', d: 'd',
-    open_app: 'Open in app', forget: 'Forget', add_group: 'Add group', paste_link: 'Paste a group link', bad_link: 'That isn\'t a group link',
-    confirm_forget: 'Forget this group on this browser? The data stays on the server.',     no_data: 'Nothing found for this link on this server', decrypt_failed: 'Can\'t decrypt: wrong key?', needs_https: 'This page needs https to decrypt (or localhost).', busy: 'Busy, try again', all_groups: 'All', ungrouped: 'Ungrouped', synced: 'Synced %s' },
+    open_app: 'Open in app', forget: 'Forget', paste_link: 'Paste a group link', bad_link: 'That isn\'t a group link',
+        no_data: 'Nothing found for this link on this server', decrypt_failed: 'Can\'t decrypt: wrong key?', needs_https: 'This page needs https to decrypt (or localhost).', busy: 'Busy, try again', all_groups: 'All', ungrouped: 'Ungrouped', synced: 'Synced %s', new_group: 'New group', group_name: 'Group name', rename: 'Rename', join: 'Join', join_question: 'Join «%s»?',
+    already_joined: 'Already joined as «%s»', other_server: 'That link is for %s. Open it on that server\'s page.', token: 'Token',
+    forget_backup: 'Copy this link first: it is the only backup of the key. OK forgets the group in this browser (the data stays on the server), Cancel keeps it.' },
   it: { login: 'Accedi', new_counter: 'Nuovo contatore', add: 'Aggiungi', undo: 'Annulla', search: 'Cerca tra etichette e tag',
     sort_due: 'Più in ritardo', sort_recent: 'Azzerati di recente', sort_name: 'Nome',
     unreachable: 'Server irraggiungibile, ultima modifica non salvata. Nuovo tentativo ogni minuto.', sync_failed: 'Sincronizzazione non riuscita: %s',
@@ -97,8 +100,10 @@ const T = {
     nfc_paired: 'Tag NFC abbinato', unpair: 'Disabbina', save: 'Salva', archive: 'Archivia', unarchive: 'Ripristina',
     intervals: 'Intervalli · media %s', archived: 'Archiviati', delete_counter: 'Elimina contatore', confirm_delete: 'Eliminare questo contatore?',
     reset_label: 'Azzera %s', pick_past: 'Scegli un momento nel passato', create: 'creato', manual: 'manuale', nfc: 'via NFC', d: 'g',
-    open_app: 'Apri nell\'app', forget: 'Dimentica', add_group: 'Aggiungi gruppo', paste_link: 'Incolla un link di gruppo', bad_link: 'Questo non è un link di gruppo',
-    confirm_forget: 'Dimenticare questo gruppo su questo browser? I dati restano sul server.',     no_data: 'Niente trovato per questo link su questo server', decrypt_failed: 'Impossibile decifrare: chiave sbagliata?', needs_https: 'Questa pagina richiede https per decifrare (o localhost).', busy: 'Occupato, riprova', all_groups: 'Tutti', ungrouped: 'Senza gruppo', synced: 'Sincronizzato alle %s' },
+    open_app: 'Apri nell\'app', forget: 'Dimentica', paste_link: 'Incolla un link di gruppo', bad_link: 'Questo non è un link di gruppo',
+        no_data: 'Niente trovato per questo link su questo server', decrypt_failed: 'Impossibile decifrare: chiave sbagliata?', needs_https: 'Questa pagina richiede https per decifrare (o localhost).', busy: 'Occupato, riprova', all_groups: 'Tutti', ungrouped: 'Senza gruppo', synced: 'Sincronizzato alle %s', new_group: 'Nuovo gruppo', group_name: 'Nome del gruppo', rename: 'Rinomina', join: 'Unisciti', join_question: 'Unirti a «%s»?',
+    already_joined: 'Già unito come «%s»', other_server: 'Quel link è per %s. Aprilo sulla pagina di quel server.', token: 'Token',
+    forget_backup: 'Copia prima questo link: è l\'unico backup della chiave. OK dimentica il gruppo in questo browser (i dati restano sul server), Annulla lo tiene.' },
 };
 let saved = null; try { saved = localStorage.getItem('lang'); } catch {}
 const lang = saved || ((navigator.languages?.[0] || navigator.language).toLowerCase().startsWith('it') ? 'it' : 'en'); // chosen, else first preferred language
@@ -144,7 +149,8 @@ function merge(s, inn) {
   const cutoff = Date.now() - 90 * 864e5, byId = (a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   const counters = [...cs.values()].filter(c => !c.deleted || c.updatedAt >= cutoff).sort(byId);
   const live = new Set(counters.map(c => c.id));
-  return { name: s.name, nameUpdatedAt: s.nameUpdatedAt, counters, events: [...es.values()].filter(e => live.has(e.counterId)).sort(byId) };
+  const rename = inn.name != null && inn.nameUpdatedAt > (s.nameUpdatedAt ?? 0); // newest rename wins, like the phone
+  return { name: rename ? inn.name : s.name, nameUpdatedAt: rename ? inn.nameUpdatedAt : s.nameUpdatedAt, counters, events: [...es.values()].filter(e => live.has(e.counterId)).sort(byId) };
 }
 
 const emptyState = () => ({ name: null, nameUpdatedAt: 0, counters: [], events: [] });
@@ -170,7 +176,11 @@ async function pull(k) {
   let r;
   try { r = await fetch(`${base}/s/${s.keys.id}`, { headers: headers(g) }); } catch { return bad(t('unreachable')); }
   if (r.status === 401) { loginFor = k; $('#login').hidden = false; $('#token').focus(); return bad(t('wrong_token')); }
-  if (r.status === 404) { s.etag = null; return bad(t('no_data')); }
+  if (r.status === 404) {
+    if (!g.fresh) { s.etag = null; return bad(t('no_data')); }
+    s.etag = null; if (!s.state.name) s.state = { ...emptyState(), name: g.name, nameUpdatedAt: g.nameUpdatedAt }; // made here, not uploaded yet
+    return true;
+  }
   if (!r.ok) return bad(t('sync_failed', await r.text()));
   const j = await r.json();
   try { s.state = await unseal(s.keys, b64u(j.ciphertext)); } catch { return bad(t('decrypt_failed')); }
@@ -186,21 +196,25 @@ const commit = (k, change = { counters: [], events: [] }) => {
   return s.queue = s.queue.then(() => run(k, change)).catch(e => { s.status = String(e); s.failed = true; render(); });
 };
 async function run(k, change) {
-  const s = store(k), has = change.counters.length || change.events.length;
+  const s = store(k), has = change.counters.length || change.events.length || change.name != null;
   if (k === '') { if (has) { s.state = merge(s.state, change); localStorage.setItem('local', JSON.stringify(s.state)); } return render(); }
   for (let i = 0; i < 5; i++) {
     if (!await pull(k)) return;
-    if (!has) return render();
+    const g = groups.find(g => g.secret === k);
+    if (!has && !g.fresh) return render();
     const next = merge(s.state, change), mine = s.etag;
     const r = await fetch(`${base}/s/${s.keys.id}`, { method: 'PUT', headers: { ...headers(groups.find(g => g.secret === k)), ...(mine && { 'If-Match': mine }) },
       body: JSON.stringify({ ciphertext: b64(await seal(s.keys, next)) }) });
-    if (r.ok) { s.state = next; s.etag = (await r.json()).etag; return render(); }
+    if (r.ok) { s.state = next; s.etag = (await r.json()).etag; if (g.fresh) { delete g.fresh; saveGroups(); } return render(); }
     if (r.status !== 409) { s.status = t('sync_failed', await r.text()); s.failed = true; return render(); }
   }
   s.status = t('busy'); s.failed = true; render();
 }
 const syncAll = () => Promise.all(['', ...groups.map(g => g.secret)].map(k => commit(k)));
 
+const shareLink = g => `${base}/#k=${g.secret}${g.token ? '&t=' + encodeURIComponent(g.token) : ''}`;
+const defaultToken = () => localStorage.getItem('token') || groups.find(g => g.token)?.token || '';
+const uniqueName = (name, taken) => { let n = name, i = 1; while (taken.some(x => x.toLowerCase() === n.toLowerCase())) n = `${name} (${++i})`; return n; };
 const byName = (a, b) => (a.name || '￿').localeCompare(b.name || '￿');
 function fillGroups() {
   const opts = [['all', t('all_groups')]];
@@ -214,19 +228,68 @@ function fillGroups() {
   $('#group').value = view;
   $('#groups').hidden = !groups.length;
   const g = groups.find(g => g.secret === view);
-  $('#app').hidden = $('#forget').hidden = !g;
+  $('#app').hidden = $('#rename').hidden = $('#forget').hidden = !g;
   if (g) $('#app').href = `howlongsince://join?h=${encodeURIComponent(base)}#k=${g.secret}${g.token ? '&t=' + encodeURIComponent(g.token) : ''}`;
 }
 
-/** Adds a group from a link's `#k=...&t=...` part and shows it. False if it isn't one. */
-function addGroup(fragment) {
-  const p = new URLSearchParams(fragment), secret = p.get('k'), token = p.get('t') || '';
-  if (!secret || !validSecret(secret)) return false;
-  const g = groups.find(g => g.secret === secret);
-  if (g) g.token = token || g.token; else groups.push({ secret, token, name: '' });
-  view = secret; saveGroups(); fillGroups(); render();
-  commit(secret);
-  return true;
+/** The server a pasted link points at, or null for just a `#k=...` part (which means this one). */
+const linkServer = link => {
+  if (link.startsWith('howlongsince:')) { try { return new URL(link).searchParams.get('h'); } catch { return null; } }
+  return /^https?:/.test(link) ? link.split('#')[0] : null;
+};
+
+/** Reads a group's name from its blob, asking for the token if the server wants one. Null if nothing is stored under the key. */
+async function peek(secret, token) {
+  const keys = await deriveKeys(secret);
+  for (;;) {
+    const r = await fetch(`${base}/s/${keys.id}`, { headers: headers({ token }) });
+    if (r.status === 401) { token = prompt(t('token')); if (token) continue; throw new Error(t('wrong_token')); }
+    if (r.status === 404) return null;
+    if (!r.ok) throw new Error(t('sync_failed', await r.text()));
+    return { state: await unseal(keys, b64u((await r.json()).ciphertext)), token };
+  }
+}
+
+/** Joins the group in a link: its `#k=...&t=...` part, whole or alone. Shows the name and asks first, like the phone. */
+async function join(link) {
+  link = link.trim();
+  const server = linkServer(link);
+  if (server && server.replace(/\/$/, '') !== base) return alert(t('other_server', server));
+  const p = new URLSearchParams(link.includes('#') ? link.split('#')[1] : link), secret = p.get('k');
+  if (!secret || !validSecret(secret)) return alert(t('bad_link'));
+  const known = groups.find(g => g.secret === secret);
+  if (known) { view = secret; render(); return alert(t('already_joined', known.name || '…')); }
+  if (!crypto.subtle) return alert(t('needs_https'));
+  try {
+    const found = await peek(secret, p.get('t') || '');
+    if (!found) return alert(t('no_data'));
+    if (!confirm(t('join_question', found.state.name || '…'))) return;
+    groups.push({ secret, token: found.token, name: found.state.name || '' });
+    view = secret; saveGroups(); render(); commit(secret);
+  } catch (e) { alert(e instanceof TypeError ? t('unreachable') : e.name === 'OperationError' ? t('decrypt_failed') : e.message); }
+}
+
+/** A new group: a random key made here, the first blob uploaded as soon as the server answers. */
+function newGroup() {
+  const name = prompt(t('group_name'))?.trim();
+  if (!name) return;
+  if (!crypto.subtle) return alert(t('needs_https'));
+  const secret = b64(crypto.getRandomValues(new Uint8Array(32))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  groups.push({ secret, token: defaultToken(), name: uniqueName(name, groups.map(g => g.name)), nameUpdatedAt: Date.now(), fresh: true });
+  view = secret; saveGroups(); render(); commit(secret);
+}
+
+function renameGroup() {
+  const g = groups.find(g => g.secret === view), name = prompt(t('group_name'), g.name)?.trim();
+  if (!name || name === g.name) return;
+  g.name = uniqueName(name, groups.filter(x => x !== g).map(x => x.name)); saveGroups(); render();
+  commit(g.secret, { counters: [], events: [], name: g.name, nameUpdatedAt: Date.now() });
+}
+
+function forgetGroup() {
+  const g = groups.find(g => g.secret === view);
+  if (prompt(t('forget_backup'), shareLink(g)) === null) return; // a text box, so the link can be copied
+  groups = groups.filter(x => x !== g); stores.delete(g.secret); view = 'all'; saveGroups(); render();
 }
 
 function since(ms) {
@@ -400,19 +463,15 @@ $('#lang').value = saved || '';
 $('#lang').onchange = () => { try { $('#lang').value ? localStorage.setItem('lang', $('#lang').value) : localStorage.removeItem('lang'); } catch {} location.reload(); };
 $('#sort').onchange = () => { localStorage.setItem('sort', $('#sort').value); render(); };
 $('#group').onchange = () => { view = $('#group').value; render(); };
-$('#addgroup').onclick = () => {
-  const link = prompt(t('paste_link'));
-  if (link && !addGroup(link.split('#')[1] ?? '')) alert(t('bad_link'));
-};
-$('#forget').onclick = () => {
-  if (!confirm(t('confirm_forget'))) return;
-  groups = groups.filter(g => g.secret !== view); stores.delete(view); view = 'all'; saveGroups(); render();
-};
+$('#newgroup').onclick = newGroup;
+$('#addgroup').onclick = () => { const link = prompt(t('paste_link')); if (link) join(link); };
+$('#rename').onclick = renameGroup;
+$('#forget').onclick = forgetGroup;
 
 if (location.hash.length > 1) { // opened from a share link: remember the group, then hide the key from the address bar
   const frag = location.hash.slice(1);
   history.replaceState(null, '', location.pathname + location.search);
-  if (!addGroup(frag)) $('#err').textContent = t('bad_link');
+  join(frag);
 }
 render();
 syncAll();
