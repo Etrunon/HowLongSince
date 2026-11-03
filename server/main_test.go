@@ -22,7 +22,7 @@ type tc struct {
 
 func newTC(t *testing.T) *tc {
 	s := &server{dir: t.TempDir(), token: "legacy", createsPerIP: 3, maxGr: 100, maxAdmin: 3}
-	srv := httptest.NewServer(cors(gz(s.routes())))
+	srv := httptest.NewServer(cors(gz(s.handler())))
 	t.Cleanup(srv.Close)
 	return &tc{t, s, srv}
 }
@@ -399,4 +399,24 @@ func TestGzip(t *testing.T) {
 		}
 		res.Body.Close()
 	}
+}
+
+// The website is at /, the web app and API under /app/, and the API also at the root for older clients.
+func TestPaths(t *testing.T) {
+	c := newTC(t)
+	for path, want := range map[string]string{"/": "<!doctype html>", "/it/": `lang="it"`, "/app/": `id="list"`, "/app/limits": "maxAdminGroups", "/limits": "maxAdminGroups"} {
+		res, err := http.Get(c.srv.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if res.StatusCode != 200 || !strings.Contains(string(b), want) {
+			t.Errorf("%s: %d, missing %q", path, res.StatusCode, want)
+		}
+	}
+	code, _ := c.do("PUT", "/app/s/"+gid, "", "", map[string]any{"ciphertext": "YQ==", "deviceId": "00000000-0000-4000-8000-000000000001", "recovery": "r"})
+	c.want(200, code, "create under /app")
+	code, _ = c.do("GET", "/s/"+gid, "", "", nil)
+	c.want(401, code, "same group at the root needs a token")
 }

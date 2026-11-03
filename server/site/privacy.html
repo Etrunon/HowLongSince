@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy – How Long Since?</title>
+<meta name="description" content="How Long Since? encrypts synced groups end to end. What the server can't read, what metadata it can see, and how the encryption works.">
+<link rel="icon" href="img/icon.svg">
+<link rel="stylesheet" href="style.css">
+<link rel="alternate" hreflang="en" href="https://howlongsince.etrunon.eu/privacy.html">
+<link rel="alternate" hreflang="it" href="https://howlongsince.etrunon.eu/it/privacy.html">
+</head>
+<body>
+<header><div class="wrap">
+  <a class="brand" href="./"><img src="img/icon.svg" alt=""><span>How Long Since?</span></a>
+  <nav>
+    <a class="page" href="features.html">Features</a>
+    <a class="page" href="privacy.html" aria-current="page">Privacy</a>
+    <a class="page" href="groups.html">Groups</a>
+    <a class="page" href="self-host.html">Self-host</a>
+    <a class="lang" href="it/privacy.html" hreflang="it" onclick="try{localStorage.setItem('lang','it')}catch{}">IT</a>
+    <a class="btn" href="app/">Open app</a>
+  </nav>
+</div></header>
+
+<main class="wrap doc">
+<h1>Privacy first</h1>
+<p class="lead">Counters that aren't in a synced group never leave your phone (or your browser). When you sync a group, it is <strong>end-to-end encrypted</strong>: the phone or the browser encrypts it before sending it, and only devices that have the group's key can decrypt it. The server stores a blob it can't read and merges nothing: all merging happens on your devices.</p>
+<p>There are no ads, no account, no analytics and no tracking, in the app or on this website.</p>
+
+<h2>The server can't read</h2>
+<ul>
+  <li>counter labels, tags, notes and NFC tag ids;</li>
+  <li>the group's name and the devices' names;</li>
+  <li>which device logged each reset.</li>
+</ul>
+
+<h2>The server can't change anything unnoticed</h2>
+<p>The whole document carries a MAC made with the group's key, so a tampered blob is rejected by the apps. What a server can still do is refuse to serve a group, delete it, or serve an older copy of it (which could bring back a recently deleted counter).</p>
+
+<h2>The server can read</h2>
+<p>This metadata is kept in the clear so the server can count active groups and clean up abandoned ones:</p>
+<ul>
+  <li>how many counters a group has, and their random ids;</li>
+  <li>when each counter was reset, to the second, and whether it was a <code>create</code>, <code>manual</code> or <code>nfc</code> reset;</li>
+  <li>each counter's reminder interval, whether it is archived or deleted, and when it was last edited;</li>
+  <li>the group's devices: random ids, role (admin or member), when they joined and when they last synced;</li>
+  <li>the size of the blob, when you sync, and your IP address.</li>
+</ul>
+<p>So the server operator could see that "some counter in some group is reset about every 3 days from an NFC tag", but not what it is.</p>
+
+<h2>Keys and passwords</h2>
+<ul>
+  <li>Each group has a random 32-byte secret made on the device that created it. It travels only inside the share link, after the <code>#</code>, a part that browsers never send to the server.</li>
+  <li>Your recovery password never leaves the device: only a slow, salted hash of it (PBKDF2, 600 000 rounds) is sent, and the server stores a hash of that.</li>
+  <li>Each device gets its own access token; the server stores only its hash.</li>
+  <li>On Android, keys and tokens are kept in a file that backups skip.</li>
+  <li>Anyone with both the link and the recovery password is an admin. Someone with only the link can guess passwords online, 5 per hour; the server operator can guess offline against the stored hash, slowed by PBKDF2. Choose a strong password.</li>
+</ul>
+
+<h2 id="how-sync-works">How sync works</h2>
+<ul>
+  <li>The key: HKDF-SHA256 turns the group's random 32-byte secret into the id the server sees and an AES-256-GCM key.</li>
+  <li>The blob (format v4) is JSON: each counter carries its own resets, and a reset is identified by its counter and its time, stored to the second. Labels, tags, NFC ids, notes, and group and device names are each sealed with AES-GCM (authenticated with the group id, record id and field name). Which device logged each reset is sealed once for the whole document, as one list (<code>who</code>). The rest is readable: counter and device ids, <code>updatedAt</code>, <code>deleted</code>, <code>archived</code>, reminder intervals, reset times and sources. The whole document travels as one string with a MAC (SHA-256 of its exact bytes, sealed with the key). The server stores each blob gzipped.</li>
+  <li>A sync is: get the blob, decrypt, merge with the local group, encrypt, put it back with <code>If-Match</code>; on a 409 it starts again.</li>
+  <li>Counters have a UUID; the phone keeps its local ids for reminders, and NFC tags hold the UUID. Counter edits: the newer <code>updatedAt</code> wins. Resets are merged by counter and time. Moving a counter keeps its UUID and writes a tombstone in the old group.</li>
+  <li>Deletes are tombstones (<code>deleted: true</code>), so they reach every device. They are dropped for good after 90 days; a device offline for longer, or a server serving an old blob, could bring one back.</li>
+  <li>Next to the blob the server keeps, never sent to clients, the group's devices (id, token hash, role, created, last seen), its open invites, the recovery hash and when it was last synced (stamped at most once an hour).</li>
+  <li>Each sync carries the full state of the group, which is fine for a few phones and hundreds of counters (requests are capped at 10 MB after decompression).</li>
+  <li>Only format v4 is read: older apps and servers can't open v4 groups, and the new ones can't open older groups.</li>
+</ul>
+<p>Don't want to trust anyone's server? <a href="self-host.html">Host your own</a>.</p>
+</main>
+
+<footer><div class="wrap">
+  <span>How Long Since? · GPL-3.0 · <a href="https://github.com/Etrunon/HowLongSince">GitHub</a></span>
+  <span><a href="features.html">Features</a> · <a href="privacy.html">Privacy</a> · <a href="groups.html">Groups</a> · <a href="self-host.html">Self-host</a> · <a href="contribute.html">Contribute</a> · <a href="it/privacy.html" hreflang="it" onclick="try{localStorage.setItem('lang','it')}catch{}">Italiano</a></span>
+</div></footer>
+</body>
+</html>

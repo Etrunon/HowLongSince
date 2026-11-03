@@ -6,3 +6,4 @@ local.properties
 server/.env
 server/data/
 deploy.sh
+.kotlin/

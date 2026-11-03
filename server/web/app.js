@@ -123,7 +123,7 @@ const base = location.origin + location.pathname.replace(/[^/]*$/, '').replace(/
 
 const emptyState = () => ({ name: null, nameUpdatedAt: 0, counters: [], events: [], devices: [] });
 // Who logs resets: a random id made once per browser (no registration) and an editable name; the name travels in each group's blob, so a rename reaches old events.
-const DEFAULT_SERVER = 'https://howlongsince.etrunon.eu';
+const DEFAULT_SERVER = 'https://howlongsince.etrunon.eu/app';
 const withScheme = s => (/^https?:\/\//i.test(s) ? s : 'https://' + s).replace(/\/+$/, ''); // "host:port" alone would parse as a scheme
 const srv = g => g.server ? withScheme(g.server) : base; // groups from before servers per group live on this page's server
 const host = s => s.replace(/^https?:\/\//, '');

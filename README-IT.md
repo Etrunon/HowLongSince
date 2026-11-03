@@ -14,7 +14,9 @@
 - **Privata per progettazione**: i gruppi sincronizzati sono cifrati end-to-end. Il server non può leggere i tuoi contatori.
 - **Gratuita e open source** (GPL-3.0), niente pubblicità, niente account, niente tracciamento. Usa il server pubblico o ospita il tuo.
 
-<img src="docs/app-list.png" width="240" alt="Elenco dei contatori"> <img src="docs/app-detail.png" width="240" alt="Dettaglio di un contatore con il registro degli azzeramenti">
+**Sito: [howlongsince.etrunon.eu](https://howlongsince.etrunon.eu/it/)** · **Web app: [howlongsince.etrunon.eu/app](https://howlongsince.etrunon.eu/app/)**
+
+<img src="server/site/img/app-list.png" width="240" alt="Elenco dei contatori"> <img src="server/site/img/app-detail.png" width="240" alt="Dettaglio di un contatore con il registro degli azzeramenti">
 
 ## Funzionalità
 
@@ -32,7 +34,7 @@
   - Toccare il tag azzera il contatore, anche ad app chiusa. I tag non abbinati vengono rifiutati, e Unpair o Re-pair fanno smettere di funzionare un vecchio tag.
   - Oppure "Copy URL" e scrivi il tag con qualsiasi altra app NFC; il primo tocco di quel tag lo abbina.
 
-  <img src="docs/nfc-pairing.png" width="240" alt="Finestra di abbinamento: copia l'URL o abbina ora">
+  <img src="server/site/img/nfc-pairing.png" width="240" alt="Finestra di abbinamento: copia l'URL o abbina ora">
 
 - **Archivio**: nasconde un contatore senza perderne la storia; i contatori archiviati non hanno promemoria e stanno dietro il chip "Archived".
 - **Ricerca, ordinamento e tag**: cerca tra etichette e tag; ordina per più in ritardo, azzerati di recente o nome; filtra per tag, ognuno con un colore fisso.
@@ -46,9 +48,9 @@
 
 ### Web app
 
-![Web app](docs/web.png)
+![Web app](server/site/img/web.png)
 
-Ogni gruppo sincronizzato si può aprire anche in un browser all'indirizzo del server (per esempio [howlongsince.etrunon.eu](https://howlongsince.etrunon.eu)). La web app fa tutto quello che fa il telefono tranne l'abbinamento NFC, i promemoria e le notifiche, e il widget. I contatori possono anche vivere solo nel browser ("Senza gruppo", salvati nel suo local storage).
+Ogni gruppo sincronizzato si può aprire anche in un browser all'indirizzo del server (per esempio [howlongsince.etrunon.eu/app](https://howlongsince.etrunon.eu/app/)). La web app fa tutto quello che fa il telefono tranne l'abbinamento NFC, i promemoria e le notifiche, e il widget. I contatori possono anche vivere solo nel browser ("Senza gruppo", salvati nel suo local storage).
 
 Si può installare come app, con finestra e icona proprie:
 - Chrome / Chromium / Edge (qualsiasi OS): l'icona di installazione a destra della barra degli indirizzi.
@@ -116,7 +118,7 @@ Il server limita anche quanti gruppi un indirizzo IP può creare all'ora (10 di 
 
 ## Ospitare il tuo server
 
-Il server in `server/` è un piccolo programma Go che salva ogni gruppo sincronizzato come un file cifrato e serve la web app. L'immagine Docker è un singolo binario di circa 8 MB. Le app funzionano con qualsiasi server: quando crei un gruppo, scegli un server personalizzato invece di quello pubblico, e il link di condivisione porta tutti sul server che indica.
+Il server in `server/` è un piccolo programma Go che salva ogni gruppo sincronizzato come un file cifrato, e serve il sito su `/` e la web app su `/app/`. L'immagine Docker è un singolo binario di circa 8 MB. Le app funzionano con qualsiasi server: quando crei un gruppo, scegli un server personalizzato invece di quello pubblico, e il link di condivisione porta tutti sul server che indica.
 
 **Requisiti**: una macchina con Docker, un nome di dominio, e HTTPS con un certificato di cui Android si fida di default (Let's Encrypt, Tailscale, una CA commerciale). I certificati autofirmati o di una CA privata installati sul telefono non sono accettati dall'app, e la web app richiede https (o localhost) per la crittografia del browser.
 
@@ -147,7 +149,7 @@ server {
     add_header Referrer-Policy no-referrer always;
     add_header Content-Security-Policy "default-src 'self'; connect-src 'self' https:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'" always;
 
-    location /s/ {
+    location ~ ^(/app)?/s/ {
         limit_req zone=hls burst=20 nodelay;   # ~30 sync/min per IP, picchi consentiti
         proxy_pass http://127.0.0.1:13387;
     }
@@ -158,7 +160,7 @@ server {
 ```
 Con Caddy, gli stessi header vanno in un blocco `header`; il rate limiting richiede il plugin `caddy-ratelimit`. Lascia `connect-src 'self' https:` nella CSP: senza, la web app su questo server non può sincronizzare gruppi su un altro. Il server risponde da sé alle richieste cross-origin (CORS), quindi il proxy non deve fare nulla per questo. Lo stesso per la compressione: il server comprime le risposte con gzip e accetta corpi delle richieste compressi (`Content-Encoding: gzip`), quindi lascia spenta la compressione del proxy. Le app inviano sempre gzip, quindi serve un server recente almeno quanto loro. `tailscale serve` fornisce HTTPS ma non può aggiungere header né limiti, il che va bene quando il server è raggiungibile solo dalla tua tailnet.
 
-Poi apri `https://hls.example.com` per la web app, o inserisci quell'URL nel telefono (Gruppi → tocca un gruppo → URL del server).
+Poi apri `https://hls.example.com/app/` per la web app, o inserisci `https://hls.example.com/app` come URL del server sul telefono (Gruppi → tocca un gruppo → server personalizzato).
 
 **Configurazione** (variabili d'ambiente): `TOKEN` (facoltativo: rivendica i gruppi creati prima dei token per dispositivo, e legge `/stats`), `CREATES_PER_IP_HOUR` (predefinito 10), `MAX_GROUPS` (predefinito 10000), `MAX_ADMIN_GROUPS` (predefinito 10, vedi [Limite di amministrazione per dispositivo](#limite-di-amministrazione-per-dispositivo); rifiutato con 402), `DATA_DIR` (predefinito `/data`, i blob vanno in `s/` al suo interno), `ADDR` (predefinito `:8080`). `compose.yml` collega `HLS_TOKEN` e `HLS_MAX_ADMIN_GROUPS` da `.env` a `TOKEN` e `MAX_ADMIN_GROUPS`. Chiunque può creare un gruppo, entro questi limiti. I limiti per IP leggono l'ultimo indirizzo di `X-Forwarded-For`, che imposta il reverse proxy. Il server chiude le connessioni lente o bloccate (10 s per inviare gli header, 30 s per richiesta) e scrive i blob in modo atomico.
 
@@ -168,8 +170,8 @@ Poi apri `https://hls.example.com` per la web app, o inserisci quell'URL nel tel
 
 ### API
 
-`{id}` sono 32 caratteri esadecimali derivati dal segreto del gruppo; "dispositivo" significa il token del dispositivo come `Authorization: Bearer`.
-- `GET /` web app, `GET /health` risponde `ok`, `GET /limits` restituisce `{"maxAdminGroups": N}`, `GET /stats` (con `TOKEN`) restituisce i totali: gruppi, dispositivi, contatori attivi, azzeramenti negli ultimi 7 e 30 giorni.
+Ogni percorso qui sotto funziona anche sotto `/app`, dove le app mandano i nuovi gruppi; i percorsi alla radice restano per i gruppi creati prima. `{id}` sono 32 caratteri esadecimali derivati dal segreto del gruppo; "dispositivo" significa il token del dispositivo come `Authorization: Bearer`.
+- `GET /` sito, `GET /app/` web app, `GET /health` risponde `ok`, `GET /limits` restituisce `{"maxAdminGroups": N}`, `GET /stats` (con `TOKEN`) restituisce i totali: gruppi, dispositivi, contatori attivi, azzeramenti negli ultimi 7 e 30 giorni.
 - `GET /s/{id}` (dispositivo) restituisce `{etag, ciphertext}`. `PUT /s/{id}` (dispositivo) riceve `{ciphertext}` e `If-Match: <etag>`, e risponde 409 se qualcun altro ha scritto prima. Senza `If-Match` crea il gruppo: `{ciphertext, deviceId, recovery}`, senza token, restituisce `{etag, token}` e chi chiama è amministratore.
 - `POST /s/{id}/invite` (amministratore) restituisce `{nonce}`, monouso, 24 h. `POST /s/{id}/enroll {deviceId, nonce}` crea un membro, `{deviceId, recovery}` un amministratore; entrambi restituiscono `{token}`. `POST /s/{id}/promote {recovery}` (dispositivo) rende amministratore chi chiama. `POST /s/{id}/recovery {recovery}` (amministratore) cambia la password.
 - `GET /s/{id}/devices` (amministratore) elenca `{id, admin, created, lastSeen}`. `POST /s/{id}/revoke {deviceId}` (amministratore). `POST /s/{id}/leave` (dispositivo); il gruppo viene eliminato quando non resta nessun dispositivo.
@@ -195,7 +197,7 @@ Segnalazioni di bug, idee e pull request sono benvenute.
 2. Fai un fork del repository e crea un branch da `main`.
 3. Fai la modifica. Tienila piccola e nello stile del codice intorno: pochi file, nessuna nuova dipendenza se non davvero necessaria.
 4. Esegui i test (vedi sotto) e prova la modifica su un telefono o nel browser.
-5. Se la modifica cambia ciò che vedono gli utenti o come funziona il server, aggiorna **entrambi** `README.md` e `README-IT.md` nello stesso commit: devono sempre dire la stessa cosa. Ogni nuovo testo visibile all'utente richiede una stringa in inglese e una in italiano (`app/src/main/res/values*/strings.xml`, e le tabelle `T` in `server/web/app.js`).
+5. Se la modifica cambia ciò che vedono gli utenti o come funziona il server, aggiorna **entrambi** `README.md` e `README-IT.md` nello stesso commit: devono sempre dire la stessa cosa. Lo stesso vale per le pagine inglesi e italiane del sito (`server/site/` e `server/site/it/`). Ogni nuovo testo visibile all'utente richiede una stringa in inglese e una in italiano (`app/src/main/res/values*/strings.xml`, e le tabelle `T` in `server/web/app.js`).
 6. Apri una pull request verso `main` descrivendo cosa è cambiato e perché, con uno screenshot per le modifiche all'interfaccia.
 
 ### Compilazione e test
@@ -212,7 +214,7 @@ cd server && go test ./...        # test del server (girano anche durante il doc
 
 L'NFC richiede un telefono vero e tag NDEF scrivibili (per esempio NTAG213/215/216).
 
-**Tecnologia**: Kotlin e Jetpack Compose (Material 3) in una sola Activity, Android 8.0 (API 26) o successivo. **Room** salva le tabelle `Counter` ed `Event`; il tempo trascorso viene calcolato dall'ultimo `Event` e mai salvato. **WorkManager** esegue un job di promemoria ritardato per ogni contatore. L'**API NFC di Android** (record URI NDEF, reader mode durante l'abbinamento). Le librerie integrate `org.json` e `HttpURLConnection` per esportazione, importazione e sincronizzazione. Il server è in Go senza dipendenze oltre la libreria standard; la web app è JavaScript semplice senza build.
+**Tecnologia**: Kotlin e Jetpack Compose (Material 3) in una sola Activity, Android 8.0 (API 26) o successivo. **Room** salva le tabelle `Counter` ed `Event`; il tempo trascorso viene calcolato dall'ultimo `Event` e mai salvato. **WorkManager** esegue un job di promemoria ritardato per ogni contatore. L'**API NFC di Android** (record URI NDEF, reader mode durante l'abbinamento). Le librerie integrate `org.json` e `HttpURLConnection` per esportazione, importazione e sincronizzazione. Il server è in Go senza dipendenze oltre la libreria standard; la web app e il sito sono HTML, CSS e JavaScript semplici, senza build.
 
 ### Struttura del codice
 
@@ -232,10 +234,11 @@ app/src/main/java/eu/etrunon/howlongsince/
   Theme.kt         Tema a colori dinamici e colori dei tag
 app/src/test/.../SinceTest.kt  Test unitari (formattazione, tag, ritardo dei promemoria, URI NFC, andata e ritorno JSON di backup e sync)
 server/
-  main.go          Server di sincronizzazione: archivio di blob cifrati e handler HTTP
-  main_test.go     Test dell'archivio dei blob (eseguito durante il docker build)
+  main.go          Server di sincronizzazione: archivio di blob cifrati, handler HTTP, sito e web app
+  main_test.go     Test del server (eseguiti durante il docker build)
   web.test.mjs     Test della logica della web app
-  web/             Web app (index.html, style.css, core.js, app.js), inclusa nel binario del server
+  web/             Web app (index.html, style.css, core.js, app.js), inclusa nel binario del server, servita su /app/
+  site/            Sito (inglese su /, italiano in it/, screenshot in img/), servito su /
   Dockerfile, compose.yml
 logo.svg           Logo (l'icona dell'app e la favicon web derivano da qui)
 ```

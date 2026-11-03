@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Features – How Long Since?</title>
+<meta name="description" content="Everything How Long Since? does: counters, reset log, reminders, NFC tags, widget, groups, export and the web app.">
+<link rel="icon" href="img/icon.svg">
+<link rel="stylesheet" href="style.css">
+<link rel="alternate" hreflang="en" href="https://howlongsince.etrunon.eu/features.html">
+<link rel="alternate" hreflang="it" href="https://howlongsince.etrunon.eu/it/features.html">
+</head>
+<body>
+<header><div class="wrap">
+  <a class="brand" href="./"><img src="img/icon.svg" alt=""><span>How Long Since?</span></a>
+  <nav>
+    <a class="page" href="features.html" aria-current="page">Features</a>
+    <a class="page" href="privacy.html">Privacy</a>
+    <a class="page" href="groups.html">Groups</a>
+    <a class="page" href="self-host.html">Self-host</a>
+    <a class="lang" href="it/features.html" hreflang="it" onclick="try{localStorage.setItem('lang','it')}catch{}">IT</a>
+    <a class="btn" href="app/">Open app</a>
+  </nav>
+</div></header>
+
+<main class="wrap doc">
+<h1>Features</h1>
+<p class="lead">Each thing you track is a <strong>counter</strong>: a label, some tags, and a log of every time it was set or reset. The app shows the time since the latest reset and can remind you when a counter has gone too long.</p>
+
+<h2>Counters and history</h2>
+<ul>
+  <li><strong>Counters</strong>: each has a label and comma-separated tags. Cards show the elapsed time as a large number with the date of the last reset underneath.</li>
+  <li><strong>Reset log</strong>: every create or reset is stored, marked <code>create</code>, <code>manual</code> or <code>nfc</code>. A counter's detail page shows the log as a timeline with the gap between resets, and a small bar chart of the recent intervals and their average.</li>
+  <li><strong>Reset at a past time</strong>: "Reset at…" on the detail page, for when you forgot to log it.</li>
+  <li><strong>Notes</strong>: "Reset…" on the detail page takes an optional note (e.g. "new filter brand"), shown in the timeline.</li>
+  <li><strong>Undo</strong>: every reset shows an "Undo" snackbar, and Undo removes that log entry.</li>
+  <li><strong>Archive</strong>: hide a counter without losing its history; archived counters have no reminders and sit behind an "Archived" chip.</li>
+  <li><strong>Search, sort and tags</strong>: search labels and tags; sort by most overdue, recently reset or name; filter by tag, each with a stable color.</li>
+</ul>
+<p><img class="phone" src="img/app-detail.png" alt="A counter's detail page: interval chart and reset timeline"></p>
+
+<h2>Reminders</h2>
+<ul>
+  <li>Optionally set "notify after" in hours, days or weeks (or minutes in Debug mode). "Use my average" sets it to your average interval between resets.</li>
+  <li>A ring around the reset button fills up as the reminder gets closer and turns red when overdue. Overdue counters are listed first.</li>
+  <li>Tapping the notification opens that counter's page. Its buttons reset the counter or snooze for a day.</li>
+</ul>
+
+<h2>NFC tags</h2>
+<ul>
+  <li>Pair a tag from the counter's detail page. The app writes <code>howlongsince://reset/&lt;uuid&gt;</code> (the counter's sync id, so the tag works on every phone in the group) to the tag and remembers the tag's ID.</li>
+  <li>Tapping the tag resets the counter, even when the app is closed. Tags that aren't paired are rejected, and Unpair or Re-pair makes an old tag stop working.</li>
+  <li>Or "Copy URL" and write the tag with any other NFC app; the first tap of that tag then pairs it.</li>
+  <li>Any writable NDEF tag works, for example NTAG213/215/216 stickers.</li>
+</ul>
+<p><img class="phone" src="img/nfc-pairing.png" alt="Pair dialog: copy the URL or pair now"></p>
+
+<h2>On Android</h2>
+<ul>
+  <li><strong>Home-screen widget</strong>: the counters most in need of a reset, each with a reset button. Times refresh on every change and every 30 minutes.</li>
+  <li><strong>Launcher shortcuts</strong>: long-press the app icon to reset the 4 counters that need it most.</li>
+  <li><strong>Look</strong>: Material 3 with colors from your wallpaper (Android 12+) and a large title bar that collapses as you scroll. Android 8.0 or later.</li>
+  <li><strong>Settings</strong> (☰ menu): dark theme (follows the system until you change it), Debug mode (minute-based reminders).</li>
+  <li><strong>Languages</strong>: English and Italian, following the phone language. On Android 13+ the app's language can also be set on its own (Settings → Apps → How Long Since? → Language).</li>
+</ul>
+
+<h2>Groups and sync</h2>
+<p>Counters can be put in groups and shared with other phones and browsers, end-to-end encrypted. See <a href="groups.html">Groups</a> and <a href="privacy.html">Privacy</a>.</p>
+
+<h2>Export and import</h2>
+<p>A JSON file, checked before anything is overwritten. "Replace" swaps the groups of the same name for the file's, "Keep both" imports them as new groups. The same file works on the phone and the web.</p>
+
+<h2>Web app</h2>
+<p><img class="shot" src="img/web.png" alt="The web app in a desktop browser"></p>
+<p>Every synced group can also be opened in a browser at <a href="app/">howlongsince.etrunon.eu/app</a> (or at your own server). The web app does everything the phone does except NFC pairing, reminders and notifications, and the widget. Counters can also live only in the browser ("Ungrouped", kept in its local storage).</p>
+<p>It can be installed as an app with its own window and icon:</p>
+<ul>
+  <li>Chrome / Chromium / Edge (any OS): the install icon on the right of the address bar.</li>
+  <li>Firefox on Windows (143+): the "add to taskbar" icon in the address bar. If missing, set <code>browser.taskbarTabs.enabled</code> to <code>true</code> in <code>about:config</code>.</li>
+  <li>Firefox on Android: menu → "Add to Home screen".</li>
+  <li>Firefox on Linux: no install option; use a pinned tab or Chromium.</li>
+</ul>
+<p>The web app keeps keys and tokens in the browser's <code>localStorage</code>: clearing site data loses them, along with Ungrouped counters. "Copy link" backs up a group; Export backs up Ungrouped.</p>
+</main>
+
+<footer><div class="wrap">
+  <span>How Long Since? · GPL-3.0 · <a href="https://github.com/Etrunon/HowLongSince">GitHub</a></span>
+  <span><a href="features.html">Features</a> · <a href="privacy.html">Privacy</a> · <a href="groups.html">Groups</a> · <a href="self-host.html">Self-host</a> · <a href="contribute.html">Contribute</a> · <a href="it/features.html" hreflang="it" onclick="try{localStorage.setItem('lang','it')}catch{}">Italiano</a></span>
+</div></footer>
+</body>
+</html>

@@ -14,7 +14,9 @@
 - **Private by design**: synced groups are end-to-end encrypted. The server can't read your counters.
 - **Free and open source** (GPL-3.0), no ads, no account, no tracking. Use the public server or host your own.
 
-<img src="docs/app-list.png" width="240" alt="Counter list"> <img src="docs/app-detail.png" width="240" alt="Counter detail with reset log">
+**Website: [howlongsince.etrunon.eu](https://howlongsince.etrunon.eu)** · **Web app: [howlongsince.etrunon.eu/app](https://howlongsince.etrunon.eu/app/)**
+
+<img src="server/site/img/app-list.png" width="240" alt="Counter list"> <img src="server/site/img/app-detail.png" width="240" alt="Counter detail with reset log">
 
 ## Features
 
@@ -32,7 +34,7 @@
   - Tapping the tag resets the counter, even when the app is closed. Tags that aren't paired are rejected, and Unpair or Re-pair makes an old tag stop working.
   - Or "Copy URL" and write the tag with any other NFC app; the first tap of that tag then pairs it.
 
-  <img src="docs/nfc-pairing.png" width="240" alt="Pair dialog: copy the URL or pair now">
+  <img src="server/site/img/nfc-pairing.png" width="240" alt="Pair dialog: copy the URL or pair now">
 
 - **Archive**: hide a counter without losing its history; archived counters have no reminders and sit behind an "Archived" chip.
 - **Search, sort and tags**: search labels and tags; sort by most overdue, recently reset or name; filter by tag, each with a stable color.
@@ -46,9 +48,9 @@
 
 ### Web app
 
-![Web app](docs/web.png)
+![Web app](server/site/img/web.png)
 
-Every synced group can also be opened in a browser at the server's address (for example [howlongsince.etrunon.eu](https://howlongsince.etrunon.eu)). The web app does everything the phone does except NFC pairing, reminders and notifications, and the widget. Counters can also live only in the browser ("Ungrouped", kept in its local storage).
+Every synced group can also be opened in a browser at the server's address (for example [howlongsince.etrunon.eu/app](https://howlongsince.etrunon.eu/app/)). The web app does everything the phone does except NFC pairing, reminders and notifications, and the widget. Counters can also live only in the browser ("Ungrouped", kept in its local storage).
 
 It can be installed as an app with its own window and icon:
 - Chrome / Chromium / Edge (any OS): the install icon on the right of the address bar.
@@ -116,7 +118,7 @@ The server also caps how many groups an IP address can create per hour (10 by de
 
 ## Host your own server
 
-The server in `server/` is a small Go program that stores each synced group as one encrypted file and serves the web app. The Docker image is a single binary of about 8 MB. The apps work with any server: when creating a group, choose a custom server instead of the public one, and the share link takes everyone to the server it names.
+The server in `server/` is a small Go program that stores each synced group as one encrypted file, and serves the website at `/` and the web app at `/app/`. The Docker image is a single binary of about 8 MB. The apps work with any server: when creating a group, choose a custom server instead of the public one, and the share link takes everyone to the server it names.
 
 **Requirements**: a machine with Docker, a domain name, and HTTPS with a certificate Android trusts by default (Let's Encrypt, Tailscale, a commercial CA). Self-signed or private-CA certificates installed on the phone are not trusted by the app, and the web app needs https (or localhost) for the browser's crypto.
 
@@ -147,7 +149,7 @@ server {
     add_header Referrer-Policy no-referrer always;
     add_header Content-Security-Policy "default-src 'self'; connect-src 'self' https:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'" always;
 
-    location /s/ {
+    location ~ ^(/app)?/s/ {
         limit_req zone=hls burst=20 nodelay;   # ~30 syncs/min per IP, bursts allowed
         proxy_pass http://127.0.0.1:13387;
     }
@@ -158,7 +160,7 @@ server {
 ```
 With Caddy, the same headers go in a `header` block; rate limiting needs the `caddy-ratelimit` plugin. Keep `connect-src 'self' https:` in the CSP: without it, the web app on this server can't sync groups on another one. The server answers cross-origin requests itself (CORS), so the proxy needs nothing for that. Compression too: the server gzips its responses and accepts gzipped request bodies (`Content-Encoding: gzip`), so leave the proxy's compression off. The apps always send gzip, so they need a server at least as new as they are. `tailscale serve` gives HTTPS but can't add headers or limits, which is fine when only your tailnet can reach it.
 
-Then open `https://hls.example.com` for the web app, or enter that URL in the phone (Groups → tap a group → server URL).
+Then open `https://hls.example.com/app/` for the web app, or enter `https://hls.example.com/app` as the server URL on the phone (Groups → tap a group → custom server).
 
 **Configuration** (environment variables): `TOKEN` (optional: claims groups made before device tokens, and reads `/stats`), `CREATES_PER_IP_HOUR` (default 10), `MAX_GROUPS` (default 10000), `MAX_ADMIN_GROUPS` (default 10, see [Admin limit per device](#admin-limit-per-device); refused with 402), `DATA_DIR` (default `/data`, blobs go in `s/` inside it), `ADDR` (default `:8080`). `compose.yml` maps `HLS_TOKEN` and `HLS_MAX_ADMIN_GROUPS` from `.env` to `TOKEN` and `MAX_ADMIN_GROUPS`. Anyone can create a group, within those caps. The per-IP limits read the last `X-Forwarded-For` address, which the reverse proxy sets. The server drops slow or stuck connections (10 s to send headers, 30 s per request) and writes blobs atomically.
 
@@ -168,8 +170,8 @@ Then open `https://hls.example.com` for the web app, or enter that URL in the ph
 
 ### API
 
-`{id}` is 32 hex characters derived from the group's secret; "device" means the device's token as `Authorization: Bearer`.
-- `GET /` web app, `GET /health` returns `ok`, `GET /limits` returns `{"maxAdminGroups": N}`, `GET /stats` (with `TOKEN`) returns totals: groups, devices, live counters, resets in the last 7 and 30 days.
+Every path below works under `/app` too, which is where the apps send new groups; the root paths stay for groups made before. `{id}` is 32 hex characters derived from the group's secret; "device" means the device's token as `Authorization: Bearer`.
+- `GET /` website, `GET /app/` web app, `GET /health` returns `ok`, `GET /limits` returns `{"maxAdminGroups": N}`, `GET /stats` (with `TOKEN`) returns totals: groups, devices, live counters, resets in the last 7 and 30 days.
 - `GET /s/{id}` (device) returns `{etag, ciphertext}`. `PUT /s/{id}` (device) takes `{ciphertext}` and `If-Match: <etag>`, and answers 409 if someone else wrote first. Without `If-Match` it creates the group: `{ciphertext, deviceId, recovery}`, no token needed, returns `{etag, token}` and the caller is admin.
 - `POST /s/{id}/invite` (admin) returns `{nonce}`, single use, 24 h. `POST /s/{id}/enroll {deviceId, nonce}` makes a member, `{deviceId, recovery}` an admin; both return `{token}`. `POST /s/{id}/promote {recovery}` (device) makes the caller admin. `POST /s/{id}/recovery {recovery}` (admin) changes the password.
 - `GET /s/{id}/devices` (admin) lists `{id, admin, created, lastSeen}`. `POST /s/{id}/revoke {deviceId}` (admin). `POST /s/{id}/leave` (device); the group is deleted when no device is left.
@@ -195,7 +197,7 @@ Bug reports, ideas and pull requests are welcome.
 2. Fork the repository and create a branch from `main`.
 3. Make the change. Keep it small and in the style of the surrounding code: few files, no new dependencies unless really needed.
 4. Run the tests (see below) and try the change on a phone or in the browser.
-5. If the change affects what users see or how the server works, update **both** `README.md` and `README-IT.md` in the same commit: they must always say the same thing. New user-facing text needs both an English and an Italian string (`app/src/main/res/values*/strings.xml`, and the `T` tables in `server/web/app.js`).
+5. If the change affects what users see or how the server works, update **both** `README.md` and `README-IT.md` in the same commit: they must always say the same thing. The same goes for the English and Italian pages of the website (`server/site/` and `server/site/it/`). New user-facing text needs both an English and an Italian string (`app/src/main/res/values*/strings.xml`, and the `T` tables in `server/web/app.js`).
 6. Open a pull request against `main` describing what changed and why, with a screenshot for UI changes.
 
 ### Build and test
@@ -212,7 +214,7 @@ cd server && go test ./...        # server tests (they also run during docker bu
 
 NFC needs a real phone and writable NDEF tags (for example NTAG213/215/216).
 
-**Tech**: Kotlin and Jetpack Compose (Material 3) in a single Activity, Android 8.0 (API 26) or later. **Room** stores `Counter` and `Event` tables; elapsed time is calculated from the latest `Event` and never stored. **WorkManager** runs one delayed reminder job per counter. The **Android NFC API** (NDEF URI records, reader mode while pairing). The built-in `org.json` and `HttpURLConnection` for export, import and sync. The server is Go with no dependencies beyond the standard library; the web app is plain JavaScript with no build step.
+**Tech**: Kotlin and Jetpack Compose (Material 3) in a single Activity, Android 8.0 (API 26) or later. **Room** stores `Counter` and `Event` tables; elapsed time is calculated from the latest `Event` and never stored. **WorkManager** runs one delayed reminder job per counter. The **Android NFC API** (NDEF URI records, reader mode while pairing). The built-in `org.json` and `HttpURLConnection` for export, import and sync. The server is Go with no dependencies beyond the standard library; the web app and the website are plain HTML, CSS and JavaScript with no build step.
 
 ### Code layout
 
@@ -232,10 +234,11 @@ app/src/main/java/eu/etrunon/howlongsince/
   Theme.kt         Dynamic color theme and tag colors
 app/src/test/.../SinceTest.kt  Unit tests (formatting, tags, reminder delay, NFC URI, backup and sync JSON round trips)
 server/
-  main.go          Sync server: encrypted blob store and HTTP handlers
-  main_test.go     Blob store test (runs during docker build)
+  main.go          Sync server: encrypted blob store, HTTP handlers, website and web app
+  main_test.go     Server tests (run during docker build)
   web.test.mjs     Web app logic tests
-  web/             Web app (index.html, style.css, core.js, app.js), built into the server binary
+  web/             Web app (index.html, style.css, core.js, app.js), built into the server binary, served at /app/
+  site/            Website (English at /, Italian in it/, screenshots in img/), served at /
   Dockerfile, compose.yml
 logo.svg           Logo (the app icon and the web favicon are drawn from it)
 ```

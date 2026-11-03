@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contribuire – How Long Since?</title>
+<meta name="description" content="How Long Since? è open source (GPL-3.0). Come compilarlo, eseguire i test e aprire una pull request.">
+<link rel="icon" href="../img/icon.svg">
+<link rel="stylesheet" href="../style.css">
+<link rel="alternate" hreflang="en" href="https://howlongsince.etrunon.eu/contribute.html">
+<link rel="alternate" hreflang="it" href="https://howlongsince.etrunon.eu/it/contribute.html">
+</head>
+<body>
+<header><div class="wrap">
+  <a class="brand" href="./"><img src="../img/icon.svg" alt=""><span>How Long Since?</span></a>
+  <nav>
+    <a class="page" href="features.html">Funzionalità</a>
+    <a class="page" href="privacy.html">Privacy</a>
+    <a class="page" href="groups.html">Gruppi</a>
+    <a class="page" href="self-host.html">Self-host</a>
+    <a class="lang" href="../contribute.html" hreflang="en" onclick="try{localStorage.setItem('lang','en')}catch{}">EN</a>
+    <a class="btn" href="../app/">Apri l'app</a>
+  </nav>
+</div></header>
+
+<main class="wrap doc">
+<h1>Contribuire</h1>
+<p class="lead">How Long Since? è software libero sotto GPL-3.0: puoi usarlo, modificarlo e condividerlo, e le modifiche condivise devono restare sotto GPL. Segnalazioni di bug, idee e pull request sono benvenute su <a href="https://github.com/Etrunon/HowLongSince">GitHub</a>.</p>
+
+<h2>Aprire una pull request</h2>
+<ol>
+  <li>Per qualsiasi cosa più grande di una piccola correzione apri prima una <a href="https://github.com/Etrunon/HowLongSince/issues">issue</a>, così ci mettiamo d'accordo sull'approccio.</li>
+  <li>Fai un fork del repository e crea un branch da <code>main</code>.</li>
+  <li>Fai la modifica. Tienila piccola e nello stile del codice intorno: pochi file, nessuna nuova dipendenza se non davvero necessaria.</li>
+  <li>Esegui i test (vedi sotto) e prova la modifica su un telefono o nel browser.</li>
+  <li>Se la modifica cambia ciò che vedono gli utenti o come funziona il server, aggiorna <strong>entrambi</strong> <code>README.md</code> e <code>README-IT.md</code> nello stesso commit: devono sempre dire la stessa cosa. Lo stesso vale per le pagine inglesi e italiane di questo sito (<code>server/site/</code> e <code>server/site/it/</code>). Ogni nuovo testo visibile all'utente richiede una stringa in inglese e una in italiano (<code>app/src/main/res/values*/strings.xml</code>, e le tabelle <code>T</code> in <code>server/web/app.js</code>).</li>
+  <li>Apri una pull request verso <code>main</code> descrivendo cosa è cambiato e perché, con uno screenshot per le modifiche all'interfaccia.</li>
+</ol>
+
+<h2>Compilazione e test</h2>
+<p>Richiede JDK 21 (Gradle 8.11 non funziona con JDK più recenti) e l'Android SDK. Imposta <code>sdk.dir</code> in <code>local.properties</code>, oppure <code>ANDROID_HOME</code>.</p>
+<pre><code>export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+./gradlew test                    # test unitari Android
+./gradlew installDebug            # compila e installa su un telefono collegato (debug USB attivo)
+node --test server/web.test.mjs   # test della logica della web app
+cd server &amp;&amp; go test ./...        # test del server (girano anche durante il docker build)</code></pre>
+<p>L'NFC richiede un telefono vero e tag NDEF scrivibili (per esempio NTAG213/215/216).</p>
+
+<h2>Tecnologia</h2>
+<ul>
+  <li>Kotlin e Jetpack Compose (Material 3) in una sola Activity, Android 8.0 (API 26) o successivo.</li>
+  <li><strong>Room</strong> salva le tabelle <code>Counter</code> ed <code>Event</code>; il tempo trascorso viene calcolato dall'ultimo <code>Event</code> e mai salvato.</li>
+  <li><strong>WorkManager</strong> esegue un job di promemoria ritardato per ogni contatore.</li>
+  <li>L'<strong>API NFC di Android</strong>: record URI NDEF, reader mode durante l'abbinamento.</li>
+  <li>Le librerie integrate <code>org.json</code> e <code>HttpURLConnection</code> per esportazione, importazione e sincronizzazione.</li>
+  <li>Il server è in Go senza dipendenze oltre la libreria standard; la web app e questo sito sono HTML, CSS e JavaScript semplici, senza build.</li>
+</ul>
+
+<h2>Struttura del codice</h2>
+<pre><code>app/src/main/java/eu/etrunon/howlongsince/
+  Data.kt          Entità Room, query al database, formattazione di tempi e tag
+  MainActivity.kt  Schermata elenco, finestra di modifica, impostazioni, gestione degli intent di notifiche e NFC
+  Detail.kt        Schermata di dettaglio: timeline, grafico degli intervalli, abbinamento NFC
+  Notify.kt        Pianificazione dei promemoria e worker delle notifiche
+  Nfc.kt           Scrittura dei tag e lettura dell'URI di azzeramento
+  Export.kt        Esportazione, importazione e ripristino JSON
+  Sync.kt          Sincronizzazione col server: formato JSON, unione e chiamate HTTP
+  Crypto.kt        Derivazione delle chiavi e cifratura di un gruppo
+  Groups.kt        Schermata Gruppi: crea, rinomina, elimina, sincronizza e condividi
+  Join.kt          Link di condivisione, codice QR e unione a un gruppo
+  Widget.kt        Widget per la schermata Home
+  Theme.kt         Tema a colori dinamici e colori dei tag
+app/src/test/.../SinceTest.kt  Test unitari
+server/
+  main.go          Server di sincronizzazione: archivio di blob cifrati, handler HTTP, sito e web app
+  main_test.go     Test del server (eseguiti durante il docker build)
+  web.test.mjs     Test della logica della web app
+  web/             Web app (index.html, style.css, core.js, app.js), servita su /app/
+  site/            Questo sito (inglese su /, italiano in it/), servito su /
+  Dockerfile, compose.yml</code></pre>
+</main>
+
+<footer><div class="wrap">
+  <span>How Long Since? · GPL-3.0 · <a href="https://github.com/Etrunon/HowLongSince">GitHub</a></span>
+  <span><a href="features.html">Funzionalità</a> · <a href="privacy.html">Privacy</a> · <a href="groups.html">Gruppi</a> · <a href="self-host.html">Self-host</a> · <a href="contribute.html">Contribuire</a> · <a href="../contribute.html" hreflang="en" onclick="try{localStorage.setItem('lang','en')}catch{}">English</a></span>
+</div></footer>
+</body>
+</html>

@@ -189,7 +189,7 @@ private suspend fun call(ctx: Context, g: CounterGroup, method: String, path: St
     return try { withContext(Dispatchers.IO) { http(method, url, keys.getString("d${g.id}", null) ?: "", body = body?.toString()) } } catch (_: IOException) { 0 to "" }
 }
 
-const val DEFAULT_SERVER = "https://howlongsince.etrunon.eu"
+const val DEFAULT_SERVER = "https://howlongsince.etrunon.eu/app"
 
 /** A server this phone syncs with: how many of its groups this phone is admin of, and the server's cap (null if unreachable). */
 data class Limit(val server: String, val admin: Int, val max: Int?)

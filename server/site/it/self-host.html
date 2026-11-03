@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ospitare il tuo server – How Long Since?</title>
+<meta name="description" content="Esegui il tuo server di sincronizzazione How Long Since? con Docker: installazione, reverse proxy con HTTPS, configurazione e API.">
+<link rel="icon" href="../img/icon.svg">
+<link rel="stylesheet" href="../style.css">
+<link rel="alternate" hreflang="en" href="https://howlongsince.etrunon.eu/self-host.html">
+<link rel="alternate" hreflang="it" href="https://howlongsince.etrunon.eu/it/self-host.html">
+</head>
+<body>
+<header><div class="wrap">
+  <a class="brand" href="./"><img src="../img/icon.svg" alt=""><span>How Long Since?</span></a>
+  <nav>
+    <a class="page" href="features.html">Funzionalità</a>
+    <a class="page" href="privacy.html">Privacy</a>
+    <a class="page" href="groups.html">Gruppi</a>
+    <a class="page" href="self-host.html" aria-current="page">Self-host</a>
+    <a class="lang" href="../self-host.html" hreflang="en" onclick="try{localStorage.setItem('lang','en')}catch{}">EN</a>
+    <a class="btn" href="../app/">Apri l'app</a>
+  </nav>
+</div></header>
+
+<main class="wrap doc">
+<h1>Ospitare il tuo server</h1>
+<p class="lead">Il server è un piccolo programma Go che salva ogni gruppo sincronizzato come un file cifrato, e serve questo sito su <code>/</code> e la web app su <code>/app/</code>. L'immagine Docker è un singolo binario di circa 8 MB. Le app funzionano con qualsiasi server: quando crei un gruppo, scegli un server personalizzato invece di quello pubblico, e il link di condivisione porta tutti sul server che indica.</p>
+
+<h2>Requisiti</h2>
+<p>Una macchina con Docker, un nome di dominio, e HTTPS con un certificato di cui Android si fida di default (Let's Encrypt, Tailscale, una CA commerciale). I certificati autofirmati o di una CA privata installati sul telefono non sono accettati dall'app, e la web app richiede https (o localhost) per la crittografia del browser.</p>
+
+<h2>Avvio</h2>
+<pre><code>git clone https://github.com/Etrunon/HowLongSince.git
+cd HowLongSince/server
+echo HLS_TOKEN=$(openssl rand -hex 16) &gt; .env   # facoltativo: per GET /stats e per i gruppi creati prima dei token per dispositivo
+mkdir -p data                                   # deve essere scrivibile dall'uid 1000
+docker compose up -d --build                    # in ascolto su 127.0.0.1:13387</code></pre>
+<p>Metti davanti un reverse proxy con HTTPS. Il server parla solo HTTP semplice; il proxy gestisce il certificato, limita i tentativi di indovinare il token e aggiunge gli header di sicurezza per il browser. nginx fa tutto questo senza plugin:</p>
+<pre><code># nel blocco http {}
+limit_req_zone $binary_remote_addr zone=hls:1m rate=30r/m;
+
+server {
+    listen 443 ssl;
+    server_name hls.example.com;
+    ssl_certificate     /etc/letsencrypt/live/hls.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/hls.example.com/privkey.pem;
+
+    client_max_body_size 10m;                          # il default di nginx (1 MB) è sotto il limite del server
+    proxy_set_header X-Forwarded-For $remote_addr;     # i limiti per IP leggono questo
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy no-referrer always;
+    add_header Content-Security-Policy "default-src 'self'; connect-src 'self' https:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'" always;
+
+    location ~ ^(/app)?/s/ {
+        limit_req zone=hls burst=20 nodelay;   # ~30 sync/min per IP, picchi consentiti
+        proxy_pass http://127.0.0.1:13387;
+    }
+    location / {
+        proxy_pass http://127.0.0.1:13387;
+    }
+}</code></pre>
+<p>Con Caddy, gli stessi header vanno in un blocco <code>header</code>; il rate limiting richiede il plugin <code>caddy-ratelimit</code>. Lascia <code>connect-src 'self' https:</code> nella CSP: senza, la web app su questo server non può sincronizzare gruppi su un altro. Il server risponde da sé alle richieste cross-origin (CORS), quindi il proxy non deve fare nulla per questo. Lo stesso per la compressione: il server comprime le risposte con gzip e accetta corpi delle richieste compressi (<code>Content-Encoding: gzip</code>), quindi lascia spenta la compressione del proxy. Le app inviano sempre gzip, quindi serve un server recente almeno quanto loro. <code>tailscale serve</code> fornisce HTTPS ma non può aggiungere header né limiti, il che va bene quando il server è raggiungibile solo dalla tua tailnet.</p>
+<p>Poi apri <code>https://hls.example.com/app/</code> per la web app, o inserisci <code>https://hls.example.com/app</code> come URL del server sul telefono (Gruppi → tocca un gruppo → server personalizzato).</p>
+
+<h2>Configurazione</h2>
+<p>Variabili d'ambiente:</p>
+<ul>
+  <li><code>TOKEN</code> (facoltativo): rivendica i gruppi creati prima dei token per dispositivo, e legge <code>/stats</code>.</li>
+  <li><code>CREATES_PER_IP_HOUR</code> (predefinito 10), <code>MAX_GROUPS</code> (predefinito 10000).</li>
+  <li><code>MAX_ADMIN_GROUPS</code> (predefinito 10): vedi <a href="groups.html#admin-limit">il limite di amministrazione</a>; rifiutato con 402.</li>
+  <li><code>DATA_DIR</code> (predefinito <code>/data</code>, i blob vanno in <code>s/</code> al suo interno), <code>ADDR</code> (predefinito <code>:8080</code>).</li>
+</ul>
+<p><code>compose.yml</code> collega <code>HLS_TOKEN</code> e <code>HLS_MAX_ADMIN_GROUPS</code> da <code>.env</code> a <code>TOKEN</code> e <code>MAX_ADMIN_GROUPS</code>. Chiunque può creare un gruppo, entro questi limiti. I limiti per IP leggono l'ultimo indirizzo di <code>X-Forwarded-For</code>, che imposta il reverse proxy. Il server chiude le connessioni lente o bloccate (10 s per inviare gli header, 30 s per richiesta) e scrive i blob in modo atomico.</p>
+<p><strong>Backup</strong>: tutto lo stato è la cartella <code>data/</code>. Basta copiarla; contiene solo blob cifrati e hash.</p>
+<p><strong>Aggiornare dal <code>TOKEN</code> condiviso</strong>: lascia <code>TOKEN</code> impostato. Ogni dispositivo ci rivendica il proprio token alla prima sincronizzazione, come membro; il primo che inserisce una password di recupero (web: la chiede; telefono: tocca il gruppo) diventa amministratore, e da lì <code>TOKEN</code> non apre più quel gruppo. Quando tutti i gruppi sono rivendicati, <code>TOKEN</code> serve solo per <code>/stats</code>.</p>
+
+<h2>API</h2>
+<p>Ogni percorso qui sotto funziona anche sotto <code>/app</code>, dove le app mandano i nuovi gruppi; i percorsi alla radice restano per i gruppi creati prima. <code>{id}</code> sono 32 caratteri esadecimali derivati dal segreto del gruppo; "dispositivo" significa il token del dispositivo come <code>Authorization: Bearer</code>.</p>
+<ul>
+  <li><code>GET /health</code> risponde <code>ok</code>, <code>GET /limits</code> restituisce <code>{"maxAdminGroups": N}</code>, <code>GET /stats</code> (con <code>TOKEN</code>) restituisce i totali: gruppi, dispositivi, contatori attivi, azzeramenti negli ultimi 7 e 30 giorni.</li>
+  <li><code>GET /s/{id}</code> (dispositivo) restituisce <code>{etag, ciphertext}</code>. <code>PUT /s/{id}</code> (dispositivo) riceve <code>{ciphertext}</code> e <code>If-Match: &lt;etag&gt;</code>, e risponde 409 se qualcun altro ha scritto prima. Senza <code>If-Match</code> crea il gruppo: <code>{ciphertext, deviceId, recovery}</code>, senza token, restituisce <code>{etag, token}</code> e chi chiama è amministratore.</li>
+  <li><code>POST /s/{id}/invite</code> (amministratore) restituisce <code>{nonce}</code>, monouso, 24 h. <code>POST /s/{id}/enroll {deviceId, nonce}</code> crea un membro, <code>{deviceId, recovery}</code> un amministratore; entrambi restituiscono <code>{token}</code>. <code>POST /s/{id}/promote {recovery}</code> (dispositivo) rende amministratore chi chiama. <code>POST /s/{id}/recovery {recovery}</code> (amministratore) cambia la password.</li>
+  <li><code>GET /s/{id}/devices</code> (amministratore) elenca <code>{id, admin, created, lastSeen}</code>. <code>POST /s/{id}/revoke {deviceId}</code> (amministratore). <code>POST /s/{id}/leave</code> (dispositivo); il gruppo viene eliminato quando non resta nessun dispositivo.</li>
+  <li><code>POST /s/{id}/claim {deviceId}</code> (con <code>TOKEN</code>, solo gruppi senza password di recupero) restituisce un <code>{token}</code> da membro.</li>
+  <li><code>recovery</code> è PBKDF2-HMAC-SHA256 della password, con <code>{id}</code> come sale, 600 000 iterazioni, in base64. Il server salva lo SHA-256 di questo valore e di ogni token, e ammette 5 password errate per gruppo all'ora e 20 errori per IP all'ora.</li>
+</ul>
+<p>Come è fatto il blob cifrato è descritto in <a href="privacy.html#how-sync-works">Privacy → Come funziona la sincronizzazione</a>.</p>
+</main>
+
+<footer><div class="wrap">
+  <span>How Long Since? · GPL-3.0 · <a href="https://github.com/Etrunon/HowLongSince">GitHub</a></span>
+  <span><a href="features.html">Funzionalità</a> · <a href="privacy.html">Privacy</a> · <a href="groups.html">Gruppi</a> · <a href="self-host.html">Self-host</a> · <a href="contribute.html">Contribuire</a> · <a href="../self-host.html" hreflang="en" onclick="try{localStorage.setItem('lang','en')}catch{}">English</a></span>
+</div></footer>
+</body>
+</html>

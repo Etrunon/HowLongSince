@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Funzionalità – How Long Since?</title>
+<meta name="description" content="Tutto quello che fa How Long Since?: contatori, registro degli azzeramenti, promemoria, tag NFC, widget, gruppi, esportazione e web app.">
+<link rel="icon" href="../img/icon.svg">
+<link rel="stylesheet" href="../style.css">
+<link rel="alternate" hreflang="en" href="https://howlongsince.etrunon.eu/features.html">
+<link rel="alternate" hreflang="it" href="https://howlongsince.etrunon.eu/it/features.html">
+</head>
+<body>
+<header><div class="wrap">
+  <a class="brand" href="./"><img src="../img/icon.svg" alt=""><span>How Long Since?</span></a>
+  <nav>
+    <a class="page" href="features.html" aria-current="page">Funzionalità</a>
+    <a class="page" href="privacy.html">Privacy</a>
+    <a class="page" href="groups.html">Gruppi</a>
+    <a class="page" href="self-host.html">Self-host</a>
+    <a class="lang" href="../features.html" hreflang="en" onclick="try{localStorage.setItem('lang','en')}catch{}">EN</a>
+    <a class="btn" href="../app/">Apri l'app</a>
+  </nav>
+</div></header>
+
+<main class="wrap doc">
+<h1>Funzionalità</h1>
+<p class="lead">Ogni cosa che tieni d'occhio è un <strong>contatore</strong>: un'etichetta, alcuni tag e il registro di ogni volta che è stato creato o azzerato. L'app mostra il tempo trascorso dall'ultimo azzeramento e può avvisarti quando un contatore è fermo da troppo.</p>
+
+<h2>Contatori e storico</h2>
+<ul>
+  <li><strong>Contatori</strong>: ognuno ha un'etichetta e dei tag separati da virgole. Le schede mostrano il tempo trascorso con un numero grande e sotto la data dell'ultimo azzeramento.</li>
+  <li><strong>Registro degli azzeramenti</strong>: ogni creazione o azzeramento viene salvato, marcato <code>create</code>, <code>manual</code> o <code>nfc</code>. La pagina di dettaglio di un contatore mostra il registro come una timeline con l'intervallo tra un azzeramento e l'altro, e un piccolo grafico a barre degli intervalli recenti e della loro media.</li>
+  <li><strong>Azzeramento nel passato</strong>: "Reset at…" nella pagina di dettaglio, per quando ti sei dimenticato di registrarlo.</li>
+  <li><strong>Note</strong>: "Reset…" nella pagina di dettaglio accetta una nota opzionale (es. "nuova marca di filtro"), mostrata nella timeline.</li>
+  <li><strong>Annulla</strong>: ogni azzeramento mostra uno snackbar "Undo", e Undo rimuove quella voce dal registro.</li>
+  <li><strong>Archivio</strong>: nasconde un contatore senza perderne la storia; i contatori archiviati non hanno promemoria e stanno dietro il chip "Archived".</li>
+  <li><strong>Ricerca, ordinamento e tag</strong>: cerca tra etichette e tag; ordina per più in ritardo, azzerati di recente o nome; filtra per tag, ognuno con un colore fisso.</li>
+</ul>
+<p><img class="phone" src="../img/app-detail.png" alt="La pagina di dettaglio di un contatore: grafico degli intervalli e timeline degli azzeramenti"></p>
+
+<h2>Promemoria</h2>
+<ul>
+  <li>Imposta facoltativamente "notify after" in ore, giorni o settimane (o minuti in modalità Debug). "Usa la mia media" lo imposta sul tuo intervallo medio tra gli azzeramenti.</li>
+  <li>Un anello attorno al pulsante di azzeramento si riempie man mano che si avvicina il promemoria e diventa rosso quando è scaduto. I contatori in ritardo compaiono per primi.</li>
+  <li>Toccando la notifica si apre la pagina del contatore. I suoi pulsanti azzerano il contatore o rimandano di un giorno.</li>
+</ul>
+
+<h2>Tag NFC</h2>
+<ul>
+  <li>Abbina un tag dalla pagina di dettaglio del contatore. L'app scrive <code>howlongsince://reset/&lt;uuid&gt;</code> (l'id di sincronizzazione del contatore, così il tag funziona su ogni telefono del gruppo) sul tag e ne ricorda l'ID.</li>
+  <li>Toccare il tag azzera il contatore, anche ad app chiusa. I tag non abbinati vengono rifiutati, e Unpair o Re-pair fanno smettere di funzionare un vecchio tag.</li>
+  <li>Oppure "Copy URL" e scrivi il tag con qualsiasi altra app NFC; il primo tocco di quel tag lo abbina.</li>
+  <li>Funziona qualsiasi tag NDEF scrivibile, per esempio gli adesivi NTAG213/215/216.</li>
+</ul>
+<p><img class="phone" src="../img/nfc-pairing.png" alt="Finestra di abbinamento: copia l'URL o abbina ora"></p>
+
+<h2>Su Android</h2>
+<ul>
+  <li><strong>Widget per la schermata Home</strong>: i contatori che più hanno bisogno di un azzeramento, ognuno con il suo pulsante. I tempi si aggiornano a ogni modifica e ogni 30 minuti.</li>
+  <li><strong>Scorciatoie del launcher</strong>: tieni premuta l'icona dell'app per azzerare i 4 contatori che ne hanno più bisogno.</li>
+  <li><strong>Aspetto</strong>: Material 3 con i colori del tuo sfondo (Android 12+) e una barra del titolo grande che si riduce scorrendo. Android 8.0 o successivo.</li>
+  <li><strong>Impostazioni</strong> (menu ☰): tema scuro (segue il sistema finché non lo cambi), modalità Debug (promemoria in minuti).</li>
+  <li><strong>Lingue</strong>: inglese e italiano, secondo la lingua del telefono. Da Android 13 la lingua dell'app si può anche impostare a parte (Impostazioni → App → How Long Since? → Lingua).</li>
+</ul>
+
+<h2>Gruppi e sincronizzazione</h2>
+<p>I contatori si possono mettere in gruppi e condividere con altri telefoni e browser, cifrati end-to-end. Vedi <a href="groups.html">Gruppi</a> e <a href="privacy.html">Privacy</a>.</p>
+
+<h2>Esporta e importa</h2>
+<p>Un file JSON, controllato prima che venga sovrascritto qualcosa. "Sostituisci" scambia i gruppi con lo stesso nome con quelli del file, "Tieni entrambi" li importa come nuovi gruppi. Lo stesso file funziona sul telefono e sul web.</p>
+
+<h2>Web app</h2>
+<p><img class="shot" src="../img/web.png" alt="La web app in un browser desktop"></p>
+<p>Ogni gruppo sincronizzato si può aprire anche in un browser su <a href="../app/">howlongsince.etrunon.eu/app</a> (o sul tuo server). La web app fa tutto quello che fa il telefono tranne l'abbinamento NFC, i promemoria e le notifiche, e il widget. I contatori possono anche vivere solo nel browser ("Senza gruppo", salvati nel suo local storage).</p>
+<p>Si può installare come app, con finestra e icona proprie:</p>
+<ul>
+  <li>Chrome / Chromium / Edge (qualsiasi OS): l'icona di installazione a destra della barra degli indirizzi.</li>
+  <li>Firefox su Windows (143+): l'icona "aggiungi alla barra delle applicazioni" nella barra degli indirizzi. Se manca, imposta <code>browser.taskbarTabs.enabled</code> a <code>true</code> in <code>about:config</code>.</li>
+  <li>Firefox su Android: menu → "Aggiungi a schermata Home".</li>
+  <li>Firefox su Linux: nessuna opzione di installazione; usa una scheda fissata o Chromium.</li>
+</ul>
+<p>La web app tiene chiavi e token nel <code>localStorage</code> del browser: cancellare i dati del sito li perde, insieme ai contatori Senza gruppo. "Copia link" salva un gruppo; Esporta salva i Senza gruppo.</p>
+</main>
+
+<footer><div class="wrap">
+  <span>How Long Since? · GPL-3.0 · <a href="https://github.com/Etrunon/HowLongSince">GitHub</a></span>
+  <span><a href="features.html">Funzionalità</a> · <a href="privacy.html">Privacy</a> · <a href="groups.html">Gruppi</a> · <a href="self-host.html">Self-host</a> · <a href="contribute.html">Contribuire</a> · <a href="../features.html" hreflang="en" onclick="try{localStorage.setItem('lang','en')}catch{}">English</a></span>
+</div></footer>
+</body>
+</html>

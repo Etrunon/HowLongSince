@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contribute – How Long Since?</title>
+<meta name="description" content="How Long Since? is open source (GPL-3.0). How to build it, run the tests and open a pull request.">
+<link rel="icon" href="img/icon.svg">
+<link rel="stylesheet" href="style.css">
+<link rel="alternate" hreflang="en" href="https://howlongsince.etrunon.eu/contribute.html">
+<link rel="alternate" hreflang="it" href="https://howlongsince.etrunon.eu/it/contribute.html">
+</head>
+<body>
+<header><div class="wrap">
+  <a class="brand" href="./"><img src="img/icon.svg" alt=""><span>How Long Since?</span></a>
+  <nav>
+    <a class="page" href="features.html">Features</a>
+    <a class="page" href="privacy.html">Privacy</a>
+    <a class="page" href="groups.html">Groups</a>
+    <a class="page" href="self-host.html">Self-host</a>
+    <a class="lang" href="it/contribute.html" hreflang="it" onclick="try{localStorage.setItem('lang','it')}catch{}">IT</a>
+    <a class="btn" href="app/">Open app</a>
+  </nav>
+</div></header>
+
+<main class="wrap doc">
+<h1>Contribute</h1>
+<p class="lead">How Long Since? is free software under the GPL-3.0: you can use, change and share it, and shared changes must stay under the GPL. Bug reports, ideas and pull requests are welcome on <a href="https://github.com/Etrunon/HowLongSince">GitHub</a>.</p>
+
+<h2>Opening a pull request</h2>
+<ol>
+  <li>Open an <a href="https://github.com/Etrunon/HowLongSince/issues">issue</a> first for anything bigger than a small fix, so we can agree on the approach.</li>
+  <li>Fork the repository and create a branch from <code>main</code>.</li>
+  <li>Make the change. Keep it small and in the style of the surrounding code: few files, no new dependencies unless really needed.</li>
+  <li>Run the tests (see below) and try the change on a phone or in the browser.</li>
+  <li>If the change affects what users see or how the server works, update <strong>both</strong> <code>README.md</code> and <code>README-IT.md</code> in the same commit: they must always say the same thing. The same goes for the English and Italian pages of this website (<code>server/site/</code> and <code>server/site/it/</code>). New user-facing text needs both an English and an Italian string (<code>app/src/main/res/values*/strings.xml</code>, and the <code>T</code> tables in <code>server/web/app.js</code>).</li>
+  <li>Open a pull request against <code>main</code> describing what changed and why, with a screenshot for UI changes.</li>
+</ol>
+
+<h2>Build and test</h2>
+<p>Requires JDK 21 (Gradle 8.11 does not run on newer JDKs) and the Android SDK. Set <code>sdk.dir</code> in <code>local.properties</code>, or set <code>ANDROID_HOME</code>.</p>
+<pre><code>export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+./gradlew test                    # Android unit tests
+./gradlew installDebug            # build and install on a connected phone (USB debugging on)
+node --test server/web.test.mjs   # web app logic tests
+cd server &amp;&amp; go test ./...        # server tests (they also run during docker build)</code></pre>
+<p>NFC needs a real phone and writable NDEF tags (for example NTAG213/215/216).</p>
+
+<h2>Tech</h2>
+<ul>
+  <li>Kotlin and Jetpack Compose (Material 3) in a single Activity, Android 8.0 (API 26) or later.</li>
+  <li><strong>Room</strong> stores <code>Counter</code> and <code>Event</code> tables; elapsed time is calculated from the latest <code>Event</code> and never stored.</li>
+  <li><strong>WorkManager</strong> runs one delayed reminder job per counter.</li>
+  <li>The <strong>Android NFC API</strong>: NDEF URI records, reader mode while pairing.</li>
+  <li>The built-in <code>org.json</code> and <code>HttpURLConnection</code> for export, import and sync.</li>
+  <li>The server is Go with no dependencies beyond the standard library; the web app and this website are plain HTML, CSS and JavaScript with no build step.</li>
+</ul>
+
+<h2>Code layout</h2>
+<pre><code>app/src/main/java/eu/etrunon/howlongsince/
+  Data.kt          Room entities, database queries, time and tag formatting helpers
+  MainActivity.kt  List screen, edit dialog, settings, handling of notification and NFC intents
+  Detail.kt        Detail screen: timeline, interval chart, NFC pairing
+  Notify.kt        Reminder scheduling and the notification worker
+  Nfc.kt           Tag writing and reading of the reset URI
+  Export.kt        JSON export, import and restore
+  Sync.kt          Sync with the server: JSON format, merge and the HTTP calls
+  Crypto.kt        Key derivation and encryption of a group
+  Groups.kt        Groups screen: create, rename, delete, sync and share
+  Join.kt          Share link, QR code and joining a group
+  Widget.kt        Home-screen widget
+  Theme.kt         Dynamic color theme and tag colors
+app/src/test/.../SinceTest.kt  Unit tests
+server/
+  main.go          Sync server: encrypted blob store, HTTP handlers, website and web app
+  main_test.go     Server tests (run during docker build)
+  web.test.mjs     Web app logic tests
+  web/             Web app (index.html, style.css, core.js, app.js), served at /app/
+  site/            This website (English at /, Italian in it/), served at /
+  Dockerfile, compose.yml</code></pre>
+</main>
+
+<footer><div class="wrap">
+  <span>How Long Since? · GPL-3.0 · <a href="https://github.com/Etrunon/HowLongSince">GitHub</a></span>
+  <span><a href="features.html">Features</a> · <a href="privacy.html">Privacy</a> · <a href="groups.html">Groups</a> · <a href="self-host.html">Self-host</a> · <a href="contribute.html">Contribute</a> · <a href="it/contribute.html" hreflang="it" onclick="try{localStorage.setItem('lang','it')}catch{}">Italiano</a></span>
+</div></footer>
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Long Since? – track when you last did anything</title>
+<meta name="description" content="Free, open-source app for Android and the web that tracks how long it has been since you last watered the plants, changed the toothbrush or called grandma. Reminders, NFC tags, shared groups, end-to-end encrypted.">
+<link rel="icon" href="img/icon.svg">
+<link rel="stylesheet" href="style.css">
+<link rel="alternate" hreflang="en" href="https://howlongsince.etrunon.eu/">
+<link rel="alternate" hreflang="it" href="https://howlongsince.etrunon.eu/it/">
+<link rel="alternate" hreflang="x-default" href="https://howlongsince.etrunon.eu/">
+<meta property="og:title" content="How Long Since? – track when you last did anything">
+<meta property="og:description" content="One tap when you do it, and the app counts the days. Free, open source, end-to-end encrypted.">
+<meta property="og:image" content="https://howlongsince.etrunon.eu/img/app-list.png">
+<script>
+// Old share links (/#k=…) and web apps installed before /app go to the app; an Italian browser or choice goes to /it/.
+try {
+  if (location.hash.includes('k=') || matchMedia('(display-mode: standalone)').matches) location.replace('app/' + location.hash);
+  else { const l = localStorage.getItem('lang'); if (l === 'it' || (!l && /^it/i.test(navigator.language))) location.replace('it/'); }
+} catch {}
+</script>
+</head>
+<body>
+<header><div class="wrap">
+  <a class="brand" href="./"><img src="img/icon.svg" alt=""><span>How Long Since?</span></a>
+  <nav>
+    <a class="page" href="features.html">Features</a>
+    <a class="page" href="privacy.html">Privacy</a>
+    <a class="page" href="groups.html">Groups</a>
+    <a class="page" href="self-host.html">Self-host</a>
+    <a class="lang" href="it/" hreflang="it" onclick="try{localStorage.setItem('lang','it')}catch{}">IT</a>
+    <a class="btn" href="app/">Open app</a>
+  </nav>
+</div></header>
+
+<main>
+<div class="wrap hero">
+  <div>
+    <h1>How long since you last <em>…watered the plants?</em></h1>
+    <p>A free, open-source app for Android and the web that tracks when you last did anything: changed the toothbrush, cleaned the coffee machine, had a haircut, called grandma. Tap once when you do it, and it counts the days for you.</p>
+    <div class="ctas">
+      <a class="btn" href="app/">Open the web app</a>
+      <a class="btn ghost" href="https://github.com/Etrunon/HowLongSince">Android app on GitHub</a>
+    </div>
+  </div>
+  <div class="phones">
+    <img src="img/app-list.png" alt="List of counters, each showing the days since the last time">
+    <img src="img/app-detail.png" alt="A counter's history with intervals and average">
+  </div>
+</div>
+
+<section><div class="wrap">
+  <h2>Simple, on purpose</h2>
+  <p class="lead">One card for each thing you want to keep track of. Nothing else to learn.</p>
+  <div class="grid">
+    <div class="card"><span class="ico">⏱️</span><h3>Days since, at a glance</h3><p>Each card shows "12 days" since the last time, and the most overdue come first.</p></div>
+    <div class="card"><span class="ico">🔔</span><h3>Reminders</h3><p>Get a notification when something has gone too long, or let the app use your own average.</p></div>
+    <div class="card"><span class="ico">📶</span><h3>NFC tags</h3><p>Stick a tag on the plant pot or the filter and tap it with your phone to log it, even with the app closed.</p></div>
+    <div class="card"><span class="ico">📈</span><h3>History and stats</h3><p>Every time is logged, with notes, the gaps between them and your average interval.</p></div>
+    <div class="card"><span class="ico">👨‍👩‍👧</span><h3>Shared with your people</h3><p>Put counters in a group and share it with family or flatmates, on phones and in any browser.</p></div>
+    <div class="card"><span class="ico">🔒</span><h3>Private by design</h3><p>Synced groups are end-to-end encrypted. No ads, no account, no tracking.</p></div>
+  </div>
+  <p><a class="more" href="features.html">All features →</a></p>
+</div></section>
+
+<section class="band"><div class="wrap split">
+  <div>
+    <h2>Your counters stay yours</h2>
+    <p>When you share a group, your phone encrypts it before it leaves. The server stores a blob it can't read, and can't change it without your apps noticing.</p>
+    <ul class="check no">
+      <li>The server never sees labels, tags, notes or names</li>
+      <li>Nor which person logged each reset</li>
+    </ul>
+    <p><a class="more" href="privacy.html">What the server can and can't see →</a></p>
+  </div>
+  <div>
+    <h2>Groups for the whole household</h2>
+    <p>Create a group, share a link or a QR code, and everyone sees the same counters. Whoever watered the plants, everyone knows.</p>
+    <ul class="check">
+      <li>Single-use invites, valid for 24 hours</li>
+      <li>Admins can see and revoke devices</li>
+      <li>A recovery password brings everything back</li>
+    </ul>
+    <p><a class="more" href="groups.html">How groups work →</a></p>
+  </div>
+</div></section>
+
+<section><div class="wrap split">
+  <img class="shot" src="img/web.png" alt="The web app in a desktop browser">
+  <div>
+    <h2>On your phone and in your browser</h2>
+    <p>The Android app has reminders, NFC tags, a home-screen widget and launcher shortcuts. The web app does the rest in any browser, and can be installed with its own window and icon.</p>
+    <p><a class="btn" href="app/">Open the web app</a></p>
+  </div>
+</div></section>
+
+<section class="band"><div class="wrap split">
+  <div>
+    <h2>Host your own server</h2>
+    <p>The whole server is one small program of about 8 MB that runs in Docker. Point the apps at it, and your groups never touch anyone else's machine.</p>
+    <p><a class="more" href="self-host.html">Self-hosting guide →</a></p>
+  </div>
+  <div>
+    <h2>Free and open source</h2>
+    <p>How Long Since? is GPL-3.0. Read the code, report a bug, or send a pull request.</p>
+    <p><a class="more" href="contribute.html">How to contribute →</a></p>
+  </div>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+  <span>How Long Since? · GPL-3.0 · <a href="https://github.com/Etrunon/HowLongSince">GitHub</a></span>
+  <span><a href="features.html">Features</a> · <a href="privacy.html">Privacy</a> · <a href="groups.html">Groups</a> · <a href="self-host.html">Self-host</a> · <a href="contribute.html">Contribute</a> · <a href="it/" hreflang="it" onclick="try{localStorage.setItem('lang','it')}catch{}">Italiano</a></span>
+</div></footer>
+</body>
+</html>

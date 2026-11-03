@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Groups – How Long Since?</title>
+<meta name="description" content="Share counters with family or flatmates: groups, invites, admins and members, the recovery password, and the admin limit per device.">
+<link rel="icon" href="img/icon.svg">
+<link rel="stylesheet" href="style.css">
+<link rel="alternate" hreflang="en" href="https://howlongsince.etrunon.eu/groups.html">
+<link rel="alternate" hreflang="it" href="https://howlongsince.etrunon.eu/it/groups.html">
+</head>
+<body>
+<header><div class="wrap">
+  <a class="brand" href="./"><img src="img/icon.svg" alt=""><span>How Long Since?</span></a>
+  <nav>
+    <a class="page" href="features.html">Features</a>
+    <a class="page" href="privacy.html">Privacy</a>
+    <a class="page" href="groups.html" aria-current="page">Groups</a>
+    <a class="page" href="self-host.html">Self-host</a>
+    <a class="lang" href="it/groups.html" hreflang="it" onclick="try{localStorage.setItem('lang','it')}catch{}">IT</a>
+    <a class="btn" href="app/">Open app</a>
+  </nav>
+</div></header>
+
+<main class="wrap doc">
+<h1>Groups</h1>
+<p class="lead">A <strong>group</strong> is a set of counters that is synced, or not, on its own. The home screen shows one foldable section per group; the ☰ menu opens a single group. Counters without a group stay on the device.</p>
+
+<h2>How they work</h2>
+<ul>
+  <li><strong>Create and sync</strong>: ☰ → Groups → tap a group, enter a server URL (the public one is offered by default) and a recovery password, and turn sync on. That device becomes the group's <strong>admin</strong>.</li>
+  <li><strong>Share</strong>: on a synced group, the share icon gives an admin a link and a QR code. They hold the server address, the group's key and a single-use invite valid for 24 hours. On another phone, open Groups → Join and paste the link, or simply open it (or scan the QR code with the camera): it opens the app or the web app.</li>
+  <li><strong>Members</strong>: whoever joins with an invite is a <strong>member</strong>. Members see and edit all the group's counters and sync normally, but can't invite or revoke.</li>
+  <li><strong>Admins</strong> see the group's devices and can revoke any of them. A revoked device stops syncing but keeps what it already has; to cut someone off completely, make a new group and move the counters into it.</li>
+  <li><strong>Recovery password</strong>: together with the group link, it joins a new device as an admin, even if every other device is lost. A member who knows it becomes admin by entering it. Keep the link (a member's Share shows it without an invite) and the password somewhere safe: anyone who has both is an admin, and the password can't be reset. A forgotten password with no admin device left means nobody can invite or revoke again; members still sync, and the way back is a new group.</li>
+  <li><strong>Moving counters</strong>: a counter's edit dialog moves it to another group; or long-press a counter to select several, then tap the arrow. A moved counter disappears from the old group for everyone, and its NFC tag keeps working.</li>
+  <li><strong>Deleting a group</strong> asks whether its counters on this device move to "Ungrouped" or are deleted. Leaving a group removes this device; the group is deleted from the server when no device is left.</li>
+</ul>
+
+<h2>Good to know</h2>
+<ul>
+  <li>Resets are never lost, even when two phones reset at the same moment. Two resets of the same counter in the same second count as one.</li>
+  <li>Edits are whole-counter: the most recent edit replaces label, tags and reminder together, so if two people change different fields at almost the same time, one change is lost. "Most recent" uses each phone's clock.</li>
+  <li>Reminders fire on every phone that has the counter, and a tag paired on one phone works on all of them.</li>
+  <li>The app syncs when it opens, shortly after every change, and every 15 minutes in the background. The web app syncs every 15 minutes and when its tab comes back into view.</li>
+</ul>
+
+<h2 id="admin-limit">Admin limit per device</h2>
+<p>To keep a shared server fair, each device can be <strong>admin of at most 10 groups per server</strong> (a self-hosted server can change this with <code>MAX_ADMIN_GROUPS</code>). A device becomes admin by creating a group or by entering a group's recovery password, and both count. Joining as a member with an invite doesn't count: a device can be a member of any number of groups.</p>
+<ul>
+  <li>The limit is per device and per server: a phone and a browser are separate devices, and groups on another server have their own limit.</li>
+  <li>The ☰ menu (app) and the sidebar (web) show "Admin of X / N groups" for each server.</li>
+  <li>When the limit is reached, creating a group or becoming admin is refused with "You are already admin of as many groups as this server allows". Leave or delete a group you administer to make room.</li>
+</ul>
+<p>The server also caps how many groups an IP address can create per hour (10 by default) and the total number of groups (10 000 by default), and deletes groups that haven't synced for a year (half a year if they have fewer than 3 counters).</p>
+</main>
+
+<footer><div class="wrap">
+  <span>How Long Since? · GPL-3.0 · <a href="https://github.com/Etrunon/HowLongSince">GitHub</a></span>
+  <span><a href="features.html">Features</a> · <a href="privacy.html">Privacy</a> · <a href="groups.html">Groups</a> · <a href="self-host.html">Self-host</a> · <a href="contribute.html">Contribute</a> · <a href="it/groups.html" hreflang="it" onclick="try{localStorage.setItem('lang','it')}catch{}">Italiano</a></span>
+</div></footer>
+</body>
+</html>

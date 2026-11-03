@@ -30,7 +30,7 @@ import (
 	"time"
 )
 
-//go:embed web
+//go:embed web site
 var web embed.FS
 
 const manifest = `{"name":"How Long Since?","short_name":"How Long Since","start_url":".","display":"standalone",
@@ -448,6 +448,19 @@ func seen(bl *blob, c caller) bool {
 	return save
 }
 
+// handler serves the website at /, and the web app with its API under /app/. The API also stays at the root, for groups and apps made before /app.
+func (s *server) handler() http.Handler {
+	app := s.routes()
+	site, _ := fs.Sub(web, "site")
+	top := http.NewServeMux()
+	top.Handle("/app/", http.StripPrefix("/app", app))
+	for _, p := range []string{"/s/", "/health", "/limits", "/stats"} {
+		top.Handle(p, app)
+	}
+	top.Handle("/", http.FileServerFS(site))
+	return top
+}
+
 func (s *server) routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	static := func(path, typ string, body []byte) {
@@ -709,7 +722,7 @@ func main() {
 	}()
 	addr := env("ADDR", ":8080")
 	log.Printf("listening on %s, data %s", addr, dir)
-	srv := &http.Server{Addr: addr, Handler: cors(gz(s.routes())), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second,
+	srv := &http.Server{Addr: addr, Handler: cors(gz(s.handler())), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second,
 		WriteTimeout: 30 * time.Second, IdleTimeout: 2 * time.Minute} // drop slow or stuck clients
 	log.Fatal(srv.ListenAndServe())
 }
