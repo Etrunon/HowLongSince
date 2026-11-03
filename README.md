@@ -149,7 +149,7 @@ server {
     }
 }
 ```
-With Caddy, the same headers go in a `header` block; rate limiting needs the `caddy-ratelimit` plugin. `tailscale serve` gives HTTPS but can't add headers or limits, which is fine when only your tailnet can reach it.
+With Caddy, the same headers go in a `header` block; rate limiting needs the `caddy-ratelimit` plugin. Keep `connect-src 'self' https:` in the CSP: without it, the web app on this server can't sync groups on another one. The server answers cross-origin requests itself (CORS), so the proxy needs nothing for that. `tailscale serve` gives HTTPS but can't add headers or limits, which is fine when only your tailnet can reach it.
 
 The Android app needs an `https://` URL with a certificate that Android trusts by default (Let's Encrypt, Tailscale, a commercial CA). Self-signed or private-CA certificates installed on the phone are not trusted by the app.
 
@@ -163,10 +163,10 @@ Then:
 - **Phone**: Groups → tap a group → enter the URL and a recovery password → Turn on sync.
 - **Upgrading from the shared `TOKEN`**: keep `TOKEN` set. Each device claims its own token with it on the first sync, as a member; the first one to enter a recovery password (web: it asks; phone: tap the group) becomes admin, and from then on `TOKEN` no longer opens that group. Once every group is claimed, `TOKEN` is only needed for `/stats`.
 
-**Configuration** (environment variables): `TOKEN` (optional: claims groups made before device tokens, and reads `/stats`), `CREATES_PER_IP_HOUR` (default 10), `MAX_GROUPS` (default 10000), `MAX_ADMIN_GROUPS` (default 10: groups one device may be admin of, by creating one or with a recovery password; refused with 402), `DATA_DIR` (default `/data`, blobs go in `s/` inside it), `ADDR` (default `:8080`). `compose.yml` maps `HLS_TOKEN` from `.env` to `TOKEN`. Anyone can create a group, within those caps. The per-IP limits read the last `X-Forwarded-For` address, which the reverse proxy sets. Once a day the server deletes groups not synced for a year, or for half a year with fewer than 3 counters.
+**Configuration** (environment variables): `TOKEN` (optional: claims groups made before device tokens, and reads `/stats`), `CREATES_PER_IP_HOUR` (default 10), `MAX_GROUPS` (default 10000), `MAX_ADMIN_GROUPS` (default 10: groups one device may be admin of, by creating one or with a recovery password; refused with 402), `DATA_DIR` (default `/data`, blobs go in `s/` inside it), `ADDR` (default `:8080`). `compose.yml` maps `HLS_TOKEN` and `HLS_MAX_ADMIN_GROUPS` from `.env` to `TOKEN` and `MAX_ADMIN_GROUPS`. Anyone can create a group, within those caps. The per-IP limits read the last `X-Forwarded-For` address, which the reverse proxy sets. Once a day the server deletes groups not synced for a year, or for half a year with fewer than 3 counters.
 
 **API** (`{id}` is 32 hex characters derived from the group's secret; "device" means the device's token as `Authorization: Bearer`):
-- `GET /` web app, `GET /health` returns `ok`, `GET /stats` (with `TOKEN`) returns totals: groups, devices, live counters, resets in the last 7 and 30 days.
+- `GET /` web app, `GET /health` returns `ok`, `GET /limits` returns `{"maxAdminGroups": N}` (the apps show "Admin of X / N"), `GET /stats` (with `TOKEN`) returns totals: groups, devices, live counters, resets in the last 7 and 30 days.
 - `GET /s/{id}` (device) returns `{etag, ciphertext}`. `PUT /s/{id}` (device) takes `{ciphertext}` and `If-Match: <etag>`, and answers 409 if someone else wrote first. Without `If-Match` it creates the group: `{ciphertext, deviceId, recovery}`, no token needed, returns `{etag, token}` and the caller is admin.
 - `POST /s/{id}/invite` (admin) returns `{nonce}`, single use, 24 h. `POST /s/{id}/enroll {deviceId, nonce}` makes a member, `{deviceId, recovery}` an admin; both return `{token}`. `POST /s/{id}/promote {recovery}` (device) makes the caller admin. `POST /s/{id}/recovery {recovery}` (admin) changes the password.
 - `GET /s/{id}/devices` (admin) lists `{id, admin, created, lastSeen}`. `POST /s/{id}/revoke {deviceId}` (admin). `POST /s/{id}/leave` (device); the group is deleted when no device is left.
