@@ -153,6 +153,35 @@ class WebCryptoTest {
     }
 }
 
+class DocV2Test {
+    private val k = keysOf("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8")
+    private val c = listOf(Counter(1, "Water plants", tags = "garden", uid = "c1", updatedAt = 5))
+    private val e = listOf(Event(1, 1, 5, "manual", uid = "e1", note = "new filter", deviceId = "d1"))
+    private val plain = stateJson(c, e, "Família", 7, listOf(Device("d1", "Pixel 9", 1)))
+
+    @Test fun roundTripHidesText() {
+        val blob = sealDoc(k, plain)
+        assertEquals(plain, openDoc(k, blob))
+        val text = blob.decodeToString()
+        for (secret in listOf("Water plants", "garden", "new filter", "Pixel 9", "Família")) assertEquals(secret, false, text.contains(secret))
+        assertEquals(true, text.contains("updatedAt"))
+    }
+
+    @Test fun readsV1() = assertEquals(plain, openDoc(k, seal(k, plain.toByteArray())))
+
+    @Test fun tamperFails() {
+        val env = org.json.JSONObject(sealDoc(k, plain).decodeToString())
+        val bad = env.put("doc", env.getString("doc").replace("\"at\":5", "\"at\":6")).toString().toByteArray()
+        assertEquals(true, runCatching { openDoc(k, bad) }.isFailure)
+    }
+
+    @Test fun opensWhatTheWebAppSealed() { // server/web.test.mjs seals the same state
+        val r = parseState(openDoc(k, java.util.Base64.getDecoder().decode("eyJ2IjoyLCJkb2MiOiJ7XCJuYW1lXCI6XCJSVm9CRGM4WHdWUEdieTAxeU0yS3FWbjFXVWUzRUhwNWRrS256NDRCcFE1VG9PRXRcIixcIm5hbWVVcGRhdGVkQXRcIjo3LFwiY291bnRlcnNcIjpbe1wiaWRcIjpcImMxXCIsXCJsYWJlbFwiOlwiVVdERzgyQi82bncwOE5MckkwaVlFQWVyZjFVeitUSHFxZEdOMVZEZklrYnpcIixcInRhZ3NcIjpcInRIcE5tMDNYZXVVMlpGNHR1YmVtOFVOWk9Xd3hucTJIM3Z2QXJBYzRJRTQ9XCIsXCJub3RpZnlBZnRlck1zXCI6bnVsbCxcIm5mY1RhZ0lkXCI6bnVsbCxcInVwZGF0ZWRBdFwiOjUsXCJkZWxldGVkXCI6ZmFsc2UsXCJhcmNoaXZlZFwiOmZhbHNlfV0sXCJldmVudHNcIjpbe1wiaWRcIjpcImUxXCIsXCJjb3VudGVySWRcIjpcImMxXCIsXCJhdFwiOjUsXCJzb3VyY2VcIjpcIm1hbnVhbFwiLFwiZGVsZXRlZFwiOmZhbHNlLFwibm90ZVwiOlwiRm5aS2lTSW1QLzluZGRZckM0dXg5Z2VwbXp0Qi9meVFROXNYbWEvRFwiLFwiZGV2aWNlSWRcIjpcIjRwMXJyanJtaVpGZlBpWFlhVlBBL3NDRjQzazlpN0QzamIwczVOT0VcIn1dLFwiZGV2aWNlc1wiOlt7XCJpZFwiOlwiZDFcIixcIm5hbWVcIjpcIjhiQ3ZSNzVYQ2VHdlpMNU9hdWVpeld2VEJNL3R4Vi9ZMzNtODdnbzZEWDFhXCIsXCJ1cGRhdGVkQXRcIjoxfV19IiwibWFjIjoiZVNsc043SmlqRDdDYzVKM0pSSzhGT0k4VnpTeU4zRm40V080R0owYlI0VCtQNlUwSnJOQXlzWkpucWFzY0k4NG41VnJpQnU1eE9ZTzIva3MifQ==")))
+        assertEquals(listOf("Família", "Water", "home", "hi", "d1", "Pixel"),
+            listOf(r.name, r.counters[0].label, r.counters[0].tags, r.events[0].second.note, r.events[0].second.deviceId, r.devices[0].name))
+    }
+}
+
 class WebBackupTest {
     // The same text as FIXTURE in server/web.test.mjs: a file in the phone's format, which the web app must read too.
     private val phoneFile = """{"version":1,"exportedAt":"2026-11-03T10:00:00Z","counters":[

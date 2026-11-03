@@ -6,7 +6,7 @@ Agreed 2026-11-03, not started. Groups, encrypted sync, sharing and the web app 
 
 The server never sees a text a user typed (names, labels, tags, notes, NFC ids) or which device made which change. It may see counter metadata: how many counters, when they were reset, reminder intervals. Server access moves from the instance-wide `TOKEN` (it rides in share links, is one per server and can't be revoked) to per-device tokens with single-use invites.
 
-## Phase 0: blob format v2
+## Phase 0: blob format v2 (done)
 
 - One key per group, from the existing HKDF secret. Clients read v1 and v2, and write v2 (a `v` field). This ships first, so migration happens once.
 - **Encrypted per field** (AES-GCM, random nonce, associated data = group id + record uid + field name): group name, counter `label`, `tags`, `nfcTagId`, event `note` and `deviceId`, device name.

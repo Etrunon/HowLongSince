@@ -104,7 +104,7 @@ private suspend fun syncGroup(ctx: Context, dao: CounterDao, g: CounterGroup, se
         val (code, text) = withContext(Dispatchers.IO) { http("GET", url, token) }
         var etag: String? = null; var remote: String? = null
         when (code) {
-            200 -> JSONObject(text).let { etag = it.getString("etag"); remote = open(k, Base64.getDecoder().decode(it.getString("ciphertext"))).decodeToString() }
+            200 -> JSONObject(text).let { etag = it.getString("etag"); remote = openDoc(k, Base64.getDecoder().decode(it.getString("ciphertext"))) }
             404 -> {} // not uploaded yet
             else -> throw httpError(code)
         }
@@ -123,7 +123,7 @@ private suspend fun syncGroup(ctx: Context, dao: CounterDao, g: CounterGroup, se
         val kept = parsed?.counters.orEmpty().filter { r -> r.deleted && r.updatedAt >= cutoff && mine.none { it.uid == r.uid } }.map { it.copy(id = -1) }
         val out = stateJson(mine + moved + kept, dao.rawEvents(), me.name, me.nameUpdatedAt, dao.allDevices())
         if (out == remote) return // nothing new to say
-        val body = JSONObject().put("ciphertext", Base64.getEncoder().encodeToString(seal(k, out.toByteArray()))).toString()
+        val body = JSONObject().put("ciphertext", Base64.getEncoder().encodeToString(sealDoc(k, out))).toString()
         when (val c = withContext(Dispatchers.IO) { http("PUT", url, token, etag, body).first }) {
             200 -> return
             409 -> {}
@@ -138,7 +138,7 @@ suspend fun peekGroup(j: Join): Remote? {
     val k = keysOf(j.secret)
     val (code, text) = withContext(Dispatchers.IO) { http("GET", "${j.url}/s/${k.id}", j.token) }
     return when (code) {
-        200 -> parseState(open(k, Base64.getDecoder().decode(JSONObject(text).getString("ciphertext"))).decodeToString())
+        200 -> parseState(openDoc(k, Base64.getDecoder().decode(JSONObject(text).getString("ciphertext"))))
         404 -> null
         else -> throw httpError(code)
     }

@@ -200,12 +200,48 @@ let groups = []; try { groups = JSON.parse(localStorage.getItem('groups') || '[]
 const saveGroups = () => localStorage.setItem('groups', JSON.stringify(groups));
 const base = location.origin + location.pathname.replace(/[^/]*$/, '').replace(/\/$/, ''); // this server, also under a sub-path
 
+// <core> Pure logic (no page, no network): tests load this part, see web.test.mjs.
 const b64u = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
 const b64 = u => { let s = ''; for (const b of u) s += String.fromCharCode(b); return btoa(s); };
 const hex = u => [...u].map(b => b.toString(16).padStart(2, '0')).join('');
 const validSecret = s => { try { return b64u(s).length === 32; } catch { return false; } };
 
-// <core> Pure logic (no page, no network): tests load this part, see web.test.mjs.
+// Same scheme as the app (Crypto.kt): HKDF-SHA256 with a zero salt makes the server-side id and the AES-256-GCM key; the id is also the authenticated data.
+const enc = new TextEncoder(), dec = new TextDecoder();
+async function deriveKeys(secret) {
+  const ikm = await crypto.subtle.importKey('raw', b64u(secret), 'HKDF', false, ['deriveBits']);
+  const bits = (info, n) => crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(32), info: enc.encode(info) }, ikm, n);
+  return { id: hex(new Uint8Array(await bits('hls id', 128))), key: await crypto.subtle.importKey('raw', await bits('hls key', 256), 'AES-GCM', false, ['encrypt', 'decrypt']) };
+}
+async function sealBytes(k, bytes, ad = enc.encode(k.id)) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  return Uint8Array.from([...iv, ...new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: ad }, k.key, bytes))]);
+}
+const openBytes = async (k, blob, ad = enc.encode(k.id)) => new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: blob.slice(0, 12), additionalData: ad }, k.key, blob.slice(12)));
+// Format v2: typed text is sealed per field (authenticated with group id, record uid and field), the rest stays readable for the server's stats.
+// The envelope is {v: 2, doc: '<json>', mac}; the mac seals SHA-256 of the exact doc bytes, so nobody without the key can edit anything.
+const SEALED = { counters: ['label', 'tags', 'nfcTagId'], events: ['note', 'deviceId'], devices: ['name'] };
+const fieldAd = (k, uid, field) => enc.encode(`${k.id}\0${uid}\0${field}`);
+const sha256 = async b => new Uint8Array(await crypto.subtle.digest('SHA-256', b));
+async function mapFields(k, state, f) {
+  const o = structuredClone(state), jobs = [];
+  if (o.name != null) jobs.push(f(o.name, fieldAd(k, '', 'name')).then(v => o.name = v));
+  for (const [list, fields] of Object.entries(SEALED)) for (const r of o[list] ?? []) for (const fl of fields)
+    if (r[fl] != null) jobs.push(f(r[fl], fieldAd(k, r.id, fl)).then(v => r[fl] = v));
+  await Promise.all(jobs);
+  return o;
+}
+async function seal(k, state) {
+  const doc = JSON.stringify(await mapFields(k, state, async (v, ad) => b64(await sealBytes(k, enc.encode(v), ad))));
+  return enc.encode(JSON.stringify({ v: 2, doc, mac: b64(await sealBytes(k, await sha256(enc.encode(doc)))) }));
+}
+/** A v1 or v2 blob to the group state; throws an OperationError if anything was altered. */
+async function unseal(k, blob) {
+  let env; try { env = JSON.parse(dec.decode(blob)); } catch {}
+  if (env?.v !== 2) return JSON.parse(dec.decode(await openBytes(k, blob)));
+  if (b64(await openBytes(k, b64u(env.mac))) !== b64(await sha256(enc.encode(env.doc)))) throw new DOMException('tampered', 'OperationError');
+  return mapFields(k, JSON.parse(env.doc), async (v, ad) => dec.decode(await openBytes(k, b64u(v), ad)));
+}
 const UNITS = [['minutes', 6e4], ['hours', 36e5], ['days', 864e5], ['weeks', 6048e5]];
 /** Like the phone: minutes only in debug mode, or if this counter already uses them (else it couldn't be shown). */
 const unitsFor = (ms, debug) => debug || (ms ?? 0) % 36e5 !== 0 ? UNITS : UNITS.slice(1);
@@ -292,19 +328,6 @@ function planImport(items, replace, groupNames, fallbackName = 'Imported') {
 // </core>
 
 
-// Same scheme as the app (Crypto.kt): HKDF-SHA256 with a zero salt makes the server-side id and the AES-256-GCM key; the id is also the authenticated data.
-async function deriveKeys(secret) {
-  const ikm = await crypto.subtle.importKey('raw', b64u(secret), 'HKDF', false, ['deriveBits']);
-  const bits = (info, n) => crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(32), info: new TextEncoder().encode(info) }, ikm, n);
-  return { id: hex(new Uint8Array(await bits('hls id', 128))), key: await crypto.subtle.importKey('raw', await bits('hls key', 256), 'AES-GCM', false, ['encrypt', 'decrypt']) };
-}
-const aad = k => new TextEncoder().encode(k.id);
-const unseal = async (k, blob) => JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: blob.slice(0, 12), additionalData: aad(k) }, k.key, blob.slice(12))));
-async function seal(k, obj) {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: aad(k) }, k.key, new TextEncoder().encode(JSON.stringify(obj))));
-  return Uint8Array.from([...iv, ...ct]);
-}
 
 const emptyState = () => ({ name: null, nameUpdatedAt: 0, counters: [], events: [], devices: [] });
 // Who logs resets: a random id made once per browser (no registration) and an editable name; the name travels in each group's blob, so a rename reaches old events.
