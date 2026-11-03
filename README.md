@@ -112,7 +112,7 @@ NFC needs a real phone and writable NDEF tags (for example NTAG213/215/216).
 - **Counters**: add (the + button at the bottom right, like the phone's, opens a form for label, tags, group and reminder), reset (now, with a note, or at a past time), undo, archive and delete. Opening one shows the reset log, the interval chart and a form for its label, tags, group and "notify after" reminder (the reminder itself fires on the phone). A paired NFC tag can be unpaired, but pairing needs the phone. Search, tag filter and sort work inside each section. The times update every minute.
 - **Export and import** use the phone's JSON file, so a file moves between the phone and the web: Replace swaps the groups of the same name for the file's, Keep both imports them as new groups.
 - **Settings** in the sidebar: a dark theme switch (follows the system until you use it), a debug switch that allows minutes in "notify after", and the language (English or Italian, following the browser).
-- **Not on the web**: NFC pairing, reminders and notifications, the widget, and groups that live on a different server than the page.
+- **Not on the web**: NFC pairing, reminders and notifications, and the widget. Groups can live on any server: New group offers the default server (howlongsince.etrunon.eu) or a custom one, and a link joins the group on the server it names.
 
 **Run it**
 ```bash
@@ -132,10 +132,13 @@ server {
     ssl_certificate     /etc/letsencrypt/live/hls.example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/hls.example.com/privkey.pem;
 
+    client_max_body_size 10m;                          # nginx's default 1 MB is below the server's cap
+    proxy_set_header X-Forwarded-For $remote_addr;     # the per-IP limits read this
+
     add_header Strict-Transport-Security "max-age=31536000" always;
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy no-referrer always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'" always;
+    add_header Content-Security-Policy "default-src 'self'; connect-src 'self' https:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'" always;
 
     location /s/ {
         limit_req zone=hls burst=20 nodelay;   # ~30 syncs/min per IP, bursts allowed
@@ -160,7 +163,7 @@ Then:
 - **Phone**: Groups → tap a group → enter the URL and a recovery password → Turn on sync.
 - **Upgrading from the shared `TOKEN`**: keep `TOKEN` set. Each device claims its own token with it on the first sync, as a member; the first one to enter a recovery password (web: it asks; phone: tap the group) becomes admin, and from then on `TOKEN` no longer opens that group. Once every group is claimed, `TOKEN` is only needed for `/stats`.
 
-**Configuration** (environment variables): `TOKEN` (optional: claims groups made before device tokens, and reads `/stats`), `CREATES_PER_IP_HOUR` (default 10), `MAX_GROUPS` (default 10000), `DATA_DIR` (default `/data`, blobs go in `s/` inside it), `ADDR` (default `:8080`). `compose.yml` maps `HLS_TOKEN` from `.env` to `TOKEN`. Anyone can create a group, within those caps. The per-IP limits read the last `X-Forwarded-For` address, which the reverse proxy sets. Once a day the server deletes groups not synced for a year, or for half a year with fewer than 3 counters.
+**Configuration** (environment variables): `TOKEN` (optional: claims groups made before device tokens, and reads `/stats`), `CREATES_PER_IP_HOUR` (default 10), `MAX_GROUPS` (default 10000), `MAX_ADMIN_GROUPS` (default 10: groups one device may be admin of, by creating one or with a recovery password; refused with 402), `DATA_DIR` (default `/data`, blobs go in `s/` inside it), `ADDR` (default `:8080`). `compose.yml` maps `HLS_TOKEN` from `.env` to `TOKEN`. Anyone can create a group, within those caps. The per-IP limits read the last `X-Forwarded-For` address, which the reverse proxy sets. Once a day the server deletes groups not synced for a year, or for half a year with fewer than 3 counters.
 
 **API** (`{id}` is 32 hex characters derived from the group's secret; "device" means the device's token as `Authorization: Bearer`):
 - `GET /` web app, `GET /health` returns `ok`, `GET /stats` (with `TOKEN`) returns totals: groups, devices, live counters, resets in the last 7 and 30 days.

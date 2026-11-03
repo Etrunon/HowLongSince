@@ -17,6 +17,7 @@
   <button class="nav" id="addgroup" data-icon="login"><span data-i18n="join_group">Join a group</span></button>
   <button class="nav" id="newgroup" data-icon="newfolder"><span data-i18n="new_group">New group</span></button>
   <button class="nav" id="opensettings" data-icon="gear"><span data-i18n="settings">Settings</span></button>
+  <p id="adminof" class="muted"></p>
 </aside>
 <div id="scrim"></div>
 
@@ -106,6 +107,19 @@
       <button type="button" class="text" id="jcancel" data-i18n="cancel">Cancel</button>
       <button class="text" id="jgo"></button>
     </div>
+  </form>
+</dialog>
+
+<dialog id="newdlg">
+  <form method="dialog" id="nform">
+    <h2 data-i18n="new_group">New group</h2>
+    <input id="nname" data-i18n-ph="group_name">
+    <label class="radio"><input type="radio" name="srv" value="default" checked><span id="ndefault"></span></label>
+    <label class="radio"><input type="radio" name="srv" value="custom"><span data-i18n="custom_server">Custom server</span></label>
+    <input id="nurl" type="text" inputmode="url" placeholder="https://your-server.example" hidden>
+    <p id="npwtext" class="muted"></p>
+    <input id="npw" type="password" minlength="6" required data-i18n-ph="password" autocomplete="new-password">
+    <div class="actions"><button class="text" value="cancel" formnovalidate data-i18n="cancel">Cancel</button><button class="text" value="ok" data-i18n="save">Save</button></div>
   </form>
 </dialog>
 

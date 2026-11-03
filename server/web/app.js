@@ -16,7 +16,9 @@ const T = {
     no_data: 'Nothing found for this link on this server', decrypt_failed: 'Can\'t decrypt: wrong key?', needs_https: 'This page needs https to decrypt (or localhost).', busy: 'Busy, try again',
     all_groups: 'All', ungrouped: 'Ungrouped', synced: 'Synced %s', group: 'Group', move_title: 'Move out of a synced group?', move_text: 'The counter will be removed for everyone else in the group it leaves.',
     new_group: 'New group', group_name: 'Group name', name: 'Name', join: 'Join', join_group: 'Join a group', join_on: 'Join a group on %s?', password: 'Recovery password',
-    already_joined: 'Already joined as «%s»', other_server: 'That link is for %s. Open it on that server\'s page.', share: 'Share', copy_link: 'Copy link', link_copied: 'Copied', close: 'Close',
+    already_joined: 'Already joined as «%s»', share: 'Share', copy_link: 'Copy link', link_copied: 'Copied', close: 'Close',
+    check_limits: 'Check my limits', default_server: 'Default server %s', custom_server: 'Custom server',
+    admin_of: 'Admin of', admin_count: '%s / %s groups', admin_limit: 'You are already admin of %s groups, the maximum',
     new_: 'New', settings: 'Settings', group_settings: 'Group settings', back: 'Back', edit: 'Edit', language: 'Language', menu: 'Menu', dark_theme: 'Dark theme', debug_mode: 'Debug mode',
     debug_hint: 'Allow "notify after" in minutes', device_name: 'Device name', device_name_hint: 'Shown next to the resets you log, on every device in a synced group',
     export_data: 'Export', import_data: 'Import', replace: 'Replace', keep_both: 'Keep both', cancel: 'Cancel', imported_name: 'Imported', cant_read: 'Can\'t read file: %s', done_imported: 'Imported %s counters',
@@ -44,7 +46,9 @@ const T = {
     no_data: 'Niente trovato per questo link su questo server', decrypt_failed: 'Impossibile decifrare: chiave sbagliata?', needs_https: 'Questa pagina richiede https per decifrare (o localhost).', busy: 'Occupato, riprova',
     all_groups: 'Tutti', ungrouped: 'Senza gruppo', synced: 'Sincronizzato alle %s', group: 'Gruppo', move_title: 'Spostare da un gruppo sincronizzato?', move_text: 'Il contatore verrà rimosso per tutti gli altri nel gruppo che lascia.',
     new_group: 'Nuovo gruppo', group_name: 'Nome del gruppo', name: 'Nome', join: 'Unisciti', join_group: 'Unisciti a un gruppo', join_on: 'Unirti a un gruppo su %s?', password: 'Password di recupero',
-    already_joined: 'Già unito come «%s»', other_server: 'Quel link è per %s. Aprilo sulla pagina di quel server.', share: 'Condividi', copy_link: 'Copia link', link_copied: 'Copiato', close: 'Chiudi',
+    already_joined: 'Già unito come «%s»', share: 'Condividi', copy_link: 'Copia link', link_copied: 'Copiato', close: 'Chiudi',
+    check_limits: 'Controlla i miei limiti', default_server: 'Server predefinito %s', custom_server: 'Server personalizzato',
+    admin_of: 'Amministratore di', admin_count: '%s / %s gruppi', admin_limit: 'Sei già amministratore di %s gruppi, il massimo',
     new_: 'Nuovo', settings: 'Impostazioni', group_settings: 'Impostazioni gruppo', back: 'Indietro', edit: 'Modifica', language: 'Lingua', menu: 'Menu', dark_theme: 'Tema scuro', debug_mode: 'Modalità debug',
     debug_hint: 'Consenti "avvisa dopo" in minuti', device_name: 'Nome del dispositivo', device_name_hint: 'Mostrato accanto agli azzeramenti che registri, su ogni dispositivo di un gruppo sincronizzato',
     export_data: 'Esporta', import_data: 'Importa', replace: 'Sostituisci', keep_both: 'Tieni entrambi', cancel: 'Annulla', imported_name: 'Importati', cant_read: 'Impossibile leggere il file: %s', done_imported: 'Importati %s contatori',
@@ -100,9 +104,9 @@ function toast(text, action, fn) {
   el.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => el.hidden = true, action ? 8000 : 5000);
 }
 /** Resolves to the typed text (input), true (no input) or null (cancelled). */
-function ask(text, { input, value = '', ok = t('ok'), danger } = {}) {
+function ask(text, { input, value = '', ok = t('ok'), danger, info } = {}) {
   const d = $('#ask'), i = $('#askinput');
-  $('#asktext').textContent = text;
+  $('#asktext').textContent = text; $('#askcancel').hidden = !!info; // info: just a message to close
   i.hidden = !input; i.type = input || 'text'; i.value = value;
   $('#askok').textContent = ok; $('#askok').classList.toggle('danger', !!danger);
   d.returnValue = ''; d.showModal(); if (input) { i.focus(); i.select(); }
@@ -116,7 +120,21 @@ const base = location.origin + location.pathname.replace(/[^/]*$/, '').replace(/
 
 const emptyState = () => ({ name: null, nameUpdatedAt: 0, counters: [], events: [], devices: [] });
 // Who logs resets: a random id made once per browser (no registration) and an editable name; the name travels in each group's blob, so a rename reaches old events.
-const deviceId = localStorage.getItem('device') || (id => (localStorage.setItem('device', id), id))(crypto.randomUUID());
+const DEFAULT_SERVER = 'https://howlongsince.etrunon.eu';
+const withScheme = s => (/^https?:\/\//i.test(s) ? s : 'https://' + s).replace(/\/+$/, ''); // "host:port" alone would parse as a scheme
+const srv = g => g.server ? withScheme(g.server) : base; // groups from before servers per group live on this page's server
+const host = s => s.replace(/^https?:\/\//, '');
+// Each server's MAX_ADMIN_GROUPS, from its GET /limits: '…' while asking, '?' if it can't be reached.
+const limits = new Map();
+function limitOf(s) {
+  if (!limits.has(s)) {
+    limits.set(s, '…');
+    fetch(`${s}/limits`).then(r => r.json()).then(j => limits.set(s, j.maxAdminGroups)).catch(() => limits.set(s, '?')).then(fillGroups);
+  }
+  return limits.get(s);
+}
+const adminLine = s => t('admin_count', groups.filter(g => g.admin && srv(g) === s).length, limitOf(s));
+const deviceId =localStorage.getItem('device') || (id => (localStorage.setItem('device', id), id))(crypto.randomUUID());
 let deviceName = localStorage.getItem('deviceName') || 'Web', deviceNameAt = +localStorage.getItem('deviceNameAt') || 0;
 const myDevice = () => ({ id: deviceId, name: deviceName, updatedAt: deviceNameAt });
 const nameOfDevice = id => id && (id === deviceId ? deviceName : [...stores.values()].flatMap(s => s.state.devices ?? []).find(d => d.id === id)?.name) || '';
@@ -132,7 +150,7 @@ const groupOf = k => groups.find(g => g.secret === k);
 let view = 'all'; // what the list shows: 'all', '' (Ungrouped) or a group's secret
 // Each group has this browser's own device token (g.device); g.admin says whether it may invite and revoke.
 const headers = g => g.device ? { Authorization: 'Bearer ' + g.device } : {};
-const api = async (g, path, body) => fetch(`${base}/s/${(await deriveKeys(g.secret)).id}/${path}`,
+const api = async (g, path, body) => fetch(`${srv(g)}/s/${(await deriveKeys(g.secret)).id}/${path}`,
   { method: body ? 'POST' : 'GET', headers: headers(g), ...(body && { body: JSON.stringify(body) }) });
 const stretchFor = async (g, pw) => stretch(pw, (await deriveKeys(g.secret)).id);
 
@@ -140,7 +158,7 @@ const stretchFor = async (g, pw) => stretch(pw, (await deriveKeys(g.secret)).id)
 async function claim(g) {
   const legacy = g.token || localStorage.getItem('token');
   if (!legacy) return false;
-  const r = await fetch(`${base}/s/${(await deriveKeys(g.secret)).id}/claim`,
+  const r = await fetch(`${srv(g)}/s/${(await deriveKeys(g.secret)).id}/claim`,
     { method: 'POST', headers: { Authorization: 'Bearer ' + legacy }, body: JSON.stringify({ deviceId }) });
   if (!r.ok) return false;
   g.device = (await r.json()).token; g.admin = false; delete g.token; saveGroups();
@@ -152,12 +170,12 @@ async function claim(g) {
 async function setRecovery(g, pw) {
   if (pw.length < 6) return toast(t('pw_short'));
   const r = await api(g, 'recovery', { recovery: await stretchFor(g, pw) });
-  if (!r.ok) return toast(t('sync_failed', await r.text()));
+  if (!r.ok) return toast(r.status === 402 ? t('admin_limit', limitOf(srv(g))) : t('sync_failed', await r.text()));
   g.admin = true; saveGroups(); render(); return true;
 }
 async function promote(g, pw) {
   const r = await api(g, 'promote', { recovery: await stretchFor(g, pw) });
-  if (!r.ok) return toast(t('wrong_password'));
+  if (!r.ok) return toast(r.status === 402 ? t('admin_limit', limitOf(srv(g))) : t('wrong_password'));
   g.admin = true; saveGroups(); render(); return true;
 }
 /** Enrolls this browser in [g] with an invite nonce (member) or the recovery password (admin); throws a readable message. */
@@ -165,6 +183,7 @@ async function enroll(g, nonce, pw) {
   const r = await api(g, 'enroll', { deviceId, ...(nonce ? { nonce } : { recovery: await stretchFor(g, pw) }) });
   if (r.status === 404) throw new Error(t('no_data'));
   if (r.status === 401 || r.status === 429) throw new Error(nonce ? t('need_invite') : t('wrong_password'));
+  if (r.status === 402) throw new Error(t('admin_limit', limitOf(srv(g))));
   if (!r.ok) throw new Error(t('sync_failed', await r.text()));
   g.device = (await r.json()).token; g.admin = !nonce;
 }
@@ -179,7 +198,7 @@ async function pull(k) {
   let r;
   try {
     if (!g.device && !g.fresh && !await claim(g)) return bad(t('need_invite'));
-    r = await fetch(`${base}/s/${s.keys.id}`, { headers: headers(g) });
+    r = await fetch(`${srv(g)}/s/${s.keys.id}`, { headers: headers(g) });
   } catch { return bad(t('unreachable')); }
   if (r.status === 401) return bad(t('no_access'));
   if (r.status === 404) {
@@ -210,7 +229,7 @@ async function run(k, change) {
     const g = groupOf(k);
     if (!has && !g.fresh) return render();
     const next = merge(s.state, change), mine = s.etag;
-    const r = await fetch(`${base}/s/${s.keys.id}`, { method: 'PUT', headers: { ...headers(g), ...(mine && { 'If-Match': mine }) },
+    const r = await fetch(`${srv(g)}/s/${s.keys.id}`, { method: 'PUT', headers: { ...headers(g), ...(mine && { 'If-Match': mine }) },
       body: JSON.stringify({ ciphertext: b64(await seal(s.keys, next)), ...(!mine && { deviceId, recovery: g.recovery }) }) });
     if (r.ok) {
       const j = await r.json();
@@ -219,14 +238,14 @@ async function run(k, change) {
       if (g.fresh) { delete g.fresh; saveGroups(); }
       return render();
     }
-    if (r.status !== 409) { s.status = t('sync_failed', await r.text()); s.failed = true; return render(); }
+    if (r.status !== 409) { s.status = r.status === 402 ? t('admin_limit', limitOf(srv(g))) : t('sync_failed', await r.text()); s.failed = true; return render(); }
   }
   s.status = t('busy'); s.failed = true; render();
 }
 const syncAll = () => Promise.all(['', ...groups.map(g => g.secret)].map(k => commit(k)));
 
-const shareLink = (g, nonce) => `${base}/#k=${g.secret}${nonce ? '&n=' + nonce : ''}`;
-const appLink = (secret, nonce) => `howlongsince://join?h=${encodeURIComponent(base)}#k=${secret}${nonce ? '&n=' + nonce : ''}`;
+const shareLink = (g, nonce) => `${srv(g)}/#k=${g.secret}${nonce ? '&n=' + nonce : ''}`;
+const appLink = (g, nonce) => `howlongsince://join?h=${encodeURIComponent(srv(g))}#k=${g.secret}${nonce ? '&n=' + nonce : ''}`;
 const newSecret = () => b64(crypto.getRandomValues(new Uint8Array(32))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 /** A fresh single-use invite (admins only), or null. */
 const invite = async g => { const r = await api(g, 'invite', {}).catch(() => null); if (r?.status === 403) { g.admin = false; saveGroups(); } return r?.ok ? (await r.json()).nonce : null; };
@@ -246,6 +265,12 @@ function fillGroups() {
   $('#title').textContent = view === 'all' ? 'How Long Since?' : cut(view === '' ? t('ungrouped') : g?.name || '…');
   $('#gearhead').hidden = !g;
   $('#sharehead').hidden = !g?.device;
+  const ss = servers();
+  $('#adminof').innerHTML = ss.length === 1 ? `${esc(t('admin_of'))}<br>${esc(adminLine(ss[0]))}` : `<button class="text" id="limitsbtn">${esc(t('check_limits'))}</button>`;
+}
+const servers = () => groups.length ? [...new Set(groups.map(srv))].sort() : [DEFAULT_SERVER];
+$('#adminof').onclick = e => {
+  if (e.target.closest('#limitsbtn')) ask(servers().map(s => `${host(s)}\n${t('admin_of')} ${adminLine(s)}`).join('\n\n'), { ok: t('close'), info: true });
 }
 
 /* ---------- Joining, new groups, sharing ---------- */
@@ -254,7 +279,7 @@ function fillGroups() {
 function checkLink(link) {
   const p = parseLink(link);
   if (!p) return toast(t('bad_link')), null;
-  if (p.server && p.server !== base) return toast(t('other_server', p.server)), null;
+  p.server ||= base; // a bare k=... is for this page's server
   const known = groupOf(p.secret);
   if (known) { view = p.secret; render(); return toast(t('already_joined', known.name || '…')), null; }
   if (!crypto.subtle) return toast(t('needs_https')), null;
@@ -264,7 +289,7 @@ let joining = null; // the parsed link of step 2
 function openJoin(p = null) {
   joining = p;
   $('#jlink').hidden = !!p; $('#jlink').value = ''; $('#jlink').required = !p;
-  $('#jtext').hidden = !p; $('#jtext').textContent = p ? t('join_on', new URL(base).host) : '';
+  $('#jtext').hidden = !p; $('#jtext').textContent = p ? t('join_on', host(p.server)) : '';
   const needPw = p && !p.nonce && !p.token; // no invite: the recovery password makes this browser an admin
   $('#jpw').hidden = !needPw; $('#jpw').required = !!needPw; $('#jpw').value = '';
   $('#japp').hidden = !p?.nonce;
@@ -275,7 +300,7 @@ function openJoin(p = null) {
 $('#jform').onsubmit = async e => {
   e.preventDefault();
   if (!joining) { const p = checkLink($('#jlink').value); return p ? openJoin(p) : $('#joindlg').close(); }
-  const p = joining, g = { secret: p.secret, name: '' };
+  const p = joining, g = { secret: p.secret, name: '', server: p.server };
   $('#joindlg').close();
   try {
     if (p.token && !p.nonce) { g.token = p.token; if (!await claim(g)) return toast(t('need_invite')); }
@@ -283,24 +308,37 @@ $('#jform').onsubmit = async e => {
     groups.push(g); view = g.secret; saveGroups(); render(); commit(g.secret);
   } catch (e) { toast(e instanceof TypeError ? t('unreachable') : e.message); }
 };
-$('#japp').onclick = () => { $('#joindlg').close(); location.href = appLink(joining.secret, joining.nonce); }; // the invite works once: app or browser
+$('#japp').onclick = () => { $('#joindlg').close(); location.href = appLink(joining, joining.nonce); }; // the invite works once: app or browser
 $('#jcancel').onclick = () => $('#joindlg').close();
 
+/** Asks a new group's server and recovery password, and its name unless [name] is given: { name, server, pw } or null. */
+function askNewGroup(name) {
+  const d = $('#newdlg'), n = $('#nname'), url = $('#nurl');
+  n.hidden = !!name; n.required = !name; n.value = name || '';
+  const pwText = () => $('#npwtext').textContent = t('recovery_new', name || n.value || '…');
+  n.oninput = pwText; pwText();
+  $('#ndefault').textContent = t('default_server', host(DEFAULT_SERVER));
+  d.querySelector('[value=default]').checked = true; url.hidden = true; url.required = false; url.value = base; // custom starts as this page's server
+  $('#nform').onchange = e => { if (e.target.name === 'srv') url.hidden = !(url.required = e.target.value === 'custom'); };
+  $('#npw').value = ''; d.returnValue = ''; d.showModal(); (name ? $('#npw') : n).focus();
+  return new Promise(res => d.onclose = () => res(d.returnValue !== 'ok' ? null : {
+    name: name || n.value.trim(), pw: $('#npw').value,
+    server: url.required ? withScheme(url.value.trim()) : DEFAULT_SERVER,
+  }));
+}
 /** A new group: a random key and a recovery password made here; the first blob is uploaded (and this browser enrolled as admin) as soon as the server answers. */
 async function makeGroup(name) {
-  const pw = await ask(t('recovery_new', name), { input: 'password' });
-  if (!pw) return null;
-  if (pw.length < 6) { toast(t('pw_short')); return null; }
+  const a = await askNewGroup(name);
+  if (!a?.name) return null;
   const secret = newSecret();
-  const g = { secret, name, nameUpdatedAt: Date.now(), fresh: true, recovery: await stretch(pw, (await deriveKeys(secret)).id) };
+  const g = { secret, name: name || uniqueName(a.name, groups.map(g => g.name)), server: a.server, nameUpdatedAt: Date.now(), fresh: true,
+    recovery: await stretch(a.pw, (await deriveKeys(secret)).id) };
   groups.push(g); saveGroups();
   return g;
 }
 async function newGroup() {
-  const name = (await ask(t('group_name'), { input: 'text', ok: t('save') }))?.trim();
-  if (!name) return;
   if (!crypto.subtle) return toast(t('needs_https'));
-  const g = await makeGroup(uniqueName(name, groups.map(g => g.name)));
+  const g = await makeGroup();
   if (!g) return;
   view = g.secret; render(); commit(g.secret);
 }
@@ -612,7 +650,7 @@ function renderGset() {
   $('#gbody').innerHTML = `
     <form class="row" id="gname"><label class="field"><span>${t('name')}</span><input name="name" value="${esc(g.name || '')}" required></label><button>${t('save')}</button></form>
     <h3 class="sh">${t('sync')}</h3>
-    <p class="muted">${esc(t('server', base))}</p>
+    <p class="muted">${esc(t('server', srv(g)))}</p>
     <p id="gstatus" class="${s.failed ? 'bad' : 'muted'}">${esc(s.status)}</p>
     ${g.admin ? `<h3 class="sh">${t('devices')}</h3><div id="gdev"></div>` : ''}
     <form class="row" id="gpw"><label class="field"><span>${t(pwLabel)}</span><input name="pw" type="password" minlength="6" autocomplete="new-password" required></label><button hidden>${t('save')}</button></form>
@@ -639,7 +677,7 @@ $('#gbody').onsubmit = async e => {
 $('#gbody').onclick = async e => {
   const g = groupOf(gsetId), b = e.target.closest('button'); if (!b) return;
   if (b.id === 'gsync') { await commit(g.secret); renderGset(); }
-  if (b.id === 'gapp') location.href = appLink(g.secret, g.admin ? await invite(g) : null); // admins hand the app a fresh invite; members open it with the key only
+  if (b.id === 'gapp') location.href = appLink(g, g.admin ? await invite(g) : null); // admins hand the app a fresh invite; members open it with the key only
   if (b.id === 'gforget') {
     if (await ask(t('forget_backup'), { input: 'text', value: shareLink(g), ok: t('forget'), danger: true }) === null) return; // a text box, so the link can be copied
     if (g.device) api(g, 'leave', {}).catch(() => {}); // the server deletes the group once no device is left

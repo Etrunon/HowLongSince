@@ -2,7 +2,7 @@
 // Each group has its own devices, each with a random token: admins invite, revoke and list; members sync and leave.
 // A recovery password (stretched on the client, only its hash stored) enrolls or promotes an admin. See PLAN.md.
 // Config (env): DATA_DIR (default /data), ADDR (default :8080), TOKEN (optional: legacy groups and /stats),
-// CREATES_PER_IP_HOUR (default 10), MAX_GROUPS (default 10000).
+// CREATES_PER_IP_HOUR (default 10), MAX_GROUPS (default 10000), MAX_ADMIN_GROUPS (default 10, per device).
 package main
 
 import (
@@ -256,9 +256,30 @@ func countGroups(dir string) int {
 }
 
 type server struct {
-	dir, token          string
-	createsPerIP, maxGr int
-	lim                 limits
+	dir, token                    string
+	createsPerIP, maxGr, maxAdmin int
+	lim                           limits
+}
+
+// canAdmin says whether device dev may become admin of group id: at most maxAdmin groups each (id itself doesn't count).
+// ponytail: reads every group file, fine for the rare admin grant; an index once groups move to a database.
+func (s *server) canAdmin(dev, id string) error {
+	files, _ := os.ReadDir(filepath.Join(s.dir, "s"))
+	n := 0
+	for _, f := range files {
+		if f.Name() == id || !idRe.MatchString(f.Name()) {
+			continue
+		}
+		if bl, err := readBlob(s.dir, f.Name()); err == nil {
+			if d := bl.member(dev); d != nil && d.Admin {
+				n++
+			}
+		}
+	}
+	if n >= s.maxAdmin {
+		return errAdminLimit
+	}
+	return nil
 }
 
 type httpErr struct {
@@ -275,6 +296,8 @@ var (
 	errConflict  = httpErr{409, "conflict"}
 	errBusy      = httpErr{429, "too many attempts, try again later"}
 	errBadBody   = httpErr{400, "bad body"}
+	// 402: a cap that a paid plan could lift, and a status the clients can tell apart from a wrong password
+	errAdminLimit = httpErr{402, "admin group limit reached"}
 )
 
 // req is what a group request carries in its JSON body (each endpoint reads the fields it needs).
@@ -410,6 +433,10 @@ func (s *server) routes() *http.ServeMux {
 	mux.Handle("GET /", http.FileServerFS(site))
 	static("/manifest.webmanifest", "application/manifest+json", []byte(manifest))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
+	mux.HandleFunc("GET /limits", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]int{"maxAdminGroups": s.maxAdmin})
+	})
 	mux.HandleFunc("GET /stats", func(w http.ResponseWriter, r *http.Request) {
 		if s.token == "" || !same(bearer(r), s.token) {
 			http.Error(w, errAuth.msg, 401)
@@ -437,6 +464,9 @@ func (s *server) routes() *http.ServeMux {
 		if bl.Ciphertext == nil { // create: open to anyone, within the caps
 			if !devRe.MatchString(in.DeviceID) || in.Recovery == "" {
 				return nil, false, errBadBody
+			}
+			if err := s.canAdmin(in.DeviceID, id); err != nil {
+				return nil, false, err
 			}
 			if s.lim.count("create "+clientIP(r), 1) > s.createsPerIP || countGroups(s.dir) >= s.maxGr {
 				return nil, false, errBusy
@@ -472,6 +502,9 @@ func (s *server) routes() *http.ServeMux {
 			if err := s.checkRecovery(r, id, bl, in.Recovery); err != nil {
 				return nil, false, err
 			}
+			if err := s.canAdmin(in.DeviceID, id); err != nil {
+				return nil, false, err
+			}
 			return map[string]string{"token": bl.enroll(in.DeviceID, true)}, true, nil
 		}
 		h := hash(in.Nonce)
@@ -491,6 +524,9 @@ func (s *server) routes() *http.ServeMux {
 		if err := s.checkRecovery(r, id, bl, in.Recovery); err != nil {
 			return nil, false, err
 		}
+		if err := s.canAdmin(c.dev.ID, id); err != nil {
+			return nil, false, err
+		}
 		c.dev.Admin = true
 		return nil, true, nil
 	})
@@ -505,6 +541,11 @@ func (s *server) routes() *http.ServeMux {
 		}
 		if in.Recovery == "" {
 			return nil, false, errBadBody
+		}
+		if !c.dev.Admin { // claiming a legacy group; an admin changing the password keeps what it has
+			if err := s.canAdmin(c.dev.ID, id); err != nil {
+				return nil, false, err
+			}
 		}
 		bl.Recovery, c.dev.Admin = hash(in.Recovery), true
 		return nil, true, nil
@@ -557,9 +598,26 @@ func (s *server) routes() *http.ServeMux {
 	return mux
 }
 
+// cors lets a web app served by another server sync here. Any origin is fine: requests carry a bearer token, never cookies.
+func cors(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		if r.Method == http.MethodOptions {
+			w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, If-Match")
+			w.Header().Set("Access-Control-Max-Age", "86400")
+			w.Header().Set("Access-Control-Allow-Private-Network", "true") // a public page syncing with a tailnet or LAN server
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	dir := env("DATA_DIR", "/data")
-	s := &server{dir: dir, token: os.Getenv("TOKEN"), createsPerIP: envInt("CREATES_PER_IP_HOUR", 10), maxGr: envInt("MAX_GROUPS", 10000)}
+	s := &server{dir: dir, token: os.Getenv("TOKEN"), createsPerIP: envInt("CREATES_PER_IP_HOUR", 10), maxGr: envInt("MAX_GROUPS", 10000),
+		maxAdmin: envInt("MAX_ADMIN_GROUPS", 10)}
 	go func() {
 		for {
 			cleanup(dir)
@@ -568,7 +626,7 @@ func main() {
 	}()
 	addr := env("ADDR", ":8080")
 	log.Printf("listening on %s, data %s", addr, dir)
-	srv := &http.Server{Addr: addr, Handler: s.routes(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second,
+	srv := &http.Server{Addr: addr, Handler: cors(s.routes()), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second,
 		WriteTimeout: 30 * time.Second, IdleTimeout: 2 * time.Minute} // drop slow or stuck clients
 	log.Fatal(srv.ListenAndServe())
 }

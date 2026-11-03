@@ -112,7 +112,7 @@ L'NFC richiede un telefono vero e tag NDEF scrivibili (per esempio NTAG213/215/2
 - **Contatori**: aggiungi (il pulsante + in basso a destra, come sul telefono, apre un modulo per etichetta, tag, gruppo e promemoria), azzera (adesso, con una nota o in un momento passato), annulla, archivia ed elimina. Aprendone uno vedi il registro degli azzeramenti, il grafico degli intervalli e un modulo per etichetta, tag, gruppo e promemoria "avvisa dopo" (il promemoria scatta sul telefono). Un tag NFC abbinato può essere disabbinato, ma l'abbinamento richiede il telefono. Ricerca, filtro per tag e ordinamento funzionano dentro ogni sezione. I tempi si aggiornano ogni minuto.
 - **Esporta e importa** usano il file JSON del telefono, quindi un file passa dal telefono al web e viceversa: Sostituisci scambia i gruppi con lo stesso nome con quelli del file, Tieni entrambi li importa come nuovi gruppi.
 - **Impostazioni** nella barra laterale: un interruttore del tema scuro (segue il sistema finché non lo usi), un interruttore debug che consente i minuti in "avvisa dopo" e la lingua (inglese o italiano, secondo il browser).
-- **Non sul web**: abbinamento NFC, promemoria e notifiche, il widget e i gruppi che stanno su un server diverso da quello della pagina.
+- **Non sul web**: abbinamento NFC, promemoria e notifiche e il widget. I gruppi possono stare su qualsiasi server: Nuovo gruppo propone il server predefinito (howlongsince.etrunon.eu) o uno personalizzato, e un link fa entrare nel gruppo sul server che indica.
 
 **Avvio**
 ```bash
@@ -132,10 +132,13 @@ server {
     ssl_certificate     /etc/letsencrypt/live/hls.example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/hls.example.com/privkey.pem;
 
+    client_max_body_size 10m;                          # il default di nginx (1 MB) è sotto il limite del server
+    proxy_set_header X-Forwarded-For $remote_addr;     # i limiti per IP leggono questo
+
     add_header Strict-Transport-Security "max-age=31536000" always;
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy no-referrer always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'" always;
+    add_header Content-Security-Policy "default-src 'self'; connect-src 'self' https:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'" always;
 
     location /s/ {
         limit_req zone=hls burst=20 nodelay;   # ~30 sync/min per IP, picchi consentiti
@@ -160,7 +163,7 @@ Poi:
 - **Telefono**: Gruppi → tocca un gruppo → inserisci URL e una password di recupero → Attiva la sincronizzazione.
 - **Aggiornare dal `TOKEN` condiviso**: lascia `TOKEN` impostato. Ogni dispositivo ci rivendica il proprio token alla prima sincronizzazione, come membro; il primo che inserisce una password di recupero (web: la chiede; telefono: tocca il gruppo) diventa amministratore, e da lì `TOKEN` non apre più quel gruppo. Quando tutti i gruppi sono rivendicati, `TOKEN` serve solo per `/stats`.
 
-**Configurazione** (variabili d'ambiente): `TOKEN` (facoltativo: rivendica i gruppi creati prima dei token per dispositivo, e legge `/stats`), `CREATES_PER_IP_HOUR` (predefinito 10), `MAX_GROUPS` (predefinito 10000), `DATA_DIR` (predefinito `/data`, i blob vanno in `s/` al suo interno), `ADDR` (predefinito `:8080`). `compose.yml` collega `HLS_TOKEN` da `.env` a `TOKEN`. Chiunque può creare un gruppo, entro questi limiti. I limiti per IP leggono l'ultimo indirizzo di `X-Forwarded-For`, che imposta il reverse proxy. Una volta al giorno il server elimina i gruppi non sincronizzati da un anno, o da sei mesi con meno di 3 contatori.
+**Configurazione** (variabili d'ambiente): `TOKEN` (facoltativo: rivendica i gruppi creati prima dei token per dispositivo, e legge `/stats`), `CREATES_PER_IP_HOUR` (predefinito 10), `MAX_GROUPS` (predefinito 10000), `MAX_ADMIN_GROUPS` (predefinito 10: gruppi di cui un dispositivo può essere amministratore, creandoli o con una password di recupero; rifiutato con 402), `DATA_DIR` (predefinito `/data`, i blob vanno in `s/` al suo interno), `ADDR` (predefinito `:8080`). `compose.yml` collega `HLS_TOKEN` da `.env` a `TOKEN`. Chiunque può creare un gruppo, entro questi limiti. I limiti per IP leggono l'ultimo indirizzo di `X-Forwarded-For`, che imposta il reverse proxy. Una volta al giorno il server elimina i gruppi non sincronizzati da un anno, o da sei mesi con meno di 3 contatori.
 
 **API** (`{id}` sono 32 caratteri esadecimali derivati dal segreto del gruppo; "dispositivo" significa il token del dispositivo come `Authorization: Bearer`):
 - `GET /` web app, `GET /health` risponde `ok`, `GET /stats` (con `TOKEN`) restituisce i totali: gruppi, dispositivi, contatori attivi, azzeramenti negli ultimi 7 e 30 giorni.

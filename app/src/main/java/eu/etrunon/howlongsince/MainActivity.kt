@@ -209,6 +209,20 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, joinR
     val prefs = remember { ctx.getSharedPreferences("settings", 0) }
     var debug by remember { mutableStateOf(prefs.getBoolean("debug", false)) }
     val drawer = rememberDrawerState(DrawerValue.Closed)
+    var limits by remember { mutableStateOf<List<Limit>>(emptyList()) }
+    var showLimits by remember { mutableStateOf(false) }
+    LaunchedEffect(groups, drawer.isOpen) { if (drawer.isOpen) limits = adminLimits(ctx, groups) } // fresh each time it opens
+    if (showLimits) AlertDialog(
+        onDismissRequest = { showLimits = false },
+        title = { Text(stringResource(R.string.check_limits)) },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { limits.forEach { l ->
+            Column {
+                Text(l.server.substringAfter("://"))
+                Text(stringResource(R.string.admin_of) + " " + stringResource(R.string.admin_count, l.admin, l.max?.toString() ?: "?"), style = MaterialTheme.typography.bodySmall)
+            }
+        } } },
+        confirmButton = { TextButton(onClick = { showLimits = false }) { Text(stringResource(R.string.close)) } },
+    )
     val snackbar = remember { SnackbarHostState() }
     var sharing by remember { mutableStateOf(false) } // share dialog of the group being viewed
     var joining by remember { mutableStateOf<String?>(null) } // "" = ask for the link
@@ -238,6 +252,10 @@ fun CounterList(dao: CounterDao, openRequest: Long?, onOpened: () -> Unit, joinR
                 onClick = { close(); creating = true })
             NavigationDrawerItem(label = { Text(stringResource(R.string.settings)) }, selected = false, icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
                 onClick = { close(); settings = true; groupSettings = false })
+            val one = limits.singleOrNull()
+            if (one != null) Text(stringResource(R.string.admin_of) + "\n" + stringResource(R.string.admin_count, one.admin, one.max?.toString() ?: "?"),
+                Modifier.padding(start = 28.dp, top = 24.dp, bottom = 16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            else if (limits.isNotEmpty()) TextButton(onClick = { showLimits = true }, Modifier.padding(start = 12.dp, top = 16.dp)) { Text(stringResource(R.string.check_limits)) }
         } }
     }) {
       val viewed = groups.find { it.id == view }

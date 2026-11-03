@@ -5,4 +5,5 @@ services:
     ports: ["127.0.0.1:13387:8080"] # put a reverse proxy (Caddy, tailscale serve) in front
     environment:
       TOKEN: ${HLS_TOKEN:-} # optional: opens groups made before device tokens, and GET /stats
+      MAX_ADMIN_GROUPS: ${HLS_MAX_ADMIN_GROUPS:-10} # groups one device may be admin of
     volumes: ["./data:/data"] # must be writable by uid 1000

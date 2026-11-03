@@ -14,6 +14,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.Alignment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -94,6 +96,7 @@ private fun SyncSection(g: CounterGroup, dao: CounterDao, prefs: android.content
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var url by remember { mutableStateOf("") }
+    var custom by remember { mutableStateOf(false) }
     var password by remember { mutableStateOf("") }
     var status by remember { mutableStateOf(prefs.getString("syncStatus${g.id}", null)) }
     var confirmOff by remember { mutableStateOf(false) }
@@ -127,7 +130,13 @@ private fun SyncSection(g: CounterGroup, dao: CounterDao, prefs: android.content
             })) { password = it }
         } else {
             Text(stringResource(R.string.sync_hint), style = MaterialTheme.typography.bodySmall)
-            OutlinedTextField(url, { url = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.server_url)) },
+            listOf(false, true).forEach { c ->
+                Row(Modifier.fillMaxWidth().selectable(custom == c, role = Role.RadioButton) { custom = c }, verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(custom == c, onClick = null)
+                    Text(if (c) stringResource(R.string.custom_server) else stringResource(R.string.default_server, DEFAULT_SERVER.substringAfter("://")), Modifier.padding(start = 8.dp))
+                }
+            }
+            if (custom) OutlinedTextField(url, { url = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.server_url)) },
                 placeholder = { Text("https://your-server.example") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
             PasswordField(password, stringResource(R.string.recovery_new)) { password = it }
         }
@@ -137,21 +146,21 @@ private fun SyncSection(g: CounterGroup, dao: CounterDao, prefs: android.content
                 if (password.isNotEmpty()) TextButton(enabled = !busy && (!admin || password.length >= 6), onClick = { // admins set a new one
                     busy = true
                     scope.launch {
-                        val ok = useRecovery(ctx, g, password)
+                        val err = useRecovery(ctx, g, password)
                         busy = false; password = ""
-                        if (ok) admin = true
-                        status = if (ok) prefs.getString("syncStatus${g.id}", null) else ctx.getString(R.string.wrong_password)
+                        if (err == null) admin = true
+                        status = err ?: prefs.getString("syncStatus${g.id}", null)
                     }
                 }) { Text(stringResource(R.string.save)) }
                 TextButton(enabled = !busy, onClick = { scope.launch { status = ctx.getString(R.string.syncing); sync(ctx); status = prefs.getString("syncStatus${g.id}", null) } }) { Text(stringResource(R.string.sync_now)) }
                 TextButton(onClick = { confirmOff = true }) { Text(stringResource(R.string.turn_off), color = MaterialTheme.colorScheme.error) }
-            } else TextButton(enabled = url.isNotBlank() && password.length >= 6 && !busy, onClick = {
+            } else TextButton(enabled = (!custom || url.isNotBlank()) && password.length >= 6 && !busy, onClick = {
                 busy = true
                 scope.launch {
                     val secret = newSecret()
                     val recovery = withContext(Dispatchers.Default) { stretch(password, keysOf(secret).id) }
                     keyPrefs(ctx).edit().putString("k${g.id}", secret).putString("r${g.id}", recovery).commit() // key first, so a sync never sees a URL without one
-                    dao.setSyncUrl(g.id, url.trim().trimEnd('/'))
+                    dao.setSyncUrl(g.id, if (custom) url.trim().trimEnd('/').let { if (Regex("^https?://", RegexOption.IGNORE_CASE).containsMatchIn(it)) it else "https://$it" } else DEFAULT_SERVER)
                     sync(ctx)
                     busy = false; admin = isAdmin(ctx, g)
                 }

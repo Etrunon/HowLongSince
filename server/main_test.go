@@ -18,8 +18,8 @@ type tc struct {
 }
 
 func newTC(t *testing.T) *tc {
-	s := &server{dir: t.TempDir(), token: "legacy", createsPerIP: 3, maxGr: 100}
-	srv := httptest.NewServer(s.routes())
+	s := &server{dir: t.TempDir(), token: "legacy", createsPerIP: 3, maxGr: 100, maxAdmin: 3}
+	srv := httptest.NewServer(cors(s.routes()))
 	t.Cleanup(srv.Close)
 	return &tc{t, s, srv}
 }
@@ -186,14 +186,47 @@ func TestCaps(t *testing.T) {
 	c := newTC(t)
 	for i := range 4 {
 		id := strings.Repeat(string("abcd"[i]), 32)
-		code, _ := c.do("PUT", "/s/"+id, "", "", map[string]any{"ciphertext": []byte("x"), "deviceId": "d", "recovery": "pw"})
+		code, _ := c.do("PUT", "/s/"+id, "", "", map[string]any{"ciphertext": []byte("x"), "deviceId": "d" + id[:1], "recovery": "pw"})
 		c.want(map[bool]int{true: 200, false: 429}[i < 3], code, "creates per IP")
 	}
 	c.want(400, first(c.do("GET", "/s/ABC", "", "", nil)), "bad id")
+	r, _ := http.NewRequest("OPTIONS", c.srv.URL+"/s/"+gid, nil)
+	res, _ := http.DefaultClient.Do(r)
+	if res.StatusCode != 204 || !strings.Contains(res.Header.Get("Access-Control-Allow-Headers"), "If-Match") {
+		t.Errorf("CORS preflight: %d %v", res.StatusCode, res.Header)
+	}
 	for range maxFails {
 		c.do("GET", "/s/"+strings.Repeat("a", 32), "bad", "", nil)
 	}
 	c.want(429, first(c.do("GET", "/s/"+strings.Repeat("a", 32), "bad", "", nil)), "backoff after failures")
+}
+
+// Alice may be admin of one group: creating, recovering, promoting into or claiming a second is refused with 402.
+func TestAdminLimit(t *testing.T) {
+	c := newTC(t)
+	c.s.maxAdmin = 1
+	if _, out := c.do("GET", "/limits", "", "", nil); out["maxAdminGroups"] != 1.0 {
+		t.Errorf("limits: %v", out)
+	}
+	alice, _ := c.create()
+	other := strings.Repeat("b", 32)
+	put := func(dev string) int {
+		return first(c.do("PUT", "/s/"+other, "", "", map[string]any{"ciphertext": []byte("x"), "deviceId": dev, "recovery": "pw"}))
+	}
+	c.want(402, put("alice"), "create a second group")
+	code, alice := c.enroll("alice", map[string]any{"recovery": "pw"}) // re-keys her token
+	c.want(200, code, "re-enroll in her own group")
+	c.want(200, first(c.do("POST", "/s/"+gid+"/recovery", alice, "", map[string]any{"recovery": "pw2"})), "admin changes password")
+	c.want(200, put("bob"), "bob creates his group")
+	c.want(402, first(c.do("POST", "/s/"+other+"/enroll", "", "", map[string]any{"deviceId": "alice", "recovery": "pw"})), "recovery enroll elsewhere")
+	code, out := c.do("POST", "/s/"+gid+"/invite", alice, "", map[string]any{})
+	c.want(200, code, "alice invites bob")
+	_, bob := c.enroll("bob", map[string]any{"nonce": out["nonce"]})
+	c.want(402, first(c.do("POST", "/s/"+gid+"/promote", bob, "", map[string]any{"recovery": "pw2"})), "promote over the limit")
+	legacy := strings.Repeat("c", 32)
+	writeBlob(c.s.dir, legacy, blob{Ciphertext: []byte("old"), LastSynced: now()})
+	_, out = c.do("POST", "/s/"+legacy+"/claim", "legacy", "", map[string]any{"deviceId": "alice"})
+	c.want(402, first(c.do("POST", "/s/"+legacy+"/recovery", out["token"].(string), "", map[string]any{"recovery": "x"})), "legacy claim over the limit")
 }
 
 func TestCleanupAndStats(t *testing.T) {

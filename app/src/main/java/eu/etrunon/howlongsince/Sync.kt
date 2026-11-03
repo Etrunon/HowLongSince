@@ -143,6 +143,7 @@ private suspend fun syncGroup(ctx: Context, dao: CounterDao, g: CounterGroup, se
                 return
             }
             409 -> {}
+            402 -> throw IOException(ctx.getString(R.string.admin_limit))
             else -> throw httpError(c)
         }
     }
@@ -167,6 +168,7 @@ suspend fun joinGroup(ctx: Context, j: Join, password: String): String? {
     when (code) {
         200 -> {}
         404 -> return ctx.getString(R.string.no_data)
+        402 -> return ctx.getString(R.string.admin_limit)
         401, 429 -> return ctx.getString(if (j.nonce.isEmpty() && j.token.isEmpty()) R.string.wrong_password else R.string.need_invite)
         else -> return ctx.getString(R.string.sync_failed, "HTTP $code")
     }
@@ -185,6 +187,22 @@ private suspend fun call(ctx: Context, g: CounterGroup, method: String, path: St
     val secret = keys.getString("k${g.id}", null) ?: return 0 to ""
     val url = "${(g.syncUrl ?: return 0 to "").trim().trimEnd('/')}/s/${keysOf(secret).id}/$path"
     return try { withContext(Dispatchers.IO) { http(method, url, keys.getString("d${g.id}", null) ?: "", body = body?.toString()) } } catch (_: IOException) { 0 to "" }
+}
+
+const val DEFAULT_SERVER = "https://howlongsince.etrunon.eu"
+
+/** A server this phone syncs with: how many of its groups this phone is admin of, and the server's cap (null if unreachable). */
+data class Limit(val server: String, val admin: Int, val max: Int?)
+
+/** One [Limit] per server the synced [groups] use; the default server when none is synced yet. */
+suspend fun adminLimits(ctx: Context, groups: List<CounterGroup>): List<Limit> {
+    val byServer = groups.filter { it.syncUrl != null }.groupBy { it.syncUrl!!.trim().trimEnd('/') }.ifEmpty { mapOf(DEFAULT_SERVER to emptyList()) }
+    return withContext(Dispatchers.IO) {
+        byServer.map { (s, gs) ->
+            val max = try { http("GET", "$s/limits", "").let { (c, t) -> if (c == 200) JSONObject(t).getInt("maxAdminGroups") else null } } catch (_: Exception) { null }
+            Limit(s, gs.count { isAdmin(ctx, it) }, max)
+        }
+    }
 }
 
 fun isAdmin(ctx: Context, g: CounterGroup) = keyPrefs(ctx).getBoolean("a${g.id}", false)
@@ -207,25 +225,28 @@ suspend fun members(ctx: Context, g: CounterGroup): List<Member>? = call(ctx, g,
 suspend fun revoke(ctx: Context, g: CounterGroup, deviceId: String) = call(ctx, g, "POST", "revoke", JSONObject().put("deviceId", deviceId)).first == 200
 
 /** With the recovery password: a member becomes admin, an admin changes the password, a phone without access joins as admin,
- *  and a group not uploaded yet keeps it for its first upload. False if the password is wrong (or tried too often). */
-suspend fun useRecovery(ctx: Context, g: CounterGroup, password: String): Boolean {
+ *  and a group not uploaded yet keeps it for its first upload. Null when done, else the reason (wrong password, or the admin limit). */
+suspend fun useRecovery(ctx: Context, g: CounterGroup, password: String): String? {
     val keys = keyPrefs(ctx)
-    val secret = keys.getString("k${g.id}", null) ?: return false
+    val secret = keys.getString("k${g.id}", null) ?: return ctx.getString(R.string.wrong_password)
     val recovery = withContext(Dispatchers.Default) { stretch(password, keysOf(secret).id) }
     val body = JSONObject().put("recovery", recovery)
-    val ok = when {
+    val code = when {
         !hasDevice(ctx, g) -> call(ctx, g, "POST", "enroll", body.put("deviceId", Db.deviceId)).let { (c, t) ->
             when (c) {
-                200 -> { keys.edit().putString("d${g.id}", JSONObject(t).getString("token")).commit(); true }
-                404 -> { keys.edit().putString("r${g.id}", recovery).commit(); true } // not on the server yet: the next sync creates it
-                else -> false
+                200 -> { keys.edit().putString("d${g.id}", JSONObject(t).getString("token")).commit(); 200 }
+                404 -> { keys.edit().putString("r${g.id}", recovery).commit(); 200 } // not on the server yet: the next sync creates it
+                else -> c
             }
         }
-        isAdmin(ctx, g) -> call(ctx, g, "POST", "recovery", body).first == 200
-        else -> call(ctx, g, "POST", "promote", body).first == 200 || call(ctx, g, "POST", "recovery", body).first == 200 // the second only works on a group without a password yet
+        isAdmin(ctx, g) -> call(ctx, g, "POST", "recovery", body).first
+        // the second only works on a group without a password yet
+        else -> call(ctx, g, "POST", "promote", body).first.let { if (it == 200 || it == 402) it else call(ctx, g, "POST", "recovery", body).first }
     }
-    if (ok) { keys.edit().putBoolean("a${g.id}", true).commit(); sync(ctx) }
-    return ok
+    if (code == 402) return ctx.getString(R.string.admin_limit)
+    if (code != 200) return ctx.getString(R.string.wrong_password)
+    keys.edit().putBoolean("a${g.id}", true).commit(); sync(ctx)
+    return null
 }
 
 /** Tells the server this phone stopped syncing [g], so it can delete the group once no device is left. Call before the key is removed. */

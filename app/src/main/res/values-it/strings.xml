@@ -137,6 +137,12 @@
     <string name="need_invite">Nessun accesso: unisciti con un invito, o inserisci la password di recupero nelle impostazioni di sincronizzazione del gruppo</string>
     <string name="no_access">Questo telefono è stato rimosso dal gruppo: chiedi un invito a un amministratore</string>
     <string name="wrong_password">Password errata, o troppi tentativi: riprova più tardi</string>
+    <string name="admin_of">Amministratore di</string>
+    <string name="admin_count">%1$d / %2$s gruppi</string>
+    <string name="admin_limit">Sei già amministratore di tutti i gruppi che questo server consente</string>
+    <string name="check_limits">Controlla i miei limiti</string>
+    <string name="default_server">Server predefinito %s</string>
+    <string name="custom_server">Server personalizzato</string>
     <string name="recovery_new">Password di recupero (con il link del gruppo ti fa rientrare come amministratore)</string>
     <string name="recovery_join">Password di recupero, per entrare come amministratore</string>
     <string name="change_password">Nuova password di recupero</string>

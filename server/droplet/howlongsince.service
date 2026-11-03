@@ -1,0 +1,25 @@
+[Unit]
+Description=How Long Since sync server
+After=network.target var-lib-howlongsince.mount
+Requires=var-lib-howlongsince.mount
+
+[Service]
+ExecStart=/usr/local/bin/howlongsince
+Environment=DATA_DIR=/var/lib/howlongsince ADDR=127.0.0.1:13387 MAX_ADMIN_GROUPS=10
+EnvironmentFile=-/etc/howlongsince.env
+User=howlongsince
+Restart=on-failure
+# sandbox: writes only to the 300 MB data disk, small memory and process caps
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+ReadWritePaths=/var/lib/howlongsince
+MemoryLimit=64M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

@@ -138,6 +138,12 @@
     <string name="need_invite">No access yet: join with an invite, or enter the recovery password in the group\'s sync settings</string>
     <string name="no_access">This phone was removed from the group: ask an admin for an invite</string>
     <string name="wrong_password">Wrong password, or too many attempts: try later</string>
+    <string name="admin_of">Admin of</string>
+    <string name="admin_count">%1$d / %2$s groups</string>
+    <string name="admin_limit">You are already admin of as many groups as this server allows</string>
+    <string name="check_limits">Check my limits</string>
+    <string name="default_server">Default server %s</string>
+    <string name="custom_server">Custom server</string>
     <string name="recovery_new">Recovery password (with the group link, it lets you rejoin as an admin)</string>
     <string name="recovery_join">Recovery password, to join as an admin</string>
     <string name="change_password">New recovery password</string>
