@@ -1,6 +1,6 @@
 package eu.etrunon.howlongsince
 
-import org.json.JSONException
+import org.json.JSONArray
 import org.json.JSONObject
 import java.security.GeneralSecurityException
 import java.security.MessageDigest
@@ -40,9 +40,10 @@ fun open(k: Keys, blob: ByteArray, ad: ByteArray = k.id.toByteArray()): ByteArra
     return c.doFinal(blob, 12, blob.size - 12)
 }
 
-// Format v2 (same as server/index.html): typed text is sealed per field, the rest stays readable for the server's stats.
-// The envelope is {"v":2,"doc":"<json>","mac":...}; the mac seals SHA-256 of the exact doc bytes, so nobody without the key can edit anything.
-private val SEALED = mapOf("counters" to listOf("label", "tags", "nfcTagId"), "events" to listOf("note", "deviceId"), "devices" to listOf("name"))
+// Format v3 (same as server/web/core.js): typed text is sealed per field, the rest stays readable for the server's stats.
+// The envelope is {"v":3,"doc":"<json>","mac":...}; the mac seals SHA-256 of the exact doc bytes, so nobody without the key can edit anything.
+// Event deviceIds are sealed together once, as "who" (random bytes don't compress, so not one per event).
+private val SEALED = mapOf("counters" to listOf("label", "tags", "nfcTagId"), "events" to listOf("note"), "devices" to listOf("name"))
 private val b64 = Base64.getEncoder(); private val unb64 = Base64.getDecoder()
 private fun sha256(b: ByteArray) = MessageDigest.getInstance("SHA-256").digest(b)
 private fun fieldAd(k: Keys, uid: String, field: String) = "${k.id}\u0000$uid\u0000$field".toByteArray()
@@ -57,19 +58,31 @@ private fun mapFields(k: Keys, o: JSONObject, f: (String, ByteArray) -> String) 
     }
 }
 
-/** A plain group state (stateJson) to the v2 blob. */
+/** A plain group state (stateJson) to the v3 blob. */
 fun sealDoc(k: Keys, plain: String): ByteArray {
-    val doc = JSONObject(plain).also { o -> mapFields(k, o) { v, ad -> b64.encodeToString(seal(k, v.toByteArray(), ad)) } }.toString()
-    return JSONObject().put("v", 2).put("doc", doc).put("mac", b64.encodeToString(seal(k, sha256(doc.toByteArray())))).toString().toByteArray()
+    val o = JSONObject(plain); val ev = o.optJSONArray("events") ?: JSONArray().also { o.put("events", it) }
+    val d = JSONArray(); val ids = ArrayList<String>(); val idx = JSONArray()
+    for (n in 0 until ev.length()) ev.getJSONObject(n).let { e ->
+        val id = if (e.isNull("deviceId")) null else e.getString("deviceId"); e.remove("deviceId")
+        idx.put(if (id == null) -1 else ids.indexOf(id).takeIf { it >= 0 } ?: ids.size.also { ids.add(id); d.put(id) })
+    }
+    mapFields(k, o) { v, ad -> b64.encodeToString(seal(k, v.toByteArray(), ad)) }
+    o.put("who", b64.encodeToString(seal(k, JSONObject().put("d", d).put("i", idx).toString().toByteArray(), fieldAd(k, "", "who"))))
+    val doc = o.toString()
+    return JSONObject().put("v", 3).put("doc", doc).put("mac", b64.encodeToString(seal(k, sha256(doc.toByteArray())))).toString().toByteArray()
 }
 
-/** A v1 or v2 blob to the plain group state. Throws if anything was altered. */
+/** A v3 blob to the plain group state. Throws if anything was altered or the format isn't v3. */
 fun openDoc(k: Keys, blob: ByteArray): String {
-    val env = try { JSONObject(blob.decodeToString()).takeIf { it.optInt("v") == 2 } } catch (_: JSONException) { null }
-        ?: return open(k, blob).decodeToString()
+    val env = JSONObject(blob.decodeToString()).also { if (it.optInt("v") != 3) throw GeneralSecurityException("not v3") }
     val doc = env.getString("doc")
     if (!MessageDigest.isEqual(open(k, unb64.decode(env.getString("mac"))), sha256(doc.toByteArray()))) throw GeneralSecurityException("tampered")
-    return JSONObject(doc).also { o -> mapFields(k, o) { v, ad -> open(k, unb64.decode(v), ad).decodeToString() } }.toString()
+    val o = JSONObject(doc).also { o -> mapFields(k, o) { v, ad -> open(k, unb64.decode(v), ad).decodeToString() } }
+    val w = JSONObject(open(k, unb64.decode(o.remove("who") as String), fieldAd(k, "", "who")).decodeToString())
+    val d = w.getJSONArray("d"); val idx = w.getJSONArray("i"); val ev = o.optJSONArray("events") ?: JSONArray()
+    if (idx.length() != ev.length()) throw GeneralSecurityException("tampered")
+    for (n in 0 until ev.length()) if (idx.getInt(n) >= 0) ev.getJSONObject(n).put("deviceId", d.getString(idx.getInt(n)))
+    return o.toString()
 }
 
 /** The recovery password as the server gets it (same as index.html): PBKDF2-HMAC-SHA256 over UTF-8, salted with the group id, 600k rounds, 32 bytes.

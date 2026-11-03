@@ -16,9 +16,10 @@ async function sealBytes(k, bytes, ad = enc.encode(k.id)) {
   return Uint8Array.from([...iv, ...new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: ad }, k.key, bytes))]);
 }
 const openBytes = async (k, blob, ad = enc.encode(k.id)) => new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: blob.slice(0, 12), additionalData: ad }, k.key, blob.slice(12)));
-// Format v2: typed text is sealed per field (authenticated with group id, record uid and field), the rest stays readable for the server's stats.
-// The envelope is {v: 2, doc: '<json>', mac}; the mac seals SHA-256 of the exact doc bytes, so nobody without the key can edit anything.
-const SEALED = { counters: ['label', 'tags', 'nfcTagId'], events: ['note', 'deviceId'], devices: ['name'] };
+// Format v3: typed text is sealed per field (authenticated with group id, record uid and field), the rest stays readable for the server's stats.
+// Device ids are sealed once for the whole doc as `who` ({d: distinct ids, i: per event index into d or -1}), not per event: random bytes don't compress.
+// The envelope is {v: 3, doc: '<json>', mac}; the mac seals SHA-256 of the exact doc bytes, so nobody without the key can edit anything.
+const SEALED = { counters: ['label', 'tags', 'nfcTagId'], events: ['note'], devices: ['name'] };
 const fieldAd = (k, uid, field) => enc.encode(`${k.id}\0${uid}\0${field}`);
 const sha256 = async b => new Uint8Array(await crypto.subtle.digest('SHA-256', b));
 async function mapFields(k, state, f) {
@@ -30,8 +31,12 @@ async function mapFields(k, state, f) {
   return o;
 }
 async function seal(k, state) {
-  const doc = JSON.stringify(await mapFields(k, state, async (v, ad) => b64(await sealBytes(k, enc.encode(v), ad))));
-  return enc.encode(JSON.stringify({ v: 2, doc, mac: b64(await sealBytes(k, await sha256(enc.encode(doc)))) }));
+  const d = [], evs = state.events ?? [], i = evs.map(x => x.deviceId == null ? -1 : (d.includes(x.deviceId) || d.push(x.deviceId), d.indexOf(x.deviceId)));
+  const plain = { ...state, events: evs.map(({ deviceId, ...x }) => x) };
+  const o = await mapFields(k, plain, async (v, ad) => b64(await sealBytes(k, enc.encode(v), ad)));
+  o.who = b64(await sealBytes(k, enc.encode(JSON.stringify({ d, i })), fieldAd(k, '', 'who')));
+  const doc = JSON.stringify(o);
+  return enc.encode(JSON.stringify({ v: 3, doc, mac: b64(await sealBytes(k, await sha256(enc.encode(doc)))) }));
 }
 /** The recovery password as the server gets it: PBKDF2-SHA256 salted with the group id (same as the app), so the password never leaves the device. */
 async function stretch(password, id) {
@@ -48,12 +53,17 @@ function parseLink(link) {
   if (!secret || !validSecret(secret)) return null;
   return { server: server && server.replace(/\/$/, ''), secret, nonce: p.get('n'), token: p.get('t') };
 }
-/** A v1 or v2 blob to the group state; throws an OperationError if anything was altered. */
+/** A v3 blob to the group state; throws an OperationError if anything was altered. */
 async function unseal(k, blob) {
   let env; try { env = JSON.parse(dec.decode(blob)); } catch {}
-  if (env?.v !== 2) return JSON.parse(dec.decode(await openBytes(k, blob)));
+  if (env?.v !== 3) throw new Error('unsupported format');
   if (b64(await openBytes(k, b64u(env.mac))) !== b64(await sha256(enc.encode(env.doc)))) throw new DOMException('tampered', 'OperationError');
-  return mapFields(k, JSON.parse(env.doc), async (v, ad) => dec.decode(await openBytes(k, b64u(v), ad)));
+  const o = await mapFields(k, JSON.parse(env.doc), async (v, ad) => dec.decode(await openBytes(k, b64u(v), ad)));
+  const { d, i } = JSON.parse(dec.decode(await openBytes(k, b64u(o.who), fieldAd(k, '', 'who'))));
+  delete o.who;
+  if (i.length !== (o.events ?? []).length) throw new DOMException('tampered', 'OperationError');
+  o.events?.forEach((x, n) => { if (i[n] >= 0) x.deviceId = d[i[n]]; });
+  return o;
 }
 const UNITS = [['minutes', 6e4], ['hours', 36e5], ['days', 864e5], ['weeks', 6048e5]];
 /** Like the phone: minutes only in debug mode, or if this counter already uses them (else it couldn't be shown). */

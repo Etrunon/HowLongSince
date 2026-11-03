@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -124,8 +126,12 @@ func TestExpiredInvite(t *testing.T) {
 	n := c.invite(alice)
 	bl, _ := readBlob(c.s.dir, gid)
 	bl.Invites[0].Expires = now() - 1
-	b, _ := json.Marshal(bl)
-	os.WriteFile(blobPath(c.s.dir, gid), b, 0o600)
+	var buf bytes.Buffer // by hand: writeBlob would prune the invite, and this tests the enroll check
+	zw := gzip.NewWriter(&buf)
+	meta, _ := json.Marshal(blob{LastSynced: bl.LastSynced, Members: bl.Members, Invites: bl.Invites, Recovery: bl.Recovery})
+	zw.Write(append(append(meta, '\n'), bl.Ciphertext...))
+	zw.Close()
+	os.WriteFile(blobPath(c.s.dir, gid), buf.Bytes(), 0o600)
 	c.want(401, first(c.enroll("bob", map[string]any{"nonce": n})), "expired nonce")
 }
 
@@ -231,21 +237,21 @@ func TestAdminLimit(t *testing.T) {
 
 func TestCleanupAndStats(t *testing.T) {
 	c := newTC(t)
-	v2 := func(live int, at int64) []byte {
+	v3 := func(live int, at int64) []byte {
 		var cs, es []string
 		for range live {
 			cs = append(cs, `{"deleted":false}`)
 		}
 		es = append(es, `{"at":`+itoa(at)+`,"deleted":false}`)
 		d, _ := json.Marshal(`{"counters":[` + strings.Join(cs, ",") + `],"events":[` + strings.Join(es, ",") + `]}`)
-		return []byte(`{"v":2,"doc":` + string(d) + `,"mac":"x"}`)
+		return []byte(`{"v":3,"doc":` + string(d) + `,"mac":"x"}`)
 	}
 	ago := func(days int64) int64 { return now() - days*day }
 	ids := map[string]blob{
-		strings.Repeat("1", 32): {LastSynced: ago(400), Ciphertext: v2(5, 0)},                                                           // a year idle: deleted
-		strings.Repeat("2", 32): {LastSynced: ago(200), Ciphertext: v2(1, 0)},                                                           // half a year, few counters: deleted
-		strings.Repeat("3", 32): {LastSynced: ago(200), Ciphertext: v2(3, 0)},                                                           // half a year, in use: kept
-		strings.Repeat("4", 32): {LastSynced: ago(1), Ciphertext: v2(2, (now()-day)*1000), Recovery: "h", Members: []device{{ID: "a"}}}, // kept
+		strings.Repeat("1", 32): {LastSynced: ago(400), Ciphertext: v3(5, 0)},                                                           // a year idle: deleted
+		strings.Repeat("2", 32): {LastSynced: ago(200), Ciphertext: v3(1, 0)},                                                           // half a year, few counters: deleted
+		strings.Repeat("3", 32): {LastSynced: ago(200), Ciphertext: v3(3, 0)},                                                           // half a year, in use: kept
+		strings.Repeat("4", 32): {LastSynced: ago(1), Ciphertext: v3(2, (now()-day)*1000), Recovery: "h", Members: []device{{ID: "a"}}}, // kept
 	}
 	for id, bl := range ids {
 		writeBlob(c.s.dir, id, bl)
@@ -267,3 +273,15 @@ func TestCleanupAndStats(t *testing.T) {
 func first(code int, _ any) int { return code }
 
 func itoa(n int64) string { b, _ := json.Marshal(n); return string(b) }
+
+func TestBlobRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	in := blob{LastSynced: 5, Recovery: "h", Ciphertext: []byte("a\nb\xff\xfe\n\x00")}
+	if err := writeBlob(dir, gid, in); err != nil {
+		t.Fatal(err)
+	}
+	out, err := readBlob(dir, gid)
+	if err != nil || out.LastSynced != 5 || out.Recovery != "h" || string(out.Ciphertext) != string(in.Ciphertext) {
+		t.Fatalf("got %+v, %v", out, err)
+	}
+}

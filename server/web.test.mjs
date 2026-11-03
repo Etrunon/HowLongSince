@@ -101,30 +101,42 @@ test('minutes only in debug mode, or when the counter already uses them', () => 
   assert.equal(names(unitsFor(90 * 6e4, false)), 'minutes,hours,days,weeks'); // 90 minutes can't be shown in hours
 });
 
-// Format v2. KOTLIN_V2 was sealed by the phone (SinceTest.kt, DocV2Test) with the same secret.
+// Format v3. KOTLIN_V3 was sealed by the phone (SinceTest.kt, DocV3Test) with the same secret.
+const KOTLIN_V3 = 'eyJ2IjozLCJkb2MiOiJ7XCJjb3VudGVyc1wiOlt7XCJuZmNUYWdJZFwiOm51bGwsXCJhcmNoaXZlZFwiOmZhbHNlLFwibm90aWZ5QWZ0ZXJNc1wiOm51bGwsXCJkZWxldGVkXCI6ZmFsc2UsXCJpZFwiOlwiYzFcIixcImxhYmVsXCI6XCI5clM0WUEwVjkwdU85djVYL2wzbnJDWkYvSFMvTVFNOGQ4bGJFeVpaenAzWFhOS0J1MStqdkE9PVwiLFwidGFnc1wiOlwiQWtpZDVlckdoRklwT0ZZZ3NJajVsd1U1ZTNYUURlSVdjUjhoSFRkMkhHZkw0Zz09XCIsXCJ1cGRhdGVkQXRcIjo1fV0sXCJkZXZpY2VzXCI6W3tcIm5hbWVcIjpcIm8vYjVLR3BHbm14S3EwaEJpRG5QYnZGWEprYjIxRFBCS1FJdnV0U0YxUGtpaVlRPVwiLFwiaWRcIjpcImQxXCIsXCJ1cGRhdGVkQXRcIjoxfV0sXCJuYW1lXCI6XCJRMk1PWU9ndHFobWRoVHhILzVGKzJJZHhaOG1OYkprMk13eEpPNjBOZktEeVAxb2JcIixcIm5hbWVVcGRhdGVkQXRcIjo3LFwiZXZlbnRzXCI6W3tcIm5vdGVcIjpcIlRDY1YzMkd1bTFWN0NPMzZEWElQVDkyRDl4MGZMcFgzWndXY2lRL3VYTFhLWUZvM1Vzbz1cIixcImF0XCI6NSxcImRlbGV0ZWRcIjpmYWxzZSxcImlkXCI6XCJlMVwiLFwic291cmNlXCI6XCJtYW51YWxcIixcImNvdW50ZXJJZFwiOlwiYzFcIn1dLFwid2hvXCI6XCJIQ2liK1FvRUxyd0E4NE5ybDZTVU45L0Y5cTFTSzd5QzhVYnR0VjE5aHAveStvdTAxY0RtL2JtV1dsNEkzQnNFXCJ9IiwibWFjIjoiV3lFQ0o5MEFqZzBVbllNSUQ2V2FxV2hySWJUR284V1BPRHRUbjRkR1pjc3pRbVUrN3lDOTdRenkvTEtlTm1BMjJLei9zM0xtS1VKTFlGU2EifQ==';
 const SECRET = 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8';
 const STRETCHED = 'PHwhiIx1cylSWJVPIVMmYTP3aZR2NDTPX7TPSB8+mWo='; // PBKDF2-SHA256, 600k, by node:crypto
-const KOTLIN_V2 = 'eyJ2IjoyLCJkb2MiOiJ7XCJjb3VudGVyc1wiOlt7XCJuZmNUYWdJZFwiOm51bGwsXCJhcmNoaXZlZFwiOmZhbHNlLFwibm90aWZ5QWZ0ZXJNc1wiOm51bGwsXCJkZWxldGVkXCI6ZmFsc2UsXCJpZFwiOlwiYzFcIixcImxhYmVsXCI6XCJzc0tEWVc1R3E2SkF3L1dmRjZFMzBlZTY2RVNQT2FibmpFWXJtdEdpOXFaZkM4SVFSWHpsbGc9PVwiLFwidGFnc1wiOlwiQyt4cEJSYm42c05lK0F5OXllNE1lVi9EUldYOWJwdk0wZFhwcGpQREd0eWdPUT09XCIsXCJ1cGRhdGVkQXRcIjo1fV0sXCJkZXZpY2VzXCI6W3tcIm5hbWVcIjpcInMrU2ZIVHVVNHM5QzZtUGVId1VnNFg2YXBQZi84amJSSW5TQ3J6M0xaRXdlK2g0PVwiLFwiaWRcIjpcImQxXCIsXCJ1cGRhdGVkQXRcIjoxfV0sXCJuYW1lXCI6XCJQNXpMZng0b2FNaGM1OUdhSC9laHlPRnB2SVV6REdjZW9nV1NDbTJ5MTVVNHVhN1NcIixcIm5hbWVVcGRhdGVkQXRcIjo3LFwiZXZlbnRzXCI6W3tcIm5vdGVcIjpcIml0Z2tNY1BIb3ZERGFDMjVEanhuK28xOGk1aGlmZFp3RnRRbXhZVmRzVTNTcnFYWXg3RT1cIixcImF0XCI6NSxcImRlbGV0ZWRcIjpmYWxzZSxcImlkXCI6XCJlMVwiLFwic291cmNlXCI6XCJtYW51YWxcIixcImRldmljZUlkXCI6XCIyTGpHSEJRYmc5a2lrV0F0R0F0WExwTFBac1BQL0RwZ0NJU056Y21CXCIsXCJjb3VudGVySWRcIjpcImMxXCJ9XX0iLCJtYWMiOiJpUVRweGErNUtmaGxKS1ZtS25iWmlmb0ppZUhyWnlrSkx1anJnT3YvYVI4b04vWm9relkzdndrUTdrMGNpSTBNVjk5bWNrL0V0Y3ltRWFUSiJ9';
 const ST = { name: 'Família', nameUpdatedAt: 7, counters: [c('c1', 'Water plants', 5, { tags: 'garden' })],
   events: [e('e1', 'c1', 5, { note: 'new filter', deviceId: 'd1' })], devices: [{ id: 'd1', name: 'Pixel 9', updatedAt: 1 }] };
 
-test('v2: round trip hides typed text, keeps metadata readable', async () => {
+test('v3: round trip hides typed text and device ids, keeps metadata readable', async () => {
   const k = await deriveKeys(SECRET), blob = await seal(k, ST), text = new TextDecoder().decode(blob);
   assert.deepEqual(await unseal(k, blob), ST);
-  for (const s of ['Water plants', 'garden', 'new filter', 'Pixel 9', 'Família']) assert.ok(!text.includes(s), s);
+  for (const s of ['Water plants', 'garden', 'new filter', 'Pixel 9', 'Família', 'deviceId']) assert.ok(!text.includes(s), s);
   assert.ok(text.includes('updatedAt'));
 });
 
-test('v2: reads v1, refuses edits', async () => {
-  const k = await deriveKeys(SECRET);
-  assert.deepEqual(await unseal(k, await sealBytes(k, new TextEncoder().encode(JSON.stringify(ST)))), ST);
-  const env = JSON.parse(new TextDecoder().decode(await seal(k, ST)));
-  env.doc = env.doc.replace('"at":5', '"at":6');
-  await assert.rejects(unseal(k, new TextEncoder().encode(JSON.stringify(env))));
+test('v3: events without a device id stay without one', async () => {
+  const k = await deriveKeys(SECRET), st = { ...ST, events: [e('e1', 'c1', 5), e('e2', 'c1', 6, { deviceId: 'd1' }), e('e3', 'c1', 7, { deviceId: 'd1' })] };
+  const back = await unseal(k, await seal(k, st));
+  assert.deepEqual(back, st);
+  assert.ok(!('deviceId' in back.events[0]));
 });
 
-test('v2: opens what the phone sealed', async () => {
-  const s = await unseal(await deriveKeys(SECRET), b64u(KOTLIN_V2));
+test('v3: refuses edits, a wrong who length, v1 and v2', async () => {
+  const k = await deriveKeys(SECRET), T = new TextEncoder(), env = JSON.parse(new TextDecoder().decode(await seal(k, ST)));
+  const bad = o => assert.rejects(unseal(k, T.encode(JSON.stringify(o))));
+  await bad({ ...env, doc: env.doc.replace('"at":5', '"at":6') });
+  const mac = async doc => b64(await sealBytes(k, new Uint8Array(await crypto.subtle.digest('SHA-256', T.encode(doc)))));
+  const doc = JSON.parse(env.doc); // right mac, but `who` from a doc with two events
+  doc.who = JSON.parse(JSON.parse(new TextDecoder().decode(await seal(k, { ...ST, events: [ST.events[0], ST.events[0]] }))).doc).who;
+  const d2 = JSON.stringify(doc);
+  await bad({ v: 3, doc: d2, mac: await mac(d2) });
+  await bad({ ...env, v: 2 });
+  await assert.rejects(unseal(k, await sealBytes(k, T.encode(JSON.stringify(ST)))));
+});
+
+test('v3: opens what the phone sealed', async () => {
+  const s = await unseal(await deriveKeys(SECRET), b64u(KOTLIN_V3));
   assert.deepEqual([s.name, s.counters[0].label, s.counters[0].tags, s.events[0].note, s.events[0].deviceId, s.devices[0].name],
     ['Família', 'Water plants', 'garden', 'new filter', 'd1', 'Pixel 9']);
 });

@@ -175,7 +175,7 @@ Then:
 
 **How sync works**
 - The key: each synced group has a random 32-byte secret made on the phone. HKDF-SHA256 turns it into the id the server sees and an AES-256-GCM key. The secret and the device token are kept in a separate preferences file that backups skip.
-- The blob (format v2) is JSON: labels, tags, NFC ids, notes, group and device names, and which device logged each reset are each sealed with AES-GCM (authenticated with the group id, record id and field name). The rest is readable: counter ids, `updatedAt`, `deleted`, `archived`, reminder intervals, and reset times. The whole document travels as one string with a MAC (SHA-256 of its exact bytes, sealed with the key), so a server without the key can't change anything unnoticed. Clients still read the older fully encrypted format.
+- The blob (format v3) is JSON: labels, tags, NFC ids, notes, and group and device names are each sealed with AES-GCM (authenticated with the group id, record id and field name). Which device logged each reset is sealed once for the whole document, as one list (`who`). The rest is readable: counter and device ids, `updatedAt`, `deleted`, `archived`, reminder intervals, and reset times. The whole document travels as one string with a MAC (SHA-256 of its exact bytes, sealed with the key), so a server without the key can't change anything unnoticed. The server stores each blob gzipped.
 - The server sees the readable fields above, the blob size, timing and your IP address.
 - A sync is: get the blob, decrypt, merge with the local group, encrypt, put it back with `If-Match`; on a 409 it starts again. The merge is done by the phone and the web app, never the server.
 - Counters and resets have a UUID. The phone keeps its local ids for reminders; NFC tags hold the UUID.
@@ -186,7 +186,7 @@ Then:
 - If every device holding a group's key is lost, the link and the recovery password bring it back. Keep both.
 - Anyone with both the link and the recovery password is an admin, and admins are equal, so one can revoke another. Someone with only the link can guess passwords online, 5 per hour; the server operator can guess offline against the stored hash, slowed by PBKDF2. A forgotten password with no admin device left means nobody can invite or revoke again; members still sync, and the way back is a new group.
 - Revoking stops a device from syncing, but it keeps the key and whatever it already fetched. To cut someone off completely, make a new group and move the counters into it.
-- Apps older than format v2 can't read v2 groups.
+- Only format v3 is read: older apps and servers can't open v3 groups, and the new ones can't open older groups.
 - The web app keeps keys and tokens in `localStorage`: clearing site data loses them, along with Ungrouped counters that live only there. "Copy link" backs up groups; Export backs up Ungrouped.
 - Next to the blob the server keeps, never sent to clients, the group's devices (id, token hash, role, created, last seen), its open invites, the recovery hash and when it was last synced (stamped at most once an hour).
 - The server drops slow or stuck connections (10 s to send headers, 30 s per request) and writes blobs atomically.

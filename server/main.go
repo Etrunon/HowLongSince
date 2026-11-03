@@ -6,6 +6,8 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -13,6 +15,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -87,14 +90,14 @@ type invite struct {
 	Expires   int64  `json:"expires"`
 }
 
-// blob is the file on disk: the ciphertext (a v2 envelope, see web/core.js) plus what only the server sees.
+// blob is the file on disk: the ciphertext (a v3 envelope, see web/core.js) plus what only the server sees.
 // A group without a recovery hash is legacy (made before devices existed): TOKEN still opens it, and claim enrolls into it.
 type blob struct {
 	LastSynced int64    `json:"lastSynced"` // unix seconds, at most an hour stale
 	Members    []device `json:"members,omitempty"`
 	Invites    []invite `json:"invites,omitempty"`
 	Recovery   string   `json:"recovery,omitempty"` // sha256 of the client's stretched password
-	Ciphertext []byte   `json:"ciphertext"`
+	Ciphertext []byte   `json:"ciphertext,omitempty"`
 }
 
 func (bl *blob) legacy() bool { return bl.Recovery == "" }
@@ -118,9 +121,23 @@ func (bl *blob) enroll(id string, admin bool) string {
 
 func readBlob(dir, id string) (blob, error) {
 	var bl blob
-	b, err := os.ReadFile(blobPath(dir, id))
-	if err == nil {
-		err = json.Unmarshal(b, &bl)
+	f, err := os.Open(blobPath(dir, id))
+	if err != nil {
+		return bl, err
+	}
+	defer f.Close()
+	zr, err := gzip.NewReader(f)
+	if err != nil {
+		return bl, err
+	}
+	b, err := io.ReadAll(zr)
+	if err != nil {
+		return bl, err
+	}
+	meta, ct, _ := bytes.Cut(b, []byte("\n")) // json escapes newlines, so the first one ends the metadata
+	bl.Ciphertext = nil
+	if err = json.Unmarshal(meta, &bl); err == nil {
+		bl.Ciphertext = ct
 	}
 	return bl, err
 }
@@ -131,8 +148,16 @@ func writeBlob(dir, id string, bl blob) error {
 		return err
 	}
 	bl.Invites = slices.DeleteFunc(bl.Invites, func(i invite) bool { return i.Expires < now() })
-	b, _ := json.Marshal(bl)
-	if err := os.WriteFile(p+".tmp", b, 0o600); err != nil {
+	ct := bl.Ciphertext
+	bl.Ciphertext = nil
+	meta, _ := json.Marshal(bl)
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	zw.Write(meta)
+	zw.Write([]byte("\n"))
+	zw.Write(ct)
+	zw.Close()
+	if err := os.WriteFile(p+".tmp", buf.Bytes(), 0o600); err != nil {
 		return err
 	}
 	return os.Rename(p+".tmp", p) // atomic replace
@@ -169,7 +194,7 @@ func bearer(r *http.Request) string {
 	return strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 }
 
-// doc is the readable part of a v2 envelope, for stats and cleanup.
+// doc is the readable part of a v3 envelope, for stats and cleanup.
 type doc struct {
 	Counters []struct {
 		Deleted bool `json:"deleted"`
@@ -185,10 +210,10 @@ func readable(ciphertext []byte) (d doc) {
 		V   int    `json:"v"`
 		Doc string `json:"doc"`
 	}
-	if json.Unmarshal(ciphertext, &env) == nil && env.V == 2 {
+	if json.Unmarshal(ciphertext, &env) == nil && env.V == 3 {
 		json.Unmarshal([]byte(env.Doc), &d)
 	}
-	return d // empty for v1 blobs
+	return d // empty for anything but v3
 }
 
 func (d doc) live() (n int) {
@@ -302,7 +327,7 @@ var (
 
 // req is what a group request carries in its JSON body (each endpoint reads the fields it needs).
 type req struct {
-	Ciphertext []byte `json:"ciphertext"`
+	Ciphertext []byte `json:"ciphertext,omitempty"`
 	DeviceID   string `json:"deviceId"`
 	Recovery   string `json:"recovery"`
 	Nonce      string `json:"nonce"`

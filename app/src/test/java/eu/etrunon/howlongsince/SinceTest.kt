@@ -159,7 +159,7 @@ class WebCryptoTest {
     }
 }
 
-class DocV2Test {
+class DocV3Test {
     private val k = keysOf("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8")
     private val c = listOf(Counter(1, "Water plants", tags = "garden", uid = "c1", updatedAt = 5))
     private val e = listOf(Event(1, 1, 5, "manual", uid = "e1", note = "new filter", deviceId = "d1"))
@@ -173,18 +173,30 @@ class DocV2Test {
         assertEquals(true, text.contains("updatedAt"))
     }
 
-    @Test fun readsV1() = assertEquals(plain, openDoc(k, seal(k, plain.toByteArray())))
+    @Test fun noDeviceIdInBlob() {
+        val text = sealDoc(k, plain).decodeToString()
+        assertEquals(false, text.contains("deviceId")) // "d1" stays readable as the devices' id, so it can't be asserted absent
+    }
+
+    @Test fun eventWithoutDeviceIdStaysWithout() {
+        val p = stateJson(c, listOf(e[0].copy(deviceId = null), e[0].copy(uid = "e2")), "Família", 7, listOf(Device("d1", "Pixel 9", 1)))
+        assertEquals(p, openDoc(k, sealDoc(k, p)))
+    }
+
+    @Test fun v2Rejected() {
+        val v2 = org.json.JSONObject(sealDoc(k, plain).decodeToString()).put("v", 2).toString().toByteArray()
+        assertEquals(true, runCatching { openDoc(k, v2) }.isFailure)
+    }
+
+    @Test fun opensFixedV3() { // server/web.test.mjs opens the same blob (KOTLIN_V3)
+        val blob = java.util.Base64.getDecoder().decode("eyJ2IjozLCJkb2MiOiJ7XCJjb3VudGVyc1wiOlt7XCJuZmNUYWdJZFwiOm51bGwsXCJhcmNoaXZlZFwiOmZhbHNlLFwibm90aWZ5QWZ0ZXJNc1wiOm51bGwsXCJkZWxldGVkXCI6ZmFsc2UsXCJpZFwiOlwiYzFcIixcImxhYmVsXCI6XCI5clM0WUEwVjkwdU85djVYL2wzbnJDWkYvSFMvTVFNOGQ4bGJFeVpaenAzWFhOS0J1MStqdkE9PVwiLFwidGFnc1wiOlwiQWtpZDVlckdoRklwT0ZZZ3NJajVsd1U1ZTNYUURlSVdjUjhoSFRkMkhHZkw0Zz09XCIsXCJ1cGRhdGVkQXRcIjo1fV0sXCJkZXZpY2VzXCI6W3tcIm5hbWVcIjpcIm8vYjVLR3BHbm14S3EwaEJpRG5QYnZGWEprYjIxRFBCS1FJdnV0U0YxUGtpaVlRPVwiLFwiaWRcIjpcImQxXCIsXCJ1cGRhdGVkQXRcIjoxfV0sXCJuYW1lXCI6XCJRMk1PWU9ndHFobWRoVHhILzVGKzJJZHhaOG1OYkprMk13eEpPNjBOZktEeVAxb2JcIixcIm5hbWVVcGRhdGVkQXRcIjo3LFwiZXZlbnRzXCI6W3tcIm5vdGVcIjpcIlRDY1YzMkd1bTFWN0NPMzZEWElQVDkyRDl4MGZMcFgzWndXY2lRL3VYTFhLWUZvM1Vzbz1cIixcImF0XCI6NSxcImRlbGV0ZWRcIjpmYWxzZSxcImlkXCI6XCJlMVwiLFwic291cmNlXCI6XCJtYW51YWxcIixcImNvdW50ZXJJZFwiOlwiYzFcIn1dLFwid2hvXCI6XCJIQ2liK1FvRUxyd0E4NE5ybDZTVU45L0Y5cTFTSzd5QzhVYnR0VjE5aHAveStvdTAxY0RtL2JtV1dsNEkzQnNFXCJ9IiwibWFjIjoiV3lFQ0o5MEFqZzBVbllNSUQ2V2FxV2hySWJUR284V1BPRHRUbjRkR1pjc3pRbVUrN3lDOTdRenkvTEtlTm1BMjJLei9zM0xtS1VKTFlGU2EifQ==")
+        assertEquals(plain, openDoc(k, blob))
+    }
 
     @Test fun tamperFails() {
         val env = org.json.JSONObject(sealDoc(k, plain).decodeToString())
         val bad = env.put("doc", env.getString("doc").replace("\"at\":5", "\"at\":6")).toString().toByteArray()
         assertEquals(true, runCatching { openDoc(k, bad) }.isFailure)
-    }
-
-    @Test fun opensWhatTheWebAppSealed() { // server/web.test.mjs seals the same state
-        val r = parseState(openDoc(k, java.util.Base64.getDecoder().decode("eyJ2IjoyLCJkb2MiOiJ7XCJuYW1lXCI6XCJSVm9CRGM4WHdWUEdieTAxeU0yS3FWbjFXVWUzRUhwNWRrS256NDRCcFE1VG9PRXRcIixcIm5hbWVVcGRhdGVkQXRcIjo3LFwiY291bnRlcnNcIjpbe1wiaWRcIjpcImMxXCIsXCJsYWJlbFwiOlwiVVdERzgyQi82bncwOE5MckkwaVlFQWVyZjFVeitUSHFxZEdOMVZEZklrYnpcIixcInRhZ3NcIjpcInRIcE5tMDNYZXVVMlpGNHR1YmVtOFVOWk9Xd3hucTJIM3Z2QXJBYzRJRTQ9XCIsXCJub3RpZnlBZnRlck1zXCI6bnVsbCxcIm5mY1RhZ0lkXCI6bnVsbCxcInVwZGF0ZWRBdFwiOjUsXCJkZWxldGVkXCI6ZmFsc2UsXCJhcmNoaXZlZFwiOmZhbHNlfV0sXCJldmVudHNcIjpbe1wiaWRcIjpcImUxXCIsXCJjb3VudGVySWRcIjpcImMxXCIsXCJhdFwiOjUsXCJzb3VyY2VcIjpcIm1hbnVhbFwiLFwiZGVsZXRlZFwiOmZhbHNlLFwibm90ZVwiOlwiRm5aS2lTSW1QLzluZGRZckM0dXg5Z2VwbXp0Qi9meVFROXNYbWEvRFwiLFwiZGV2aWNlSWRcIjpcIjRwMXJyanJtaVpGZlBpWFlhVlBBL3NDRjQzazlpN0QzamIwczVOT0VcIn1dLFwiZGV2aWNlc1wiOlt7XCJpZFwiOlwiZDFcIixcIm5hbWVcIjpcIjhiQ3ZSNzVYQ2VHdlpMNU9hdWVpeld2VEJNL3R4Vi9ZMzNtODdnbzZEWDFhXCIsXCJ1cGRhdGVkQXRcIjoxfV19IiwibWFjIjoiZVNsc043SmlqRDdDYzVKM0pSSzhGT0k4VnpTeU4zRm40V080R0owYlI0VCtQNlUwSnJOQXlzWkpucWFzY0k4NG41VnJpQnU1eE9ZTzIva3MifQ==")))
-        assertEquals(listOf("Família", "Water", "home", "hi", "d1", "Pixel"),
-            listOf(r.name, r.counters[0].label, r.counters[0].tags, r.events[0].second.note, r.events[0].second.deviceId, r.devices[0].name))
     }
 }
 
